@@ -1,7 +1,7 @@
 import { db } from '../db/index';
 import { v4 as uuidv4 } from 'uuid';
 
-export type SyncAction = 'create' | 'update' | 'delete';
+export type SyncAction = 'create' | 'update' | 'delete' | 'upsert';
 export type SyncEntity =
   | 'booking'
   | 'user'
@@ -112,11 +112,7 @@ export class SyncQueueService {
    */
   static async updateRetryCount(id: string, retryCount: number) {
     try {
-      await db
-        .updateTable('sync_queue')
-        .set({ retryCount })
-        .where('id', '=', id)
-        .execute();
+      await db.updateTable('sync_queue').set({ retryCount }).where('id', '=', id).execute();
       console.log(`🔄 SyncQueue: Updated retry count for [${id}] to ${retryCount}`);
     } catch (error) {
       console.error('❌ SyncQueue Update Retry Count Failed:', error);
@@ -128,14 +124,30 @@ export class SyncQueueService {
    */
   static async markAsFailed(id: string) {
     try {
-      await db
-        .updateTable('sync_queue')
-        .set({ status: 'failed' })
-        .where('id', '=', id)
-        .execute();
+      await db.updateTable('sync_queue').set({ status: 'failed' }).where('id', '=', id).execute();
       console.log(`❌ SyncQueue: Marked [${id}] as failed`);
     } catch (error) {
       console.error('❌ SyncQueue Mark Failed:', error);
+    }
+  }
+
+  /**
+   * Revive failed items for specific entities (one-time recovery tool)
+   */
+  static async reviveFailedByEntities(entities: SyncEntity[]) {
+    if (!entities.length) return 0;
+    try {
+      const result = await db
+        .updateTable('sync_queue')
+        .set({ status: 'pending', retryCount: 0 })
+        .where('status', '=', 'failed')
+        .where('entity', 'in', entities)
+        .executeTakeFirst();
+
+      return Number(result.numUpdatedRows || 0);
+    } catch (error) {
+      console.error('❌ SyncQueue revive failed items failed:', error);
+      return 0;
     }
   }
 

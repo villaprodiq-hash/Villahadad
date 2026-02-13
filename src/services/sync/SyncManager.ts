@@ -22,6 +22,7 @@ export class SyncManager {
   private static onlineHandler: (() => void) | null = null;
   private static offlineHandler: (() => void) | null = null;
   private static syncInProgress = false; // 🔒 SECURITY: Prevent race conditions
+  private static recoveredSessionQueueOnce = false;
 
   // 🔔 Real-time Event Emitter for UI Updates
   private static listeners: Set<(event: string, data?: unknown) => void> = new Set();
@@ -167,6 +168,14 @@ export class SyncManager {
     let failedCount = 0;
 
     try {
+      if (!this.recoveredSessionQueueOnce) {
+        this.recoveredSessionQueueOnce = true;
+        const revived = await SyncQueueService.reviveFailedByEntities(['session', 'session_image']);
+        if (revived > 0) {
+          console.log(`♻️ SyncManager: Revived ${revived} failed session queue items`);
+        }
+      }
+
       const queueItems = await SyncQueueService.peekAll();
       if (queueItems.length === 0) {
         console.log('✅ SyncManager: Queue is empty.');
@@ -181,7 +190,7 @@ export class SyncManager {
           let success = false;
 
           // 🧹 SANITIZATION: Remove problematic camelCase keys from old queue items AND PROVIDE FALLBACKS
-          const sanitize = (d: Record<string, unknown>) => {
+          const sanitize = (entity: string, d: Record<string, unknown>) => {
             const clean = { ...d };
             delete clean.createdBy;
             delete clean.updatedBy;
@@ -189,21 +198,22 @@ export class SyncManager {
             delete clean.createdByName;
             delete clean.updatedByName;
 
-            // 🛡️ FALLBACKS for Constraints
-            if (!clean.category) clean.category = 'Wedding';
-            if (!clean.title) clean.title = 'Untitled';
-            if (!clean.clientName) clean.client_name = clean.clientName || 'Unknown';
-            if (!clean.created_at) clean.created_at = new Date().toISOString();
+            // Booking-only normalization (do not pollute other entities)
+            if (entity === 'booking') {
+              if (!clean.category) clean.category = 'Wedding';
+              if (!clean.title) clean.title = 'Untitled';
+              if (!clean.clientName) clean.client_name = clean.clientName || 'Unknown';
+              if (!clean.created_at) clean.created_at = new Date().toISOString();
 
-            // 🌑 BLACK'S MAPPING: Ensure boolean flags are synced correctly
-            if (clean.isPriority !== undefined) clean.is_priority = clean.isPriority ? 1 : 0;
-            if (clean.isCrewShooting !== undefined)
-              clean.is_crew_shooting = clean.isCrewShooting ? 1 : 0;
+              if (clean.isPriority !== undefined) clean.is_priority = clean.isPriority ? 1 : 0;
+              if (clean.isCrewShooting !== undefined)
+                clean.is_crew_shooting = clean.isCrewShooting ? 1 : 0;
+            }
 
             return clean;
           };
 
-          const cleanData = sanitize(item.data);
+          const cleanData = sanitize(item.entity, item.data);
           const attempts = item.retryCount || 0;
           console.log(
             `🔄 Processing Item ${item.id} (Attempt ${attempts + 1}/${MAX_SYNC_RETRIES}):`,
@@ -236,6 +246,14 @@ export class SyncManager {
               console.log(`✅ Successfully soft-deleted item ${item.id}`);
             } else {
               throw new Error(result.error || 'Delete failed');
+            }
+          } else {
+            const result = await callSyncFunction(item.action, item.entity, cleanData);
+            if (result.success) {
+              success = true;
+              console.log(`✅ Successfully synced [${item.entity}] item ${item.id}`);
+            } else {
+              throw new Error(result.error || `Sync failed for entity ${item.entity}`);
             }
           }
 
