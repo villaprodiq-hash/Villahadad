@@ -82,6 +82,14 @@ const STATUS_META: Record<ImageStatus, { label: string; badge: string; ring: str
   },
 };
 
+const BRAND = {
+  primary: '#ff4017',
+  secondary: '#ff8c42',
+  bg: '#0b0b0d',
+  surface: '#151519',
+  border: 'rgba(255,255,255,0.10)',
+};
+
 const ClientPortal: React.FC = () => {
   const [token, setToken] = useState<string | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
@@ -275,7 +283,25 @@ const ClientPortal: React.FC = () => {
   }, [filteredImages, handleDownloadBatch]);
 
   return (
-    <div className="min-h-screen bg-[#0b0b0d] text-white font-[Cairo,sans-serif]" dir="rtl">
+    <div
+      className="min-h-screen text-white font-[Cairo,sans-serif] relative overflow-x-hidden"
+      dir="rtl"
+      style={{ backgroundColor: BRAND.bg }}
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-80">
+        <div
+          className="absolute -top-24 -right-20 w-96 h-96 rounded-full blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgba(255,64,23,0.24) 0%, rgba(255,64,23,0) 70%)',
+          }}
+        />
+        <div
+          className="absolute -bottom-24 -left-20 w-[28rem] h-[28rem] rounded-full blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgba(255,140,66,0.14) 0%, rgba(255,140,66,0) 70%)',
+          }}
+        />
+      </div>
       <AnimatePresence mode="wait">
         {portalView === 'welcome' && (
           <motion.div
@@ -290,18 +316,31 @@ const ClientPortal: React.FC = () => {
               animate={{ y: 0, opacity: 1 }}
               className="mb-10 text-center"
             >
-              <div className="w-24 h-24 bg-gradient-to-br from-[#ff4017] to-[#ff8c42] rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#ff4017]/25">
+              <div
+                className="w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#ff4017]/25"
+                style={{
+                  background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
+                }}
+              >
                 <Camera size={40} className="text-white" />
               </div>
-              <h1 className="text-3xl font-black mb-2">فيلا حداد</h1>
-              <p className="text-zinc-400 text-sm">بوابة اختيار الصور</p>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/15 bg-white/5 text-[11px] text-zinc-300 mb-4">
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: BRAND.primary }}
+                />
+                الهوية الرسمية للاستوديو
+              </div>
+              <h1 className="text-3xl font-black mb-2 tracking-wide">فيلا حداد</h1>
+              <p className="text-zinc-300 text-sm">بوابة اختيار الصور</p>
             </motion.div>
 
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.1 }}
-              className="w-full max-w-md bg-[#151519] border border-white/10 rounded-3xl p-8 shadow-xl text-center"
+              className="w-full max-w-md border rounded-3xl p-8 shadow-xl text-center"
+              style={{ backgroundColor: BRAND.surface, borderColor: BRAND.border }}
             >
               <h2 className="text-xl font-black mb-4">أهلاً وسهلاً</h2>
               <p className="text-zinc-300 mb-8 text-sm leading-relaxed">
@@ -319,8 +358,9 @@ const ClientPortal: React.FC = () => {
 
               <button
                 disabled={!token}
-                className="w-full py-4 bg-[#ff4017] hover:bg-[#ff5b2f] disabled:bg-zinc-700 disabled:text-zinc-500
+                className="w-full py-4 disabled:bg-zinc-700 disabled:text-zinc-500
                   text-white font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ backgroundColor: BRAND.primary }}
                 onClick={handleEnterGallery}
               >
                 دخول المعرض
@@ -331,6 +371,9 @@ const ClientPortal: React.FC = () => {
                 <span>رابط خاص وآمن</span>
               </div>
             </motion.div>
+            <footer className="mt-8 text-center text-zinc-500 text-xs">
+              &copy; {new Date().getFullYear()} Villa Hadad Studio
+            </footer>
           </motion.div>
         )}
 
@@ -341,7 +384,7 @@ const ClientPortal: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="min-h-screen flex flex-col"
           >
-            <header className="sticky top-0 z-50 bg-[#0b0b0d]/85 backdrop-blur-md border-b border-white/10 px-4 md:px-6 py-4">
+            <header className="sticky top-0 z-50 backdrop-blur-md border-b px-4 md:px-6 py-4 bg-[#0b0b0d]/85 border-white/10">
               <div className="max-w-7xl mx-auto">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -393,9 +436,14 @@ const ClientPortal: React.FC = () => {
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
                           statusFilter === tab.key
-                            ? 'bg-[#ff4017] border-[#ff4017] text-white'
+                            ? 'border text-white'
                             : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
                         }`}
+                        style={
+                          statusFilter === tab.key
+                            ? { backgroundColor: BRAND.primary, borderColor: BRAND.primary }
+                            : undefined
+                        }
                       >
                         {tab.label}
                       </button>
@@ -440,6 +488,11 @@ const ClientPortal: React.FC = () => {
                     </button>
                   </div>
                 </div>
+                {downloadState === 'downloading' && (
+                  <div className="mt-3 text-xs text-zinc-300">
+                    جارِ التحميل: {downloadProgress.current}/{downloadProgress.total}
+                  </div>
+                )}
               </div>
             </header>
 
@@ -779,6 +832,7 @@ const ClientPortal: React.FC = () => {
                 </span>
               )}
             </button>
+            <p className="mt-8 text-xs text-zinc-500">هوية بصرية: Villa Hadad Client Portal</p>
           </motion.div>
         )}
       </AnimatePresence>
