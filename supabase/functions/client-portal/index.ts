@@ -247,19 +247,21 @@ async function handleConfirmSelection(supabase: any, booking: { id: string; stat
 
   if (sessionErr) console.error('Session update error:', sessionErr);
 
-  // Move booking to Editing status if currently in Selection
-  if (booking.status === 'Selection') {
-    const { error: bookingErr } = await supabase
-      .from('bookings')
-      .update({
-        status: 'Editing',
-        actual_selection_date: now,
-        updated_at: now,
-      })
-      .eq('id', booking.id);
-
-    if (bookingErr) console.error('Booking status update error:', bookingErr);
+  // Always mark selection date, and advance status when still in selection pipeline.
+  const bookingUpdate: Record<string, unknown> = {
+    actual_selection_date: now,
+    updated_at: now,
+  };
+  if (booking.status === 'Selection' || booking.status === 'Shooting Completed') {
+    bookingUpdate.status = 'Editing';
   }
+
+  const { error: bookingErr } = await supabase
+    .from('bookings')
+    .update(bookingUpdate)
+    .eq('id', booking.id);
+
+  if (bookingErr) console.error('Booking status update error:', bookingErr);
 
   return jsonResponse({
     success: true,
@@ -292,6 +294,15 @@ async function handleGetDownloadUrls(
 
   images = res.data || [];
   error = res.error;
+
+  // If selected list is empty but query succeeded, fallback to all cloud images.
+  if (!error && images.length === 0) {
+    res = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id, file_name, cloud_url').not('cloud_url', 'is', null)
+    );
+    images = res.data || [];
+    error = res.error;
+  }
 
   // Fallback for schemas without sort_order.
   if (error) {
