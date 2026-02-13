@@ -137,6 +137,10 @@ const ClientPortal: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [compareZoom, setCompareZoom] = useState(1);
+  const [compareOffset, setCompareOffset] = useState({ x: 0, y: 0 });
+  const [isCompareDragging, setIsCompareDragging] = useState(false);
+  const [compareDragStart, setCompareDragStart] = useState({ x: 0, y: 0 });
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
 
@@ -355,9 +359,56 @@ const ClientPortal: React.FC = () => {
       if (otherId) setImageStatus(otherId, 'pending');
       setCompareOpen(false);
       setCompareIds([]);
+      setCompareZoom(1);
+      setCompareOffset({ x: 0, y: 0 });
     },
     [compareIds, setImageStatus]
   );
+
+  const resetCompareView = useCallback(() => {
+    setCompareZoom(1);
+    setCompareOffset({ x: 0, y: 0 });
+  }, []);
+
+  const zoomCompare = useCallback((direction: 'in' | 'out') => {
+    setCompareZoom(prev => {
+      const next = direction === 'in' ? prev + 0.2 : prev - 0.2;
+      return Math.min(3, Math.max(1, Number(next.toFixed(2))));
+    });
+  }, []);
+
+  const startCompareDrag = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (compareZoom <= 1) return;
+      setIsCompareDragging(true);
+      setCompareDragStart({
+        x: e.clientX - compareOffset.x,
+        y: e.clientY - compareOffset.y,
+      });
+    },
+    [compareOffset.x, compareOffset.y, compareZoom]
+  );
+
+  const moveCompareDrag = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isCompareDragging) return;
+      setCompareOffset({
+        x: e.clientX - compareDragStart.x,
+        y: e.clientY - compareDragStart.y,
+      });
+    },
+    [compareDragStart.x, compareDragStart.y, isCompareDragging]
+  );
+
+  const endCompareDrag = useCallback(() => {
+    setIsCompareDragging(false);
+  }, []);
+
+  const onCompareWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    setCompareZoom(prev => Math.min(3, Math.max(1, Number((prev + delta).toFixed(2)))));
+  }, []);
 
   return (
     <div
@@ -701,24 +752,69 @@ const ClientPortal: React.FC = () => {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[1350] bg-black/95 p-4 md:p-8"
-                        onClick={() => setCompareOpen(false)}
+                        onClick={() => {
+                          setCompareOpen(false);
+                          resetCompareView();
+                        }}
                       >
                         <div className="max-w-7xl mx-auto h-full flex flex-col">
                           <div className="flex items-center justify-between mb-4">
                             <h3 className="text-base md:text-lg font-black">
                               مقارنة صورتين قبل الاختيار
                             </h3>
-                            <button
-                              onClick={() => setCompareOpen(false)}
-                              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"
-                            >
-                              <X size={18} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  zoomCompare('out');
+                                }}
+                                className="px-2.5 py-1.5 rounded-md bg-white/15 hover:bg-white/25 text-sm"
+                                title="تصغير"
+                              >
+                                -
+                              </button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  zoomCompare('in');
+                                }}
+                                className="px-2.5 py-1.5 rounded-md bg-white/15 hover:bg-white/25 text-sm"
+                                title="تكبير"
+                              >
+                                +
+                              </button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  resetCompareView();
+                                }}
+                                className="px-2.5 py-1.5 rounded-md bg-white/15 hover:bg-white/25 text-xs"
+                              >
+                                إعادة ضبط
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCompareOpen(false);
+                                  resetCompareView();
+                                }}
+                                className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"
+                              >
+                                <X size={18} />
+                              </button>
+                            </div>
                           </div>
+                          <p className="text-[11px] text-zinc-400 mb-3">
+                            اسحب لمقارنة التفاصيل، واستخدم عجلة الماوس للتكبير/التصغير (x
+                            {compareZoom.toFixed(1)})
+                          </p>
 
                           <div
                             className="grid md:grid-cols-2 gap-4 flex-1 min-h-0"
                             onClick={e => e.stopPropagation()}
+                            onMouseMove={moveCompareDrag}
+                            onMouseUp={endCompareDrag}
+                            onMouseLeave={endCompareDrag}
+                            onWheel={onCompareWheel}
                           >
                             {compareImages.map((img, idx) => (
                               <div
@@ -728,11 +824,22 @@ const ClientPortal: React.FC = () => {
                                 <div className="text-xs text-zinc-400 mb-2">
                                   {idx === 0 ? 'الصورة الأولى' : 'الصورة الثانية'}
                                 </div>
-                                <div className="flex-1 min-h-0 rounded-xl overflow-hidden bg-black/35 flex items-center justify-center">
+                                <div
+                                  className={`flex-1 min-h-0 rounded-xl overflow-hidden bg-black/35 flex items-center justify-center ${compareZoom > 1 ? 'cursor-grab' : 'cursor-default'} ${isCompareDragging ? '!cursor-grabbing' : ''}`}
+                                  onMouseDown={startCompareDrag}
+                                >
                                   <img
                                     src={img.cloudUrl || img.thumbnailUrl || ''}
                                     alt={img.fileName}
-                                    className="max-h-[56vh] w-auto object-contain"
+                                    className="max-h-[56vh] w-auto object-contain select-none"
+                                    draggable={false}
+                                    style={{
+                                      transform: `translate(${compareOffset.x}px, ${compareOffset.y}px) scale(${compareZoom})`,
+                                      transformOrigin: 'center center',
+                                      transition: isCompareDragging
+                                        ? 'none'
+                                        : 'transform 120ms ease-out',
+                                    }}
                                   />
                                 </div>
                                 <div className="mt-3 flex items-center justify-between gap-2">
