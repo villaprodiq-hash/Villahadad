@@ -53,12 +53,14 @@ try {
         console.error('[Main] dotenv error for', envPath, ':', result.error);
       } else {
         console.log('[Main] ✅ Environment loaded from:', envPath);
-        const key = process.env.R2_ACCESS_KEY_ID;
-        const secret = process.env.R2_SECRET_ACCESS_KEY;
-        console.log('[Main] R2_ACCESS_KEY_ID:', key ? `${String(key).trim().substring(0, 6)}... (len=${String(key).trim().length})` : '❌ MISSING');
-        console.log('[Main] R2_SECRET_ACCESS_KEY:', secret ? `${String(secret).trim().substring(0, 4)}... (len=${String(secret).trim().length})` : '❌ MISSING');
-        console.log('[Main] R2_BUCKET_NAME:', process.env.R2_BUCKET_NAME || '❌ MISSING');
-        console.log('[Main] R2_PUBLIC_URL:', process.env.R2_PUBLIC_URL || '❌ MISSING');
+        const key = process.env.R2_ACCESS_KEY_ID || process.env.VITE_R2_ACCESS_KEY_ID;
+        const secret = process.env.R2_SECRET_ACCESS_KEY || process.env.VITE_R2_SECRET_ACCESS_KEY;
+        const bucket = process.env.R2_BUCKET_NAME || process.env.VITE_R2_BUCKET_NAME;
+        const publicUrl = process.env.R2_PUBLIC_URL || process.env.VITE_R2_PUBLIC_URL;
+        console.log('[Main] R2/VITE_R2_ACCESS_KEY_ID:', key ? `${String(key).trim().substring(0, 6)}... (len=${String(key).trim().length})` : '❌ MISSING');
+        console.log('[Main] R2/VITE_R2_SECRET_ACCESS_KEY:', secret ? `${String(secret).trim().substring(0, 4)}... (len=${String(secret).trim().length})` : '❌ MISSING');
+        console.log('[Main] R2/VITE_R2_BUCKET_NAME:', bucket || '❌ MISSING');
+        console.log('[Main] R2/VITE_R2_PUBLIC_URL:', publicUrl || '❌ MISSING');
         loaded = true;
         break;
       }

@@ -13,7 +13,7 @@ import UnifiedTeamChat from '../shared/UnifiedTeamChat';
 import { toast } from 'sonner';
 import { formatMoney } from '../../utils/formatMoney';
 import { electronBackend } from '../../services/mockBackend';
-import { buildClientPortalUrl } from '../../utils/clientPortal';
+import { buildClientPortalUrl, getClientPortalLinkError } from '../../utils/clientPortal';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -354,7 +354,19 @@ const SelectionDashboard: React.FC<SelectionDashboardProps> = ({
           if (uploadedCount > 0) {
             toast.success(`تم رفع ${uploadedCount} صورة إلى R2 بنجاح`);
           } else {
-            toast.warning(`تم حفظ الصور محلياً فقط - R2 غير متاح`);
+            let r2Reason = '';
+            try {
+              const r2Status = await electronAPI.sessionLifecycle.getR2Status?.();
+              if (r2Status?.lastError) {
+                r2Reason = ` | السبب: ${r2Status.lastError}`;
+              } else if (r2Status?.enabled === false) {
+                r2Reason = ' | R2 غير مفعّل';
+              }
+              console.log('[Ingest] R2 status after local-only ingest:', r2Status);
+            } catch (statusErr) {
+              console.warn('[Ingest] Failed to fetch R2 status:', statusErr);
+            }
+            toast.warning(`تم حفظ الصور محلياً فقط - فشل رفع R2${r2Reason}`);
           }
         }
         if (result?.failed?.length > 0) {
@@ -1513,8 +1525,9 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, index, onStartSelect
               onClick={(e) => {
                 e.stopPropagation();
                 const token = (booking as any).client_token;
-                if (!token) {
-                  toast.error('لا يوجد token لهذا الحجز. يرجى تحديث بيانات الحجز أولاً');
+                const linkError = getClientPortalLinkError(token);
+                if (linkError) {
+                  toast.error(linkError);
                   return;
                 }
                 const portalUrl = buildClientPortalUrl(token);
@@ -1531,8 +1544,9 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, index, onStartSelect
                 onClick={(e) => {
                   e.stopPropagation();
                   const token = (booking as any).client_token;
-                  if (!token) {
-                    toast.error('لا يوجد token لهذا الحجز. يرجى تحديث بيانات الحجز أولاً');
+                  const linkError = getClientPortalLinkError(token);
+                  if (linkError) {
+                    toast.error(linkError);
                     return;
                   }
                   const portalUrl = buildClientPortalUrl(token);

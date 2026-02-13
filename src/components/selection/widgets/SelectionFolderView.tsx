@@ -38,7 +38,7 @@ import ImageSelectionToolbar from './ImageSelectionToolbar';
 import SelectionBatchBar from './SelectionBatchBar';
 import { Booking } from '../../../types';
 import { toast } from 'sonner';
-import { buildClientPortalUrl, getClientPortalBaseUrl } from '../../../utils/clientPortal';
+import { buildClientPortalUrl, getClientPortalLinkError } from '../../../utils/clientPortal';
 
 interface SelectionFolderViewProps {
   folder: GalleryFolder;
@@ -183,6 +183,11 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
   };
 
   const handleOpenPortalLink = () => {
+    const linkError = getClientPortalLinkError(booking?.client_token);
+    if (linkError) {
+      toast.error(linkError);
+      return;
+    }
     setIsPortalLinkModalOpen(true);
     setCopiedLink(false);
   };
@@ -875,7 +880,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
                     onClick={() => {
                       const url = getPortalLink();
                       if (!url) {
-                        toast.error('لا يوجد token لهذا الحجز. يرجى تحديث بيانات الحجز أولاً');
+                        toast.error('رابط البوابة غير صالح. تحقق من token و VITE_CLIENT_PORTAL_BASE_URL');
                         return;
                       }
                       handleCopyLink(url);
@@ -892,7 +897,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 flex items-center gap-4">
                 <div className="w-16 h-16 bg-white p-1 rounded-lg shrink-0 shadow-sm">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(getPortalLink() || getClientPortalBaseUrl() || '/select')}`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(getPortalLink() || '')}`}
                     alt="QR Code"
                     className="w-full h-full"
                   />
@@ -935,7 +940,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
                   onClick={() => {
                     const url = getPortalLink();
                     if (!url) {
-                      toast.error('لا يوجد token لهذا الحجز. يرجى تحديث بيانات الحجز أولاً');
+                      toast.error('رابط البوابة غير صالح. تحقق من token و VITE_CLIENT_PORTAL_BASE_URL');
                       return;
                     }
                     handleSendWhatsApp(url);

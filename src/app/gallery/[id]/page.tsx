@@ -150,7 +150,7 @@ export default function GalleryPage() {
       clientName={gallery.client_name || gallery.clientName || 'Client'}
       sessionId={gallery.session_id || gallery.sessionId || gallery.id}
       photos={photos}
-      r2PublicUrl="https://pub-placeholder.r2.dev"
+      r2PublicUrl="https://media.villahadad.org"
     />
   );
 }

@@ -13,7 +13,7 @@ import { format, isToday, isTomorrow, isSameWeek, parseISO, startOfToday } from 
 import { ar } from 'date-fns/locale';
 import FilterBar from '../../shared/FilterBar';
 import { FilterState, defaultFilterState, filterClientsByBookingType, getFilterStats } from '../../../utils/filterUtils';
-import { buildClientPortalUrl } from '../../../utils/clientPortal';
+import { buildClientPortalUrl, getClientPortalLinkError } from '../../../utils/clientPortal';
 
 const getWhatsAppUrl = (phone: string, name: string) => {
   const cleanPhone = phone.replace(/\D/g, '');
@@ -59,9 +59,12 @@ const ReceptionClientsView: React.FC<ClientsViewProps> = ({ bookings, onUpdateBo
     
     const latestBooking = clientBookings[0];
     const token = latestBooking.client_token;
-    if (!token) return null;
+    const linkError = getClientPortalLinkError(token);
+    if (linkError) return null;
+    const url = buildClientPortalUrl(token);
+    if (!url) return null;
     return {
-      url: buildClientPortalUrl(token),
+      url,
       booking: latestBooking
     };
   };
@@ -670,7 +673,8 @@ const ReceptionClientsView: React.FC<ClientsViewProps> = ({ bookings, onUpdateBo
                 return (
                   <div className="text-center py-8 text-gray-400">
                     <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>لا يوجد حجز نشط لهذا العميل</p>
+                    <p>لا يوجد رابط بوابة صالح لهذا العميل</p>
+                    <p className="text-[11px] mt-2 text-gray-500">تحقق من token و VITE_CLIENT_PORTAL_BASE_URL</p>
                   </div>
                 );
               }

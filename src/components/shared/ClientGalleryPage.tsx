@@ -61,7 +61,7 @@ const ClientGalleryPage: React.FC<ClientGalleryPageProps> = ({
   clientName,
   sessionId,
   photos,
-  r2PublicUrl = 'https://pub-xxx.r2.dev',
+  r2PublicUrl = 'https://media.villahadad.org',
   onClose,
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');

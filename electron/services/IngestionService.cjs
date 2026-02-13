@@ -24,6 +24,7 @@ try {
 }
 
 let S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, getSignedUrl;
+let awsSdkLoadError = null;
 try {
   const awsSdk = require('@aws-sdk/client-s3');
   S3Client = awsSdk.S3Client;
@@ -38,17 +39,49 @@ try {
   }
   console.log('[IngestionService] AWS SDK loaded successfully');
 } catch (err) {
-  console.warn('[IngestionService] AWS SDK not available, cloud upload disabled');
+  awsSdkLoadError = err?.message || String(err);
+  try {
+    // Fallback path for some packaged Electron builds
+    const awsSdkCjs = require('@aws-sdk/client-s3/dist-cjs/index.js');
+    S3Client = awsSdkCjs.S3Client;
+    PutObjectCommand = awsSdkCjs.PutObjectCommand;
+    GetObjectCommand = awsSdkCjs.GetObjectCommand;
+    ListObjectsV2Command = awsSdkCjs.ListObjectsV2Command;
+    DeleteObjectsCommand = awsSdkCjs.DeleteObjectsCommand;
+    try {
+      ({ getSignedUrl } = require('@aws-sdk/s3-request-presigner/dist-cjs/index.js'));
+    } catch (presignerErr2) {
+      console.warn('[IngestionService] S3 presigner fallback not available:', presignerErr2?.message || presignerErr2);
+    }
+    awsSdkLoadError = null;
+    console.log('[IngestionService] AWS SDK loaded successfully via dist-cjs fallback');
+  } catch (fallbackErr) {
+    awsSdkLoadError = `${awsSdkLoadError} | fallback: ${fallbackErr?.message || fallbackErr}`;
+    console.warn('[IngestionService] AWS SDK not available, cloud upload disabled:', awsSdkLoadError);
+  }
 }
 
 class IngestionService {
   constructor(config = {}) {
+    this.lastR2Error = null;
+    const DEFAULT_R2_PUBLIC_URL = 'https://media.villahadad.org';
+
+    const readEnv = (...keys) => {
+      for (const key of keys) {
+        const raw = process.env[key];
+        if (typeof raw === 'string' && raw.trim()) {
+          return raw.trim();
+        }
+      }
+      return '';
+    };
+
     // Cloudflare R2 Configuration (only if AWS SDK is available)
     console.log('[IngestionService] 🔍 Initializing R2...');
     console.log('[IngestionService]   AWS SDK available:', !!S3Client);
-    console.log('[IngestionService]   process.env.R2_ACCESS_KEY_ID exists:', !!process.env.R2_ACCESS_KEY_ID);
-    console.log('[IngestionService]   process.env.R2_SECRET_ACCESS_KEY exists:', !!process.env.R2_SECRET_ACCESS_KEY);
-    console.log('[IngestionService]   process.env.R2_BUCKET_NAME exists:', !!process.env.R2_BUCKET_NAME);
+    console.log('[IngestionService]   env R2/VITE key exists:', !!readEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID'));
+    console.log('[IngestionService]   env R2/VITE secret exists:', !!readEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY'));
+    console.log('[IngestionService]   env R2/VITE bucket exists:', !!readEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME'));
     
     if (S3Client) {
       // Default R2 credentials embedded in the app - works out of the box!
@@ -57,21 +90,33 @@ class IngestionService {
       const DEFAULT_R2_SECRET_KEY = '58654a9815f514fbfecccbd1875da5a3a47f8817a33fb4c47eec6fd46b62cf65';
       const DEFAULT_R2_BUCKET = 'villahadad-gallery';
       
-      const accountId = (config.r2AccountId || process.env.R2_ACCOUNT_ID || DEFAULT_R2_ACCOUNT_ID).toString().trim();
-      const endpoint = (config.r2Endpoint || process.env.R2_ENDPOINT || `https://${accountId}.r2.cloudflarestorage.com`).toString().trim();
-      const accessKeyId = (config.r2AccessKey || process.env.R2_ACCESS_KEY_ID || DEFAULT_R2_ACCESS_KEY).toString().trim();
-      const secretAccessKey = (config.r2SecretKey || process.env.R2_SECRET_ACCESS_KEY || DEFAULT_R2_SECRET_KEY).toString().trim();
+      const accountId = (config.r2AccountId || readEnv('R2_ACCOUNT_ID', 'VITE_R2_ACCOUNT_ID') || DEFAULT_R2_ACCOUNT_ID).toString().trim();
+      const endpoint = (config.r2Endpoint || readEnv('R2_ENDPOINT', 'VITE_R2_ENDPOINT') || `https://${accountId}.r2.cloudflarestorage.com`).toString().trim();
+      const accessKeyId = (config.r2AccessKey || readEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID') || DEFAULT_R2_ACCESS_KEY).toString().trim();
+      const secretAccessKey = (config.r2SecretKey || readEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY') || DEFAULT_R2_SECRET_KEY).toString().trim();
+      const resolvedBucket = (config.r2Bucket || readEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME') || DEFAULT_R2_BUCKET).toString().trim();
+      const resolvedPublicUrl = (config.r2PublicUrl || readEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL') || DEFAULT_R2_PUBLIC_URL).toString().trim();
+
+      this.r2Resolved = {
+        accountId,
+        endpoint,
+        accessKeyId,
+        secretAccessKey,
+        bucket: resolvedBucket,
+        publicUrl: resolvedPublicUrl || null,
+      };
 
       console.log('[IngestionService]   Resolved ACCESS_KEY length:', accessKeyId.length);
       console.log('[IngestionService]   Resolved SECRET_KEY length:', secretAccessKey.length);
-      console.log('[IngestionService]   Resolved BUCKET:', config.r2Bucket || process.env.R2_BUCKET_NAME || 'NOT SET');
+      console.log('[IngestionService]   Resolved BUCKET:', resolvedBucket || 'NOT SET');
 
-      if (!accessKeyId || !secretAccessKey) {
+      if (!accessKeyId || !secretAccessKey || !resolvedBucket) {
         this.r2Enabled = false;
         this.r2Client = null;
         console.warn('[IngestionService] R2 DISABLED — missing credentials');
         console.warn('[IngestionService] R2_ACCESS_KEY_ID:', accessKeyId ? 'set (len=' + accessKeyId.length + ')' : '❌ empty');
         console.warn('[IngestionService] R2_SECRET_ACCESS_KEY:', secretAccessKey ? 'set (len=' + secretAccessKey.length + ')' : '❌ empty');
+        console.warn('[IngestionService] R2_BUCKET_NAME:', resolvedBucket ? 'set' : '❌ empty');
       } else {
         try {
           this.r2Client = new S3Client({
@@ -85,12 +130,12 @@ class IngestionService {
             maxAttempts: 3,
           });
 
-          this.r2Bucket = (config.r2Bucket || process.env.R2_BUCKET_NAME || DEFAULT_R2_BUCKET).toString().trim();
+          this.r2Bucket = resolvedBucket;
           
           // IMPORTANT:
           // R2 public URLs are bucket-specific and cannot be safely derived from account ID.
           // Using pub-{accountId}.r2.dev leads to 401 in most setups.
-          const explicitPublicUrl = (config.r2PublicUrl || process.env.R2_PUBLIC_URL || '').toString().trim();
+          const explicitPublicUrl = resolvedPublicUrl;
           const invalidDerivedPattern = new RegExp(`^https://pub-${accountId}\\.r2\\.dev/?$`, 'i');
           if (explicitPublicUrl && !invalidDerivedPattern.test(explicitPublicUrl)) {
             this.r2PublicUrl = explicitPublicUrl.replace(/\/+$/, '');
@@ -110,11 +155,13 @@ class IngestionService {
         } catch (r2InitError) {
           this.r2Enabled = false;
           this.r2Client = null;
+          this.lastR2Error = r2InitError?.message || String(r2InitError);
           console.error('[IngestionService] R2 Initialization Failed:', r2InitError);
         }
       }
     } else {
       this.r2Enabled = false;
+      this.lastR2Error = awsSdkLoadError || 'AWS SDK not available in Electron main process';
       console.warn('[IngestionService] R2 not initialized - AWS SDK not available');
     }
 
@@ -160,6 +207,11 @@ class IngestionService {
       cloudUrls: [],
       localPaths: [],
       thumbnailUrls: [],
+      r2: {
+        enabled: this.r2Enabled,
+        bucket: this.r2Bucket || null,
+        lastError: this.lastR2Error || null,
+      },
     };
 
     const total = filePaths.length;
@@ -234,7 +286,8 @@ class IngestionService {
           local: localDestPath,
           cloud: cloudUrl,
           thumbnail: thumbnailUrl,
-          fileName
+          fileName,
+          r2Error: cloudUrl ? null : (this.lastR2Error || null),
         });
 
       } catch (error) {
@@ -250,6 +303,7 @@ class IngestionService {
     await this.finalizeSession(sessionInfo.sessionId, results.failed.length > 0);
 
     progressCallback(100, 'Complete');
+    results.r2.lastError = this.lastR2Error || null;
     return results;
   }
 
@@ -351,7 +405,12 @@ class IngestionService {
       }
     });
 
-    await this.r2Client.send(command);
+    try {
+      await this.r2Client.send(command);
+    } catch (err) {
+      this.lastR2Error = err?.message || String(err);
+      throw err;
+    }
     
     const publicUrl = await this.buildAccessibleR2Url(r2Key);
     
@@ -389,7 +448,12 @@ class IngestionService {
       ContentType: 'image/webp',
     });
 
-    await this.r2Client.send(command);
+    try {
+      await this.r2Client.send(command);
+    } catch (err) {
+      this.lastR2Error = err?.message || String(err);
+      throw err;
+    }
 
     const publicUrl = await this.buildAccessibleR2Url(r2Key);
 
@@ -419,8 +483,8 @@ class IngestionService {
       }
     }
 
-    // Last resort (may still be private), but keep a deterministic URL for debugging.
-    return `https://${this.r2Bucket}.r2.dev/${r2Key}`;
+    // Last resort: enforce custom media domain instead of r2.dev fallback.
+    return `https://media.villahadad.org/${r2Key}`;
   }
 
   /**
@@ -932,21 +996,24 @@ class IngestionService {
 
     // Get R2 status with detailed diagnostics
     ipcMain.handle('ingestion:getR2Status', async () => {
-      const keyId = process.env.R2_ACCESS_KEY_ID || '';
-      const secret = process.env.R2_SECRET_ACCESS_KEY || '';
+      const keyId = (this.r2Resolved?.accessKeyId || process.env.R2_ACCESS_KEY_ID || process.env.VITE_R2_ACCESS_KEY_ID || '').trim();
+      const secret = (this.r2Resolved?.secretAccessKey || process.env.R2_SECRET_ACCESS_KEY || process.env.VITE_R2_SECRET_ACCESS_KEY || '').trim();
+      const bucket = (this.r2Bucket || this.r2Resolved?.bucket || process.env.R2_BUCKET_NAME || process.env.VITE_R2_BUCKET_NAME || '').trim();
       return {
         enabled: this.r2Enabled,
-        bucket: this.r2Bucket || null,
+        bucket: bucket || null,
         publicUrl: this.r2PublicUrl || null,
         hasCredentials: !!(keyId && secret),
+        lastError: this.lastR2Error,
         diagnostics: {
           awsSdkAvailable: !!S3Client,
+          awsSdkLoadError: awsSdkLoadError,
           envKeyIdExists: !!keyId,
           envKeyIdLength: keyId.length,
           envSecretExists: !!secret,
           envSecretLength: secret.length,
-          envBucketExists: !!process.env.R2_BUCKET_NAME,
-          envPublicUrlExists: !!process.env.R2_PUBLIC_URL,
+          envBucketExists: !!bucket,
+          envPublicUrlExists: !!(this.r2PublicUrl || process.env.R2_PUBLIC_URL || process.env.VITE_R2_PUBLIC_URL),
           keyIdPrefix: keyId ? keyId.substring(0, 8) + '...' : null,
         }
       };

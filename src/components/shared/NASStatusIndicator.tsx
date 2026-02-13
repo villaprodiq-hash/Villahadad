@@ -62,6 +62,7 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
     enabled: boolean;
     bucket: string | null;
     hasCredentials: boolean;
+    lastError?: string | null;
     diagnostics?: {
       awsSdkAvailable: boolean;
       envKeyIdExists: boolean;
@@ -381,6 +382,9 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
                           <p>Key Prefix: {r2Status.diagnostics.keyIdPrefix}</p>
                         )}
                       </div>
+                    )}
+                    {r2Status.lastError && (
+                      <p className="text-amber-400 mt-1 break-words">Last Error: {r2Status.lastError}</p>
                     )}
                     {!r2Status.enabled && !r2Status.diagnostics?.envKeyIdExists && (
                       <p className="text-orange-400 mt-1">⚠️ ملف .env.local غير موجود أو غير صحيح</p>
