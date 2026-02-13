@@ -19,7 +19,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async req => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -33,15 +33,11 @@ serve(async (req) => {
 
     // Create admin client (server-side only)
     const serviceRoleKey =
-      Deno.env.get('SERVICE_ROLE_KEY') ||
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-      '';
+      Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') || '',
-      serviceRoleKey,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
+    const supabase = createClient(Deno.env.get('SUPABASE_URL') || '', serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     // Validate token → find booking (Supabase uses snake_case columns)
     const { data: booking, error: bookingErr } = await supabase
@@ -88,21 +84,20 @@ async function handleGetPhotos(
   let error: any = null;
 
   // Try full schema first.
-  let res = await supabase
-    .from('session_images')
-    .select('id, file_name, cloud_url, thumbnail_url, status, liked, notes, sort_order')
-    .eq('booking_id', booking.id)
-    .order('sort_order', { ascending: true });
+  let res = await runSessionImagesQuery(supabase, booking.id, q =>
+    q
+      .select('id, file_name, cloud_url, thumbnail_url, status, liked, notes, sort_order')
+      .order('sort_order', { ascending: true })
+  );
 
   images = res.data || [];
   error = res.error;
 
   // Fallback for older production schemas missing thumbnail_url / liked / notes / sort_order.
   if (error) {
-    res = await supabase
-      .from('session_images')
-      .select('id, file_name, cloud_url, status')
-      .eq('booking_id', booking.id);
+    res = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id, file_name, cloud_url, is_selected')
+    );
 
     images = res.data || [];
     error = res.error;
@@ -110,10 +105,9 @@ async function handleGetPhotos(
 
   // Final fallback for very old schemas missing status as well.
   if (error) {
-    res = await supabase
-      .from('session_images')
-      .select('id, file_name, cloud_url')
-      .eq('booking_id', booking.id);
+    res = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id, file_name, cloud_url')
+    );
 
     images = res.data || [];
     error = res.error;
@@ -127,7 +121,7 @@ async function handleGetPhotos(
     fileName: img.file_name,
     cloudUrl: img.cloud_url,
     thumbnailUrl: img.thumbnail_url || null,
-    status: img.status || 'pending',
+    status: img.status || (img.is_selected ? 'selected' : 'pending'),
     liked: img.liked ? 1 : 0,
     notes: img.notes || null,
     sortOrder: img.sort_order ?? 0,
@@ -162,6 +156,14 @@ async function handleUpdateSelection(
   let updated = 0;
 
   for (const sel of selections) {
+    const ownership = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id').eq('id', sel.imageId).limit(1)
+    );
+
+    if (ownership.error || !ownership.data || ownership.data.length === 0) {
+      continue;
+    }
+
     const updateData: Record<string, unknown> = {
       status: sel.status,
       selected_by: 'client',
@@ -172,13 +174,16 @@ async function handleUpdateSelection(
     if (sel.liked !== undefined) updateData.liked = sel.liked;
     if (sel.notes !== undefined) updateData.notes = sel.notes;
 
-    const { error } = await supabase
-      .from('session_images')
-      .update(updateData)
-      .eq('id', sel.imageId)
-      .eq('booking_id', booking.id);
+    let updateRes = await supabase.from('session_images').update(updateData).eq('id', sel.imageId);
 
-    if (!error) updated++;
+    if (updateRes.error && isMissingColumnError(updateRes.error)) {
+      updateRes = await supabase
+        .from('session_images')
+        .update({ is_selected: sel.status === 'selected' })
+        .eq('id', sel.imageId);
+    }
+
+    if (!updateRes.error) updated++;
   }
 
   return jsonResponse({ success: true, updated });
@@ -189,34 +194,56 @@ async function handleUpdateSelection(
  * Updates booking status, session status, and records
  * selection_confirmed_at for the 45-day R2 cleanup countdown.
  */
-async function handleConfirmSelection(
-  supabase: any,
-  booking: { id: string; status: string }
-) {
+async function handleConfirmSelection(supabase: any, booking: { id: string; status: string }) {
   const now = new Date().toISOString();
 
   // Count selected images
-  const { count } = await supabase
-    .from('session_images')
-    .select('id', { count: 'exact', head: true })
-    .eq('booking_id', booking.id)
-    .eq('status', 'selected');
+  let countRes = await runSessionImagesQuery(supabase, booking.id, q =>
+    q.select('id', { count: 'exact', head: true }).eq('status', 'selected')
+  );
+
+  // Old schema fallback with boolean selection flag.
+  if (countRes.error) {
+    countRes = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id', { count: 'exact', head: true }).eq('is_selected', true)
+    );
+  }
+
+  // Final fallback: count all linked images.
+  if (countRes.error) {
+    countRes = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id', { count: 'exact', head: true })
+    );
+  }
+
+  const count = countRes.count || 0;
 
   // Calculate R2 cleanup date (45 days from now)
   const cleanupDate = new Date();
   cleanupDate.setDate(cleanupDate.getDate() + 45);
 
   // Update session — record confirmation timestamp + scheduled cleanup
-  const { error: sessionErr } = await supabase
+  const sessionUpdate = {
+    status: 'editing',
+    selected_images: count,
+    updated_at: now,
+    selection_confirmed_at: now,
+    r2_cleanup_after: cleanupDate.toISOString(),
+  };
+
+  let sessionRes = await supabase
     .from('sessions')
-    .update({
-      status: 'editing',
-      selected_images: count || 0,
-      updated_at: now,
-      selection_confirmed_at: now,
-      r2_cleanup_after: cleanupDate.toISOString(),
-    })
+    .update(sessionUpdate)
     .eq('booking_id', booking.id);
+
+  if (sessionRes.error && isMissingColumnError(sessionRes.error)) {
+    sessionRes = await supabase.from('sessions').update(sessionUpdate).eq('bookingId', booking.id);
+  }
+  if (sessionRes.error && isMissingColumnError(sessionRes.error)) {
+    sessionRes = await supabase.from('sessions').update(sessionUpdate).eq('bookingid', booking.id);
+  }
+
+  const sessionErr = sessionRes.error;
 
   if (sessionErr) console.error('Session update error:', sessionErr);
 
@@ -236,9 +263,10 @@ async function handleConfirmSelection(
 
   return jsonResponse({
     success: true,
-    selectedCount: count || 0,
+    selectedCount: count,
     r2CleanupAfter: cleanupDate.toISOString(),
-    message: 'Selection confirmed — photos sent to editing. Cloud photos will be removed after 45 days.',
+    message:
+      'Selection confirmed — photos sent to editing. Cloud photos will be removed after 45 days.',
   });
 }
 
@@ -254,37 +282,42 @@ async function handleGetDownloadUrls(
   let error: any = null;
 
   // Try with sort_order first.
-  let res = await supabase
-    .from('session_images')
-    .select('id, file_name, cloud_url')
-    .eq('booking_id', booking.id)
-    .eq('status', 'selected')
-    .not('cloud_url', 'is', null)
-    .order('sort_order', { ascending: true });
+  let res = await runSessionImagesQuery(supabase, booking.id, q =>
+    q
+      .select('id, file_name, cloud_url')
+      .eq('status', 'selected')
+      .not('cloud_url', 'is', null)
+      .order('sort_order', { ascending: true })
+  );
 
   images = res.data || [];
   error = res.error;
 
   // Fallback for schemas without sort_order.
   if (error) {
-    res = await supabase
-      .from('session_images')
-      .select('id, file_name, cloud_url')
-      .eq('booking_id', booking.id)
-      .eq('status', 'selected')
-      .not('cloud_url', 'is', null);
+    res = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id, file_name, cloud_url').eq('status', 'selected').not('cloud_url', 'is', null)
+    );
 
     images = res.data || [];
     error = res.error;
   }
 
-  // Final fallback for old schemas without status column: return all cloud images.
+  // Fallback for legacy schemas using is_selected boolean.
   if (error) {
-    res = await supabase
-      .from('session_images')
-      .select('id, file_name, cloud_url')
-      .eq('booking_id', booking.id)
-      .not('cloud_url', 'is', null);
+    res = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id, file_name, cloud_url').eq('is_selected', true).not('cloud_url', 'is', null)
+    );
+
+    images = res.data || [];
+    error = res.error;
+  }
+
+  // Final fallback: return all cloud images.
+  if (error) {
+    res = await runSessionImagesQuery(supabase, booking.id, q =>
+      q.select('id, file_name, cloud_url').not('cloud_url', 'is', null)
+    );
 
     images = res.data || [];
     error = res.error;
@@ -316,8 +349,55 @@ function jsonResponse(data: unknown, status = 200) {
 }
 
 function errorResponse(status: number, message: string) {
-  return new Response(
-    JSON.stringify({ error: message }),
-    { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function isMissingColumnError(error: any) {
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes('column') && msg.includes('does not exist');
+}
+
+async function resolveSessionIdsForBooking(supabase: any, bookingId: string): Promise<string[]> {
+  const attempts = ['booking_id', 'bookingId', 'bookingid'];
+  for (const column of attempts) {
+    const res = await supabase.from('sessions').select('id').eq(column, bookingId);
+
+    if (!res.error) {
+      return (res.data || []).map((s: any) => s.id).filter(Boolean);
+    }
+
+    if (!isMissingColumnError(res.error)) {
+      return [];
+    }
+  }
+  return [];
+}
+
+async function runSessionImagesQuery(supabase: any, bookingId: string, builder: (q: any) => any) {
+  let lastResult: any = null;
+
+  const directAttempts = ['booking_id', 'bookingId'];
+  const directAttemptsLegacy = [...directAttempts, 'bookingid'];
+  for (const column of directAttemptsLegacy) {
+    const res = await builder(supabase.from('session_images')).eq(column, bookingId);
+    lastResult = res;
+    if (!res.error) return res;
+    if (!isMissingColumnError(res.error)) return res;
+  }
+
+  const sessionIds = await resolveSessionIdsForBooking(supabase, bookingId);
+  const candidateSessionIds = sessionIds.length > 0 ? sessionIds : [bookingId];
+
+  const sessionAttempts = ['session_id', 'sessionId', 'sessionid'];
+  for (const column of sessionAttempts) {
+    const res = await builder(supabase.from('session_images')).in(column, candidateSessionIds);
+    lastResult = res;
+    if (!res.error) return res;
+    if (!isMissingColumnError(res.error)) return res;
+  }
+
+  return lastResult || { data: [], error: null, count: 0 };
 }
