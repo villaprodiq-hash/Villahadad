@@ -108,6 +108,17 @@ async function handleGetPhotos(
     error = res.error;
   }
 
+  // Final fallback for very old schemas missing status as well.
+  if (error) {
+    res = await supabase
+      .from('session_images')
+      .select('id, file_name, cloud_url')
+      .eq('booking_id', booking.id);
+
+    images = res.data || [];
+    error = res.error;
+  }
+
   if (error) throw error;
 
   // Map snake_case → camelCase for the frontend
@@ -261,6 +272,18 @@ async function handleGetDownloadUrls(
       .select('id, file_name, cloud_url')
       .eq('booking_id', booking.id)
       .eq('status', 'selected')
+      .not('cloud_url', 'is', null);
+
+    images = res.data || [];
+    error = res.error;
+  }
+
+  // Final fallback for old schemas without status column: return all cloud images.
+  if (error) {
+    res = await supabase
+      .from('session_images')
+      .select('id, file_name, cloud_url')
+      .eq('booking_id', booking.id)
       .not('cloud_url', 'is', null);
 
     images = res.data || [];
