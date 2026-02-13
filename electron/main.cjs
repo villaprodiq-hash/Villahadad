@@ -5,21 +5,33 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-// Load .env.local for R2 credentials and other config
+// Load environment files for R2 credentials and other config
 try {
   const dotenv = require('dotenv');
   const app = require('electron').app;
   const candidatePaths = [
     path.join(__dirname, '..', '.env.local'),
+    path.join(__dirname, '..', '.env.production'),
+    path.join(__dirname, '..', '.env'),
     path.join(process.cwd(), '.env.local'),
+    path.join(process.cwd(), '.env.production'),
+    path.join(process.cwd(), '.env'),
     path.join(app.getPath('userData'), '.env.local'),
+    path.join(app.getPath('userData'), '.env.production'),
+    path.join(app.getPath('userData'), '.env'),
     // Additional paths for packaged app
     path.join(app.getAppPath(), '.env.local'),
+    path.join(app.getAppPath(), '.env.production'),
+    path.join(app.getAppPath(), '.env'),
     path.join(app.getPath('exe'), '..', '.env.local'),
+    path.join(app.getPath('exe'), '..', '.env.production'),
+    path.join(app.getPath('exe'), '..', '.env'),
     path.join(app.getPath('home'), '.villahadad', '.env.local'),
+    path.join(app.getPath('home'), '.villahadad', '.env.production'),
+    path.join(app.getPath('home'), '.villahadad', '.env'),
   ];
   
-  console.log('[Main] 🔍 Searching for .env.local...');
+  console.log('[Main] 🔍 Searching for environment file (.env.local / .env.production / .env)...');
   console.log('[Main]   __dirname:', __dirname);
   console.log('[Main]   process.cwd():', process.cwd());
   console.log('[Main]   userData:', app.getPath('userData'));
@@ -35,11 +47,12 @@ try {
     console.log(`[Main]   Checking: ${envPath} - ${exists ? 'EXISTS' : 'NOT FOUND'}`);
     
     if (exists) {
-      const result = dotenv.config({ path: envPath });
+      // Keep existing process.env values unless missing; this allows layered config.
+      const result = dotenv.config({ path: envPath, override: false });
       if (result.error) {
         console.error('[Main] dotenv error for', envPath, ':', result.error);
       } else {
-        console.log('[Main] ✅ .env.local loaded from:', envPath);
+        console.log('[Main] ✅ Environment loaded from:', envPath);
         const key = process.env.R2_ACCESS_KEY_ID;
         const secret = process.env.R2_SECRET_ACCESS_KEY;
         console.log('[Main] R2_ACCESS_KEY_ID:', key ? `${String(key).trim().substring(0, 6)}... (len=${String(key).trim().length})` : '❌ MISSING');
@@ -53,9 +66,9 @@ try {
   }
   
   if (!loaded) {
-    console.warn('[Main] ⚠️ .env.local NOT FOUND in any location');
+    console.warn('[Main] ⚠️ No env file found in any known location');
     console.warn('[Main] Checked paths:', checkedPaths);
-    console.warn('[Main] R2 will be DISABLED');
+    console.warn('[Main] R2 may still work if defaults are configured in code');
   }
 } catch (err) {
   console.warn('[Main] dotenv not available:', err.message);
