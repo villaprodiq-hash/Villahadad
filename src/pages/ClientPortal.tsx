@@ -63,6 +63,7 @@ type LoadingState = 'idle' | 'loading' | 'loaded' | 'error' | 'submitting' | 'su
 type DownloadState = 'idle' | 'downloading' | 'done';
 type PortalView = 'welcome' | 'gallery' | 'review' | 'done';
 type StatusFilter = 'all' | ImageStatus;
+type BrandMode = 'classic' | 'vip' | 'simple';
 
 const STATUS_META: Record<ImageStatus, { label: string; badge: string; ring: string }> = {
   selected: {
@@ -82,12 +83,45 @@ const STATUS_META: Record<ImageStatus, { label: string; badge: string; ring: str
   },
 };
 
-const BRAND = {
-  primary: '#ff4017',
-  secondary: '#ff8c42',
-  bg: '#0b0b0d',
-  surface: '#151519',
-  border: 'rgba(255,255,255,0.10)',
+const BRAND_PRESETS: Record<
+  BrandMode,
+  {
+    primary: string;
+    secondary: string;
+    bg: string;
+    surface: string;
+    border: string;
+    glowA: string;
+    glowB: string;
+  }
+> = {
+  classic: {
+    primary: '#ff4017',
+    secondary: '#ff8c42',
+    bg: '#0b0b0d',
+    surface: '#151519',
+    border: 'rgba(255,255,255,0.10)',
+    glowA: 'rgba(255,64,23,0.24)',
+    glowB: 'rgba(255,140,66,0.14)',
+  },
+  vip: {
+    primary: '#c9a36a',
+    secondary: '#f0d39a',
+    bg: '#0a0907',
+    surface: '#14120f',
+    border: 'rgba(201,163,106,0.34)',
+    glowA: 'rgba(201,163,106,0.24)',
+    glowB: 'rgba(240,211,154,0.14)',
+  },
+  simple: {
+    primary: '#ff4017',
+    secondary: '#ff6b3a',
+    bg: '#101114',
+    surface: '#17191f',
+    border: 'rgba(255,255,255,0.08)',
+    glowA: 'rgba(255,64,23,0.10)',
+    glowB: 'rgba(255,107,58,0.08)',
+  },
 };
 
 const ClientPortal: React.FC = () => {
@@ -96,6 +130,7 @@ const ClientPortal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [portalView, setPortalView] = useState<PortalView>('welcome');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [forcedBrandMode, setForcedBrandMode] = useState<BrandMode | null>(null);
 
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [images, setImages] = useState<PortalImage[]>([]);
@@ -106,7 +141,20 @@ const ClientPortal: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setToken(params.get('token'));
+    const style = params.get('style');
+    if (style === 'vip' || style === 'simple' || style === 'classic') {
+      setForcedBrandMode(style);
+    }
   }, []);
+
+  const brandMode = useMemo<BrandMode>(() => {
+    if (forcedBrandMode) return forcedBrandMode;
+    const title = `${booking?.title || ''} ${booking?.category || ''}`.toLowerCase();
+    if (title.includes('vip')) return 'vip';
+    return 'classic';
+  }, [booking?.category, booking?.title, forcedBrandMode]);
+
+  const brand = BRAND_PRESETS[brandMode];
 
   const fetchPhotos = useCallback(async () => {
     if (!token) return;
@@ -286,19 +334,21 @@ const ClientPortal: React.FC = () => {
     <div
       className="min-h-screen text-white font-[Cairo,sans-serif] relative overflow-x-hidden"
       dir="rtl"
-      style={{ backgroundColor: BRAND.bg }}
+      style={{ backgroundColor: brand.bg }}
     >
-      <div className="pointer-events-none absolute inset-0 opacity-80">
+      <div
+        className={`pointer-events-none absolute inset-0 ${brandMode === 'simple' ? 'opacity-40' : 'opacity-80'}`}
+      >
         <div
           className="absolute -top-24 -right-20 w-96 h-96 rounded-full blur-3xl"
           style={{
-            background: 'radial-gradient(circle, rgba(255,64,23,0.24) 0%, rgba(255,64,23,0) 70%)',
+            background: `radial-gradient(circle, ${brand.glowA} 0%, rgba(0,0,0,0) 70%)`,
           }}
         />
         <div
           className="absolute -bottom-24 -left-20 w-[28rem] h-[28rem] rounded-full blur-3xl"
           style={{
-            background: 'radial-gradient(circle, rgba(255,140,66,0.14) 0%, rgba(255,140,66,0) 70%)',
+            background: `radial-gradient(circle, ${brand.glowB} 0%, rgba(0,0,0,0) 70%)`,
           }}
         />
       </div>
@@ -317,9 +367,9 @@ const ClientPortal: React.FC = () => {
               className="mb-10 text-center"
             >
               <div
-                className="w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#ff4017]/25"
+                className={`w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 ${brandMode === 'simple' ? 'shadow-lg' : 'shadow-2xl'}`}
                 style={{
-                  background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
+                  background: `linear-gradient(135deg, ${brand.primary}, ${brand.secondary})`,
                 }}
               >
                 <Camera size={40} className="text-white" />
@@ -327,9 +377,13 @@ const ClientPortal: React.FC = () => {
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/15 bg-white/5 text-[11px] text-zinc-300 mb-4">
                 <span
                   className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: BRAND.primary }}
+                  style={{ backgroundColor: brand.primary }}
                 />
-                الهوية الرسمية للاستوديو
+                {brandMode === 'vip'
+                  ? 'واجهة VIP'
+                  : brandMode === 'simple'
+                    ? 'واجهة Simple'
+                    : 'الهوية الرسمية للاستوديو'}
               </div>
               <h1 className="text-3xl font-black mb-2 tracking-wide">فيلا حداد</h1>
               <p className="text-zinc-300 text-sm">بوابة اختيار الصور</p>
@@ -340,7 +394,7 @@ const ClientPortal: React.FC = () => {
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.1 }}
               className="w-full max-w-md border rounded-3xl p-8 shadow-xl text-center"
-              style={{ backgroundColor: BRAND.surface, borderColor: BRAND.border }}
+              style={{ backgroundColor: brand.surface, borderColor: brand.border }}
             >
               <h2 className="text-xl font-black mb-4">أهلاً وسهلاً</h2>
               <p className="text-zinc-300 mb-8 text-sm leading-relaxed">
@@ -360,7 +414,7 @@ const ClientPortal: React.FC = () => {
                 disabled={!token}
                 className="w-full py-4 disabled:bg-zinc-700 disabled:text-zinc-500
                   text-white font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ backgroundColor: BRAND.primary }}
+                style={{ backgroundColor: brand.primary }}
                 onClick={handleEnterGallery}
               >
                 دخول المعرض
@@ -384,7 +438,10 @@ const ClientPortal: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="min-h-screen flex flex-col"
           >
-            <header className="sticky top-0 z-50 backdrop-blur-md border-b px-4 md:px-6 py-4 bg-[#0b0b0d]/85 border-white/10">
+            <header
+              className="sticky top-0 z-50 backdrop-blur-md border-b px-4 md:px-6 py-4 border-white/10"
+              style={{ backgroundColor: `${brand.bg}d9` }}
+            >
               <div className="max-w-7xl mx-auto">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -410,9 +467,10 @@ const ClientPortal: React.FC = () => {
                 {totalCount > 0 && (
                   <div className="mt-3 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-[#ff8c42]"
+                      className="h-full"
                       style={{
                         width: `${Math.round(((selectedCount + rejectedCount) / totalCount) * 100)}%`,
+                        backgroundImage: `linear-gradient(to left, #10b981, ${brand.secondary})`,
                       }}
                     />
                   </div>
@@ -441,7 +499,7 @@ const ClientPortal: React.FC = () => {
                         }`}
                         style={
                           statusFilter === tab.key
-                            ? { backgroundColor: BRAND.primary, borderColor: BRAND.primary }
+                            ? { backgroundColor: brand.primary, borderColor: brand.primary }
                             : undefined
                         }
                       >
@@ -499,7 +557,11 @@ const ClientPortal: React.FC = () => {
             <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
               {loadingState === 'loading' && (
                 <div className="flex flex-col items-center justify-center py-32">
-                  <Loader2 size={44} className="text-[#ff4017] animate-spin mb-4" />
+                  <Loader2
+                    size={44}
+                    className="animate-spin mb-4"
+                    style={{ color: brand.primary }}
+                  />
                   <p className="text-zinc-400 text-sm">جاري تحميل الصور...</p>
                 </div>
               )}
@@ -588,7 +650,10 @@ const ClientPortal: React.FC = () => {
                         onClick={closeLightbox}
                       >
                         <div className="absolute top-5 left-5 flex items-center gap-2 z-10">
-                          <div className="px-3 py-1.5 rounded-full bg-[#ff4017] text-white text-sm font-bold inline-flex items-center gap-2">
+                          <div
+                            className="px-3 py-1.5 rounded-full text-white text-sm font-bold inline-flex items-center gap-2"
+                            style={{ backgroundColor: brand.primary }}
+                          >
                             <Heart size={14} /> {selectedCount} مختارة
                           </div>
                         </div>
@@ -677,7 +742,10 @@ const ClientPortal: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="min-h-screen flex flex-col"
           >
-            <header className="sticky top-0 z-50 bg-[#0b0b0d]/85 backdrop-blur-md border-b border-white/10 px-4 md:px-6 py-4">
+            <header
+              className="sticky top-0 z-50 backdrop-blur-md border-b border-white/10 px-4 md:px-6 py-4"
+              style={{ backgroundColor: `${brand.bg}d9` }}
+            >
               <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="font-black text-lg">مراجعة الاختيار</h2>
@@ -710,7 +778,8 @@ const ClientPortal: React.FC = () => {
                   <button
                     disabled={selectedCount === 0 || loadingState === 'submitting'}
                     onClick={handleSubmitSelection}
-                    className="px-5 py-2 rounded-lg bg-[#ff4017] text-white font-bold text-sm hover:bg-[#ff5b2f] disabled:bg-zinc-700 disabled:text-zinc-500"
+                    className="px-5 py-2 rounded-lg text-white font-bold text-sm disabled:bg-zinc-700 disabled:text-zinc-500"
+                    style={{ backgroundColor: brand.primary }}
                   >
                     {loadingState === 'submitting' ? (
                       <span className="inline-flex items-center gap-2">
