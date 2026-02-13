@@ -16,27 +16,21 @@ serve(async req => {
 
     // 🔒 SECURITY: Create admin client with service role key (server-side only)
     const serviceRoleKey =
-      Deno.env.get('SERVICE_ROLE_KEY') ||
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-      '';
+      Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') || '',
-      serviceRoleKey,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    );
+    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL') || '', serviceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
 
     // Validate required fields
     if (!action || !entity) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: action, entity' }),
-        { status: 400, headers: corsHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Missing required fields: action, entity' }), {
+        status: 400,
+        headers: corsHeaders,
+      });
     }
 
     let result;
@@ -58,10 +52,10 @@ serve(async req => {
         result = await handleConflictResolution(supabaseAdmin, entity, data);
         break;
       default:
-        return new Response(
-          JSON.stringify({ error: `Unknown action: ${action}` }),
-          { status: 400, headers: corsHeaders }
-        );
+        return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+          status: 400,
+          headers: corsHeaders,
+        });
     }
 
     return new Response(JSON.stringify(result), {
@@ -69,17 +63,18 @@ serve(async req => {
     });
   } catch (error) {
     console.error('Sync Function Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: corsHeaders }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 });
 
 async function handleCreate(supabaseAdmin: any, entity: string, data: any) {
+  const cleanData = sanitizeEntityPayload(entity, data);
   const { data: result, error } = await supabaseAdmin
     .from(getTableName(entity))
-    .insert(data)
+    .insert(cleanData)
     .select()
     .single();
 
@@ -88,7 +83,8 @@ async function handleCreate(supabaseAdmin: any, entity: string, data: any) {
 }
 
 async function handleUpdate(supabaseAdmin: any, entity: string, data: any) {
-  const { id, ...updateData } = data;
+  const cleanData = sanitizeEntityPayload(entity, data);
+  const { id, ...updateData } = cleanData;
   const { data: result, error } = await supabaseAdmin
     .from(getTableName(entity))
     .update(updateData)
@@ -112,10 +108,7 @@ async function handleDelete(supabaseAdmin: any, entity: string, data: any) {
     if (error) throw error;
     return { success: true, message: 'Soft deleted successfully' };
   } else {
-    const { error } = await supabaseAdmin
-      .from(getTableName(entity))
-      .delete()
-      .eq('id', id);
+    const { error } = await supabaseAdmin.from(getTableName(entity)).delete().eq('id', id);
 
     if (error) throw error;
     return { success: true, message: 'Hard deleted successfully' };
@@ -123,9 +116,10 @@ async function handleDelete(supabaseAdmin: any, entity: string, data: any) {
 }
 
 async function handleUpsert(supabaseAdmin: any, entity: string, data: any) {
+  const cleanData = sanitizeEntityPayload(entity, data);
   const { data: result, error } = await supabaseAdmin
     .from(getTableName(entity))
-    .upsert(data)
+    .upsert(cleanData)
     .select()
     .single();
 
@@ -186,4 +180,72 @@ function getTableName(entity: string): string {
   };
 
   return tableMap[entity] || entity + 's';
+}
+
+function pickFields(input: Record<string, unknown>, allowed: string[]) {
+  const out: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (input[key] !== undefined) out[key] = input[key];
+  }
+  return out;
+}
+
+function sanitizeEntityPayload(entity: string, data: Record<string, unknown>) {
+  if (!data || typeof data !== 'object') return data;
+
+  if (entity === 'session_image') {
+    // Support legacy production schema:
+    // id, session_id, file_name, cloud_url, local_path, is_selected, created_at
+    const mapped: Record<string, unknown> = {
+      id: data.id,
+      session_id: data.session_id ?? data.sessionId,
+      file_name: data.file_name ?? data.fileName,
+      cloud_url: data.cloud_url ?? data.cloudUrl,
+      local_path: data.local_path ?? data.original_path ?? data.originalPath ?? null,
+      is_selected:
+        data.is_selected ?? data.isSelected ?? (data.status === 'selected' ? true : false),
+      created_at: data.created_at ?? data.uploaded_at ?? new Date().toISOString(),
+    };
+
+    return pickFields(mapped, [
+      'id',
+      'session_id',
+      'file_name',
+      'cloud_url',
+      'local_path',
+      'is_selected',
+      'created_at',
+    ]);
+  }
+
+  if (entity === 'session') {
+    // Support legacy production schema:
+    // id, booking_id, client_name, folder_path, status, created_at
+    const mapped: Record<string, unknown> = {
+      id: data.id,
+      booking_id: data.booking_id ?? data.bookingId,
+      client_name: data.client_name ?? data.clientName,
+      folder_path: data.folder_path ?? data.nas_path ?? data.nasPath ?? null,
+      status: data.status ?? 'ingesting',
+      created_at: data.created_at ?? new Date().toISOString(),
+    };
+
+    return pickFields(mapped, [
+      'id',
+      'booking_id',
+      'client_name',
+      'folder_path',
+      'status',
+      'created_at',
+    ]);
+  }
+
+  if (entity === 'booking') {
+    // Guard old DBs that don't have exchange_rate yet.
+    const clean = { ...data };
+    delete clean.exchange_rate;
+    return clean;
+  }
+
+  return data;
 }
