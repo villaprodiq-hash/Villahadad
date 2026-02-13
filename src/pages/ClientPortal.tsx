@@ -201,49 +201,78 @@ const ClientPortal: React.FC = () => {
     }
   }, [images, token]);
 
+  const downloadBlobFile = useCallback(async (url: string, fileName: string) => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  }, []);
+
+  const handleDownloadSingle = useCallback(
+    async (image: PortalImage) => {
+      const url = image.cloudUrl || image.thumbnailUrl;
+      if (!url) return;
+      try {
+        await downloadBlobFile(url, image.fileName);
+      } catch {
+        // no-op
+      }
+    },
+    [downloadBlobFile]
+  );
+
+  const handleDownloadBatch = useCallback(
+    async (downloads: Array<{ fileName: string; url: string }>) => {
+      if (!downloads.length || downloadState === 'downloading') return;
+      setDownloadState('downloading');
+      setDownloadProgress({ current: 0, total: downloads.length });
+
+      try {
+        for (let i = 0; i < downloads.length; i++) {
+          const { fileName, url } = downloads[i];
+          try {
+            await downloadBlobFile(url, fileName);
+          } catch {
+            // continue
+          }
+          setDownloadProgress({ current: i + 1, total: downloads.length });
+          if (i < downloads.length - 1) await new Promise(r => setTimeout(r, 250));
+        }
+        setDownloadState('done');
+        setTimeout(() => setDownloadState('idle'), 2500);
+      } catch {
+        setDownloadState('idle');
+      }
+    },
+    [downloadBlobFile, downloadState]
+  );
+
   const handleDownloadAll = useCallback(async () => {
     if (!token || downloadState === 'downloading') return;
-    setDownloadState('downloading');
 
     try {
       const data = await callPortal({ action: 'get_download_urls', token });
       if (data?.error) throw new Error(data.error);
 
       const downloads: { fileName: string; url: string }[] = data.downloads || [];
-      setDownloadProgress({ current: 0, total: downloads.length });
-
-      for (let i = 0; i < downloads.length; i++) {
-        const { fileName, url } = downloads[i];
-
-        try {
-          const response = await fetch(url);
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-
-          setDownloadProgress({ current: i + 1, total: downloads.length });
-
-          if (i < downloads.length - 1) {
-            await new Promise(r => setTimeout(r, 250));
-          }
-        } catch {
-          // continue to next image
-        }
-      }
-
-      setDownloadState('done');
-      setTimeout(() => setDownloadState('idle'), 2500);
+      await handleDownloadBatch(downloads);
     } catch {
       setDownloadState('idle');
     }
-  }, [downloadState, token]);
+  }, [downloadState, handleDownloadBatch, token]);
+
+  const handleDownloadVisible = useCallback(async () => {
+    const list = filteredImages
+      .filter(img => !!(img.cloudUrl || img.thumbnailUrl))
+      .map(img => ({ fileName: img.fileName, url: (img.cloudUrl || img.thumbnailUrl) as string }));
+    await handleDownloadBatch(list);
+  }, [filteredImages, handleDownloadBatch]);
 
   return (
     <div className="min-h-screen bg-[#0b0b0d] text-white font-[Cairo,sans-serif]" dir="rtl">
@@ -387,6 +416,20 @@ const ClientPortal: React.FC = () => {
                       تصفير
                     </button>
                     <button
+                      disabled={downloadState === 'downloading' || selectedCount === 0}
+                      onClick={handleDownloadAll}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-white/10 border border-white/15 text-zinc-100 hover:bg-white/20 disabled:bg-zinc-700 disabled:text-zinc-500"
+                    >
+                      تحميل المقبولة
+                    </button>
+                    <button
+                      disabled={downloadState === 'downloading' || filteredImages.length === 0}
+                      onClick={handleDownloadVisible}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-white/10 border border-white/15 text-zinc-100 hover:bg-white/20 disabled:bg-zinc-700 disabled:text-zinc-500"
+                    >
+                      تحميل الظاهر
+                    </button>
+                    <button
                       disabled={selectedCount === 0}
                       onClick={handleGoToReview}
                       className="px-4 py-2 rounded-lg text-xs font-bold bg-white text-black hover:bg-zinc-200 disabled:bg-zinc-700 disabled:text-zinc-500"
@@ -464,6 +507,19 @@ const ClientPortal: React.FC = () => {
                           <div className="absolute bottom-2 left-2 right-2 text-right">
                             <p className="text-[10px] text-white/80 truncate">{img.fileName}</p>
                           </div>
+                          <div className="absolute bottom-2 left-2">
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleDownloadSingle(img);
+                              }}
+                              className="w-8 h-8 rounded-lg bg-black/45 hover:bg-black/70 text-white flex items-center justify-center"
+                              title="تحميل الصورة"
+                              aria-label="تحميل الصورة"
+                            >
+                              <Download size={14} />
+                            </button>
+                          </div>
                         </button>
                       </motion.div>
                     ))}
@@ -505,6 +561,12 @@ const ClientPortal: React.FC = () => {
                             className="mt-4 flex flex-wrap items-center justify-center gap-2"
                             onClick={e => e.stopPropagation()}
                           >
+                            <button
+                              onClick={() => handleDownloadSingle(currentImage)}
+                              className="px-4 py-2 rounded-lg text-sm border bg-white/10 border-white/20 text-white hover:bg-white/20"
+                            >
+                              تحميل هذه الصورة
+                            </button>
                             <button
                               onClick={() => setImageStatus(currentImage.id, 'selected')}
                               className={`px-4 py-2 rounded-lg text-sm border ${currentImage.status === 'selected' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'}`}
@@ -655,6 +717,14 @@ const ClientPortal: React.FC = () => {
                         <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">
                           {idx + 1}
                         </div>
+                        <button
+                          onClick={() => handleDownloadSingle(img)}
+                          className="absolute bottom-2 left-2 w-7 h-7 rounded-md bg-black/45 hover:bg-black/70 text-white flex items-center justify-center"
+                          title="تحميل الصورة"
+                          aria-label="تحميل الصورة"
+                        >
+                          <Download size={13} />
+                        </button>
                       </div>
                     ))}
                   </div>
