@@ -1,27 +1,21 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Lock,
-  ArrowRight,
-  Image as ImageIcon,
-  Heart,
-  CheckCircle2,
-  XCircle,
-  X,
-  HelpCircle,
-  Loader2,
   AlertCircle,
   Camera,
-  Send,
-  Download,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Heart,
+  Image as ImageIcon,
+  Loader2,
+  Lock,
+  Send,
+  X,
+  XCircle,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../services/supabase';
-
-// ─── Portal Edge Function Helper ────────────────────────────
-// supabase.functions.invoke fails without an auth session (portal is anonymous).
-// Use direct fetch with the anon key as Authorization instead.
 
 async function callPortal(body: Record<string, unknown>) {
   const fnUrl = (supabase as any).functionsUrl || `${(supabase as any).supabaseUrl}/functions/v1`;
@@ -45,14 +39,14 @@ async function callPortal(body: Record<string, unknown>) {
   return res.json();
 }
 
-// ─── Types ──────────────────────────────────────────────────
+type ImageStatus = 'pending' | 'selected' | 'rejected';
 
 interface PortalImage {
   id: string;
   fileName: string;
   cloudUrl: string | null;
   thumbnailUrl: string | null;
-  status: 'pending' | 'selected' | 'rejected';
+  status: ImageStatus;
   liked: number;
   notes: string | null;
   sortOrder: number;
@@ -68,14 +62,32 @@ interface BookingInfo {
 type LoadingState = 'idle' | 'loading' | 'loaded' | 'error' | 'submitting' | 'submitted';
 type DownloadState = 'idle' | 'downloading' | 'done';
 type PortalView = 'welcome' | 'gallery' | 'review' | 'done';
+type StatusFilter = 'all' | ImageStatus;
 
-// ─── Component ──────────────────────────────────────────────
+const STATUS_META: Record<ImageStatus, { label: string; badge: string; ring: string }> = {
+  selected: {
+    label: 'مقبولة',
+    badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    ring: 'border-emerald-500 shadow-[0_18px_38px_rgba(16,185,129,0.25)]',
+  },
+  rejected: {
+    label: 'مرفوضة',
+    badge: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    ring: 'border-rose-500 shadow-[0_18px_38px_rgba(244,63,94,0.2)]',
+  },
+  pending: {
+    label: 'معلّقة',
+    badge: 'bg-zinc-500/20 text-zinc-200 border-zinc-500/30',
+    ring: 'border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.35)]',
+  },
+};
 
 const ClientPortal: React.FC = () => {
   const [token, setToken] = useState<string | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [portalView, setPortalView] = useState<PortalView>('welcome');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [images, setImages] = useState<PortalImage[]>([]);
@@ -83,14 +95,10 @@ const ClientPortal: React.FC = () => {
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
 
-  // Extract token from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const t = params.get('token');
-    setToken(t);
+    setToken(params.get('token'));
   }, []);
-
-  // ─── Fetch photos from Edge Function ──────────────────────
 
   const fetchPhotos = useCallback(async () => {
     if (!token) return;
@@ -99,58 +107,55 @@ const ClientPortal: React.FC = () => {
 
     try {
       const data = await callPortal({ action: 'get_photos', token });
-
       if (data?.error) throw new Error(data.error);
-
       setBooking(data.booking);
       setImages(data.images || []);
       setLoadingState('loaded');
     } catch (err: any) {
-      console.error('Portal fetch error:', err);
-      setErrorMsg(err.message || 'حدث خطأ في تحميل الصور');
+      setErrorMsg(err.message || 'تعذر تحميل الصور.');
       setLoadingState('error');
     }
   }, [token]);
-
-  // ─── Enter gallery → fetch photos ────────────────────────
 
   const handleEnterGallery = useCallback(() => {
     setPortalView('gallery');
     fetchPhotos();
   }, [fetchPhotos]);
 
-  // ─── Toggle image selection ───────────────────────────────
-
-  const handleToggleStatus = useCallback((imageId: string) => {
-    setImages(prev =>
-      prev.map(img => {
-        if (img.id !== imageId) return img;
-        const newStatus = img.status === 'selected' ? 'pending' : 'selected';
-        return { ...img, status: newStatus };
-      })
-    );
+  const setImageStatus = useCallback((imageId: string, status: ImageStatus) => {
+    setImages(prev => prev.map(img => (img.id === imageId ? { ...img, status } : img)));
   }, []);
 
-  // ─── Lightbox controls ────────────────────────────────────
+  const applyStatusToAll = useCallback((status: ImageStatus | 'pending') => {
+    setImages(prev => prev.map(img => ({ ...img, status })));
+  }, []);
+
+  const selectedCount = useMemo(() => images.filter(i => i.status === 'selected').length, [images]);
+  const rejectedCount = useMemo(() => images.filter(i => i.status === 'rejected').length, [images]);
+  const pendingCount = useMemo(() => images.filter(i => i.status === 'pending').length, [images]);
+  const totalCount = images.length;
+
+  const filteredImages = useMemo(() => {
+    if (statusFilter === 'all') return images;
+    return images.filter(img => img.status === statusFilter);
+  }, [images, statusFilter]);
+
+  const selectedImages = useMemo(() => images.filter(i => i.status === 'selected'), [images]);
 
   const closeLightbox = useCallback(() => setLightboxIndex(null), []);
   const openLightbox = useCallback((index: number) => setLightboxIndex(index), []);
-  const currentImage = lightboxIndex !== null ? images[lightboxIndex] : null;
+
+  const currentImage = lightboxIndex !== null ? filteredImages[lightboxIndex] : null;
 
   const showNextImage = useCallback(() => {
-    if (lightboxIndex === null || images.length === 0) return;
-    setLightboxIndex((lightboxIndex + 1) % images.length);
-  }, [lightboxIndex, images.length]);
+    if (lightboxIndex === null || filteredImages.length === 0) return;
+    setLightboxIndex((lightboxIndex + 1) % filteredImages.length);
+  }, [lightboxIndex, filteredImages.length]);
 
   const showPrevImage = useCallback(() => {
-    if (lightboxIndex === null || images.length === 0) return;
-    setLightboxIndex((lightboxIndex - 1 + images.length) % images.length);
-  }, [lightboxIndex, images.length]);
-
-  const toggleCurrentFromLightbox = useCallback(() => {
-    if (!currentImage) return;
-    handleToggleStatus(currentImage.id);
-  }, [currentImage, handleToggleStatus]);
+    if (lightboxIndex === null || filteredImages.length === 0) return;
+    setLightboxIndex((lightboxIndex - 1 + filteredImages.length) % filteredImages.length);
+  }, [lightboxIndex, filteredImages.length]);
 
   useEffect(() => {
     if (lightboxIndex === null) return;
@@ -159,28 +164,23 @@ const ClientPortal: React.FC = () => {
       if (e.key === 'ArrowRight') showNextImage();
       if (e.key === 'ArrowLeft') showPrevImage();
     };
+
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeyDown);
+
     return () => {
       document.body.style.overflow = 'auto';
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [lightboxIndex, closeLightbox, showNextImage, showPrevImage]);
 
-  // ─── Go to review page ───────────────────────────────────
-
-  const handleGoToReview = useCallback(() => {
-    setPortalView('review');
-  }, []);
-
-  // ─── Submit selection to Edge Function ────────────────────
+  const handleGoToReview = useCallback(() => setPortalView('review'), []);
 
   const handleSubmitSelection = useCallback(async () => {
     if (!token) return;
     setLoadingState('submitting');
 
     try {
-      // Send all image statuses
       const selections = images.map(img => ({
         imageId: img.id,
         status: img.status,
@@ -188,41 +188,33 @@ const ClientPortal: React.FC = () => {
       }));
 
       const data = await callPortal({ action: 'update_selection', token, selections });
-
       if (data?.error) throw new Error(data.error);
 
-      // Confirm selection (locks it in, advances booking)
       const confirmData = await callPortal({ action: 'confirm_selection', token });
-
       if (confirmData?.error) throw new Error(confirmData.error);
 
       setLoadingState('submitted');
       setPortalView('done');
     } catch (err: any) {
-      console.error('Submit error:', err);
-      setErrorMsg(err.message || 'حدث خطأ في إرسال الاختيار');
-      setLoadingState('loaded'); // Go back to gallery so user can retry
+      setErrorMsg(err.message || 'تعذر إرسال الاختيار.');
+      setLoadingState('loaded');
     }
-  }, [token, images]);
-
-  // ─── Download all photos ─────────────────────────────────
+  }, [images, token]);
 
   const handleDownloadAll = useCallback(async () => {
     if (!token || downloadState === 'downloading') return;
     setDownloadState('downloading');
 
     try {
-      // Get full-res URLs from Edge Function
       const data = await callPortal({ action: 'get_download_urls', token });
-
       if (data?.error) throw new Error(data.error);
 
       const downloads: { fileName: string; url: string }[] = data.downloads || [];
       setDownloadProgress({ current: 0, total: downloads.length });
 
-      // Download each image using hidden <a> tags
       for (let i = 0; i < downloads.length; i++) {
         const { fileName, url } = downloads[i];
+
         try {
           const response = await fetch(url);
           const blob = await response.blob();
@@ -238,37 +230,24 @@ const ClientPortal: React.FC = () => {
 
           setDownloadProgress({ current: i + 1, total: downloads.length });
 
-          // Small delay between downloads to avoid browser throttling
           if (i < downloads.length - 1) {
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 250));
           }
         } catch {
-          console.warn(`Failed to download: ${fileName}`);
+          // continue to next image
         }
       }
 
       setDownloadState('done');
-      setTimeout(() => setDownloadState('idle'), 3000);
-    } catch (err: any) {
-      console.error('Download error:', err);
+      setTimeout(() => setDownloadState('idle'), 2500);
+    } catch {
       setDownloadState('idle');
     }
-  }, [token, downloadState]);
-
-  // ─── Counts ───────────────────────────────────────────────
-
-  const selectedCount = useMemo(() => images.filter(i => i.status === 'selected').length, [images]);
-
-  const totalCount = images.length;
-
-  const selectedImages = useMemo(() => images.filter(i => i.status === 'selected'), [images]);
-
-  // ─── Render ───────────────────────────────────────────────
+  }, [downloadState, token]);
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white font-sans" dir="rtl">
+    <div className="min-h-screen bg-[#0b0b0d] text-white font-[Cairo,sans-serif]" dir="rtl">
       <AnimatePresence mode="wait">
-        {/* ═══ VIEW 1: Welcome Screen ═══ */}
         {portalView === 'welcome' && (
           <motion.div
             key="welcome"
@@ -278,203 +257,231 @@ const ClientPortal: React.FC = () => {
             className="min-h-screen flex flex-col items-center justify-center p-6"
           >
             <motion.div
-              initial={{ y: -20, opacity: 0 }}
+              initial={{ y: -16, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              className="mb-12 text-center"
+              className="mb-10 text-center"
             >
-              <div className="w-24 h-24 bg-gradient-to-br from-amber-400 to-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-amber-500/20">
+              <div className="w-24 h-24 bg-gradient-to-br from-[#ff4017] to-[#ff8c42] rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#ff4017]/25">
                 <Camera size={40} className="text-white" />
               </div>
-              <h1 className="text-3xl font-bold mb-2">فيلا حداد</h1>
-              <p className="text-gray-400 text-sm">بوابة اختيار الصور</p>
+              <h1 className="text-3xl font-black mb-2">فيلا حداد</h1>
+              <p className="text-zinc-400 text-sm">بوابة اختيار الصور</p>
             </motion.div>
 
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.1 }}
-              className="w-full max-w-md bg-[#1a1a1a] border border-white/5 rounded-3xl p-8 shadow-xl text-center"
+              className="w-full max-w-md bg-[#151519] border border-white/10 rounded-3xl p-8 shadow-xl text-center"
             >
-              <h2 className="text-xl font-bold mb-4">!اهلا بك</h2>
-              <p className="text-gray-400 mb-8 text-sm leading-relaxed">
-                أنت على وشك الدخول إلى معرض الصور الخاص بك. اضغط على الصور لاختيارها، ثم راجع
-                اختيارك وأرسله. الصور المختارة سيتم تعديلها وتجهيزها لك.
+              <h2 className="text-xl font-black mb-4">أهلاً وسهلاً</h2>
+              <p className="text-zinc-300 mb-8 text-sm leading-relaxed">
+                ستشاهد صورك، وتحدد كل صورة: <span className="text-emerald-300">مقبولة</span> أو
+                <span className="text-rose-300"> مرفوضة</span> أو
+                <span className="text-zinc-300"> معلّقة</span> قبل الإرسال النهائي.
               </p>
 
               {!token && (
-                <div className="flex items-center gap-2 text-red-400 text-sm mb-4 justify-center">
+                <div className="flex items-center gap-2 text-rose-400 text-sm mb-4 justify-center">
                   <AlertCircle size={16} />
-                  <span>رابط غير صالح — يرجى التواصل مع الاستديو</span>
+                  <span>الرابط غير صالح، تواصل مع الاستوديو.</span>
                 </div>
               )}
 
               <button
                 disabled={!token}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-700 disabled:text-gray-500
-                  text-black font-bold rounded-xl transition-all hover:scale-105 active:scale-95
-                  flex items-center justify-center gap-2"
+                className="w-full py-4 bg-[#ff4017] hover:bg-[#ff5b2f] disabled:bg-zinc-700 disabled:text-zinc-500
+                  text-white font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
                 onClick={handleEnterGallery}
               >
-                <span>عرض الصور</span>
-                <ArrowRight size={20} />
+                دخول المعرض
               </button>
 
-              <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-500">
+              <div className="mt-6 flex items-center justify-center gap-2 text-xs text-zinc-500">
                 <Lock size={12} />
-                <span>رابط آمن وخاص بك</span>
+                <span>رابط خاص وآمن</span>
               </div>
             </motion.div>
-
-            <footer className="mt-12 text-center text-gray-600 text-xs">
-              &copy; {new Date().getFullYear()} Villa Hadad Studio
-            </footer>
           </motion.div>
         )}
 
-        {/* ═══ VIEW 2: Gallery ═══ */}
         {portalView === 'gallery' && (
           <motion.div
             key="gallery"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             className="min-h-screen flex flex-col"
           >
-            {/* Header */}
-            <header className="sticky top-0 z-50 bg-[#0f0f0f]/80 backdrop-blur-md border-b border-white/10 px-6 py-4">
-              <div className="flex items-center justify-between max-w-7xl mx-auto">
-                <div>
-                  <h2 className="font-bold text-lg">{booking?.title || 'معرض الصور'}</h2>
-                  <p className="text-xs text-gray-400">
-                    {booking?.clientName
-                      ? `مرحبا ${booking.clientName} — اضغط على الصور لاختيارها`
-                      : 'اضغط على الصور لاختيارها'}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {/* Counter */}
-                  <div className="bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center gap-2">
-                    <Heart size={16} className="text-amber-500 fill-amber-500" />
-                    <span className="text-amber-500 font-bold text-sm">
-                      {selectedCount}
-                      <span className="text-amber-500/50 font-normal"> / {totalCount}</span>
-                    </span>
+            <header className="sticky top-0 z-50 bg-[#0b0b0d]/85 backdrop-blur-md border-b border-white/10 px-4 md:px-6 py-4">
+              <div className="max-w-7xl mx-auto">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-black text-lg">{booking?.title || 'معرض العميل'}</h2>
+                    <p className="text-xs text-zinc-400">
+                      {booking?.clientName ? `مرحباً ${booking.clientName}` : 'اختر صورك ثم أرسلها'}
+                    </p>
                   </div>
 
-                  {/* Go to Review */}
-                  <button
-                    disabled={selectedCount === 0}
-                    className="bg-white text-black px-5 py-2.5 rounded-xl text-sm font-bold
-                      hover:bg-gray-200 disabled:bg-gray-800 disabled:text-gray-600
-                      transition-all flex items-center gap-2"
-                    onClick={handleGoToReview}
-                  >
-                    <Send size={16} />
-                    <span>مراجعة الاختيار</span>
-                  </button>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2.5 py-1 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                      {selectedCount} مقبولة
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg border border-rose-500/30 bg-rose-500/15 text-rose-300">
+                      {rejectedCount} مرفوضة
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg border border-zinc-500/30 bg-zinc-500/15 text-zinc-200">
+                      {pendingCount} معلّقة
+                    </span>
+                  </div>
+                </div>
+
+                {totalCount > 0 && (
+                  <div className="mt-3 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-[#ff8c42]"
+                      style={{
+                        width: `${Math.round(((selectedCount + rejectedCount) / totalCount) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        { key: 'all', label: `الكل (${totalCount})` },
+                        { key: 'selected', label: `مقبولة (${selectedCount})` },
+                        { key: 'rejected', label: `مرفوضة (${rejectedCount})` },
+                        { key: 'pending', label: `معلقة (${pendingCount})` },
+                      ] as Array<{ key: StatusFilter; label: string }>
+                    ).map(tab => (
+                      <button
+                        key={tab.key}
+                        onClick={() => {
+                          setStatusFilter(tab.key);
+                          setLightboxIndex(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                          statusFilter === tab.key
+                            ? 'bg-[#ff4017] border-[#ff4017] text-white'
+                            : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => applyStatusToAll('selected')}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30"
+                    >
+                      تحديد الكل مقبول
+                    </button>
+                    <button
+                      onClick={() => applyStatusToAll('pending')}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-zinc-500/20 border border-zinc-500/30 text-zinc-200 hover:bg-zinc-500/30"
+                    >
+                      تصفير
+                    </button>
+                    <button
+                      disabled={selectedCount === 0}
+                      onClick={handleGoToReview}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-white text-black hover:bg-zinc-200 disabled:bg-zinc-700 disabled:text-zinc-500"
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        <Send size={13} /> مراجعة وإرسال
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </header>
 
-            {/* Content */}
-            <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+            <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
               {loadingState === 'loading' && (
                 <div className="flex flex-col items-center justify-center py-32">
-                  <Loader2 size={48} className="text-amber-500 animate-spin mb-4" />
-                  <p className="text-gray-400 text-sm">جاري تحميل الصور...</p>
+                  <Loader2 size={44} className="text-[#ff4017] animate-spin mb-4" />
+                  <p className="text-zinc-400 text-sm">جاري تحميل الصور...</p>
                 </div>
               )}
 
               {loadingState === 'error' && (
                 <div className="flex flex-col items-center justify-center py-32">
-                  <AlertCircle size={48} className="text-red-400 mb-4" />
-                  <p className="text-red-400 text-sm mb-4">{errorMsg}</p>
+                  <AlertCircle size={44} className="text-rose-400 mb-4" />
+                  <p className="text-rose-300 text-sm mb-4">{errorMsg}</p>
                   <button
                     onClick={fetchPhotos}
-                    className="px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20 transition-colors"
+                    className="px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20"
                   >
                     إعادة المحاولة
                   </button>
                 </div>
               )}
 
-              {loadingState === 'loaded' && images.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-32">
-                  <ImageIcon size={48} className="text-gray-600 mb-4" />
-                  <p className="text-gray-500 text-sm">لا توجد صور بعد — يتم تجهيزها</p>
+              {loadingState === 'loaded' && filteredImages.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-32 text-center">
+                  <ImageIcon size={44} className="text-zinc-600 mb-4" />
+                  <p className="text-zinc-400 text-sm">
+                    {images.length === 0
+                      ? 'لا توجد صور متاحة حالياً.'
+                      : 'لا توجد صور ضمن هذا الفلتر.'}
+                  </p>
                 </div>
               )}
 
-              {loadingState === 'loaded' && images.length > 0 && (
+              {loadingState === 'loaded' && filteredImages.length > 0 && (
                 <>
                   <div className="columns-1 sm:columns-2 lg:columns-4 gap-3 [column-fill:_balance]">
-                    {images.map((img, index) => {
-                      const selected = img.status === 'selected';
-                      return (
-                        <motion.div
-                          key={img.id}
-                          initial={{ opacity: 0, y: 16 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.25, delay: index * 0.02 }}
-                          className="mb-3 break-inside-avoid"
+                    {filteredImages.map((img, index) => (
+                      <motion.div
+                        key={img.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.015 }}
+                        className="mb-3 break-inside-avoid"
+                      >
+                        <button
+                          onClick={() => openLightbox(index)}
+                          className={`group relative w-full overflow-hidden rounded-2xl border transition-all ${STATUS_META[img.status].ring}`}
                         >
-                          <button
-                            onClick={() => openLightbox(index)}
-                            className={`group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300
-                              ${
-                                selected
-                                  ? 'border-[#ff4017] shadow-[0_18px_40px_rgba(255,64,23,0.28)]'
-                                  : 'border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.35)] hover:border-white/25'
-                              }`}
-                          >
-                            <img
-                              src={img.thumbnailUrl || img.cloudUrl || ''}
-                              alt={img.fileName}
-                              className="w-full h-auto block object-contain transition-transform duration-500 group-hover:scale-[1.03]"
-                              loading="lazy"
-                            />
-                            <div
-                              className={`absolute inset-0 transition-colors duration-300 ${selected ? 'bg-[#ff4017]/10' : 'bg-black/0 group-hover:bg-black/20'}`}
-                            />
-                            {selected && (
-                              <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#ff4017] flex items-center justify-center">
-                                <CheckCircle2 size={16} className="text-white" />
-                              </div>
-                            )}
-                          </button>
-                        </motion.div>
-                      );
-                    })}
+                          <img
+                            src={img.thumbnailUrl || img.cloudUrl || ''}
+                            alt={img.fileName}
+                            className="w-full h-auto block object-contain transition-transform duration-500 group-hover:scale-[1.02]"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+                          <div className="absolute top-3 right-3">
+                            <span
+                              className={`px-2 py-1 text-[11px] rounded-full border ${STATUS_META[img.status].badge}`}
+                            >
+                              {STATUS_META[img.status].label}
+                            </span>
+                          </div>
+                          <div className="absolute bottom-2 left-2 right-2 text-right">
+                            <p className="text-[10px] text-white/80 truncate">{img.fileName}</p>
+                          </div>
+                        </button>
+                      </motion.div>
+                    ))}
                   </div>
 
-                  {/* Lightbox */}
                   <AnimatePresence>
                     {lightboxIndex !== null && currentImage && (
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[1200] bg-black/95"
+                        className="fixed inset-0 z-[1300] bg-black/95"
                         onClick={closeLightbox}
                       >
-                        <div className="absolute top-5 left-5 flex items-center gap-3 z-10">
-                          <div className="bg-[#ff4017] text-white px-4 py-2 rounded-full text-sm font-bold">
-                            {selectedCount} مختارة
+                        <div className="absolute top-5 left-5 flex items-center gap-2 z-10">
+                          <div className="px-3 py-1.5 rounded-full bg-[#ff4017] text-white text-sm font-bold inline-flex items-center gap-2">
+                            <Heart size={14} /> {selectedCount} مختارة
                           </div>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleGoToReview();
-                            }}
-                            className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${
-                              selectedCount > 0
-                                ? 'bg-white text-[#251b18] hover:bg-[#ff8c42] hover:text-white'
-                                : 'bg-white/20 text-white/60 cursor-not-allowed'
-                            }`}
-                            disabled={selectedCount === 0}
-                          >
-                            مراجعة الاختيار
-                          </button>
                         </div>
 
                         <button
@@ -482,44 +489,41 @@ const ClientPortal: React.FC = () => {
                             e.stopPropagation();
                             closeLightbox();
                           }}
-                          className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center z-10"
-                          aria-label="Close"
+                          className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center z-10"
                         >
                           <X size={18} />
                         </button>
 
                         <div className="h-full w-full flex flex-col items-center justify-center px-4">
-                          <button
-                            className="relative cursor-pointer"
-                            onClick={e => {
-                              e.stopPropagation();
-                              toggleCurrentFromLightbox();
-                            }}
-                          >
-                            <img
-                              src={currentImage.cloudUrl || currentImage.thumbnailUrl || ''}
-                              alt={currentImage.fileName}
-                              className="max-w-[90vw] max-h-[72vh] object-contain rounded-lg"
-                            />
-                            <div
-                              className={`absolute top-4 right-4 w-10 h-10 rounded-full border-4 flex items-center justify-center transition-all ${
-                                currentImage.status === 'selected'
-                                  ? 'border-[#ff4017] bg-[#ff4017]'
-                                  : 'border-white bg-black/20'
-                              }`}
-                            >
-                              <CheckCircle2
-                                size={18}
-                                className={`${currentImage.status === 'selected' ? 'text-white' : 'text-white/0'}`}
-                              />
-                            </div>
-                          </button>
+                          <img
+                            src={currentImage.cloudUrl || currentImage.thumbnailUrl || ''}
+                            alt={currentImage.fileName}
+                            className="max-w-[92vw] max-h-[72vh] object-contain rounded-lg"
+                          />
 
-                          <p className="text-white/80 mt-4 text-sm">
-                            {currentImage.status === 'selected'
-                              ? 'تم اختيار الصورة'
-                              : 'اضغط على الصورة لاختيارها'}
-                          </p>
+                          <div
+                            className="mt-4 flex flex-wrap items-center justify-center gap-2"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => setImageStatus(currentImage.id, 'selected')}
+                              className={`px-4 py-2 rounded-lg text-sm border ${currentImage.status === 'selected' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'}`}
+                            >
+                              مقبولة
+                            </button>
+                            <button
+                              onClick={() => setImageStatus(currentImage.id, 'rejected')}
+                              className={`px-4 py-2 rounded-lg text-sm border ${currentImage.status === 'rejected' ? 'bg-rose-500 text-white border-rose-500' : 'bg-rose-500/15 border-rose-500/30 text-rose-300 hover:bg-rose-500/25'}`}
+                            >
+                              مرفوضة
+                            </button>
+                            <button
+                              onClick={() => setImageStatus(currentImage.id, 'pending')}
+                              className={`px-4 py-2 rounded-lg text-sm border ${currentImage.status === 'pending' ? 'bg-zinc-600 text-white border-zinc-600' : 'bg-zinc-500/15 border-zinc-500/30 text-zinc-200 hover:bg-zinc-500/25'}`}
+                            >
+                              معلقة
+                            </button>
+                          </div>
                         </div>
 
                         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-3">
@@ -528,20 +532,18 @@ const ClientPortal: React.FC = () => {
                               e.stopPropagation();
                               showPrevImage();
                             }}
-                            className="w-14 h-10 rounded-lg bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
-                            aria-label="Previous"
+                            className="w-14 h-10 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center"
                           >
-                            <ChevronLeft size={18} />
+                            <ChevronRight size={18} />
                           </button>
                           <button
                             onClick={e => {
                               e.stopPropagation();
                               showNextImage();
                             }}
-                            className="w-14 h-10 rounded-lg bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
-                            aria-label="Next"
+                            className="w-14 h-10 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center"
                           >
-                            <ChevronRight size={18} />
+                            <ChevronLeft size={18} />
                           </button>
                         </div>
                       </motion.div>
@@ -550,238 +552,163 @@ const ClientPortal: React.FC = () => {
                 </>
               )}
             </main>
-
-            {/* Bottom bar */}
-            {loadingState === 'loaded' && selectedCount > 0 && (
-              <motion.div
-                initial={{ y: 50, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="sticky bottom-0 bg-[#0f0f0f]/90 backdrop-blur-md border-t border-white/10 px-6 py-4"
-              >
-                <div className="flex items-center justify-between max-w-7xl mx-auto">
-                  <p className="text-sm text-gray-400">
-                    اخترت <span className="text-amber-500 font-bold">{selectedCount}</span> صورة من
-                    أصل <span className="text-white font-bold">{totalCount}</span>
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() =>
-                        setImages(prev => prev.map(i => ({ ...i, status: 'pending' as const })))
-                      }
-                      className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-                    >
-                      إلغاء الكل
-                    </button>
-                    <button
-                      onClick={handleGoToReview}
-                      className="bg-amber-500 text-black px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-600 transition-all"
-                    >
-                      مراجعة وإرسال ({selectedCount})
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
           </motion.div>
         )}
 
-        {/* ═══ VIEW 3: Review / Summary ═══ */}
         {portalView === 'review' && (
           <motion.div
             key="review"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
             className="min-h-screen flex flex-col"
           >
-            {/* Header */}
-            <header className="sticky top-0 z-50 bg-[#0f0f0f]/80 backdrop-blur-md border-b border-white/10 px-6 py-4">
-              <div className="flex items-center justify-between max-w-7xl mx-auto">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setPortalView('gallery')}
-                    className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                  >
-                    <ArrowRight size={18} />
-                  </button>
-                  <div>
-                    <h2 className="font-bold text-lg">مراجعة الاختيار</h2>
-                    <p className="text-xs text-gray-400">
-                      تأكد من اختيارك قبل الإرسال — {selectedCount} صورة مختارة
-                    </p>
-                  </div>
+            <header className="sticky top-0 z-50 bg-[#0b0b0d]/85 backdrop-blur-md border-b border-white/10 px-4 md:px-6 py-4">
+              <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-black text-lg">مراجعة الاختيار</h2>
+                  <p className="text-xs text-zinc-400">
+                    قبل الإرسال النهائي تأكد من الصور المقبولة.
+                  </p>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  {/* Download Selected */}
+                <div className="flex items-center gap-2">
                   <button
                     disabled={selectedCount === 0 || downloadState === 'downloading'}
-                    className="bg-white/10 text-white px-4 py-2.5 rounded-xl text-sm font-medium
-                      hover:bg-white/20 disabled:bg-gray-800 disabled:text-gray-600
-                      transition-all flex items-center gap-2 border border-white/10"
+                    className="px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 disabled:bg-zinc-700 disabled:text-zinc-500"
                     onClick={handleDownloadAll}
                   >
                     {downloadState === 'downloading' ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>
-                          {downloadProgress.current}/{downloadProgress.total}
-                        </span>
-                      </>
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin" /> {downloadProgress.current}/
+                        {downloadProgress.total}
+                      </span>
                     ) : downloadState === 'done' ? (
-                      <>
-                        <CheckCircle2 size={16} className="text-green-400" />
-                        <span>تم التحميل</span>
-                      </>
+                      <span className="inline-flex items-center gap-2">
+                        <CheckCircle2 size={14} className="text-emerald-400" /> تم التحميل
+                      </span>
                     ) : (
-                      <>
-                        <Download size={16} />
-                        <span>تحميل المختارة</span>
-                      </>
+                      <span className="inline-flex items-center gap-2">
+                        <Download size={14} /> تحميل المختارة
+                      </span>
                     )}
                   </button>
 
-                  {/* Confirm & Send */}
                   <button
                     disabled={selectedCount === 0 || loadingState === 'submitting'}
-                    className="bg-amber-500 text-black px-5 py-2.5 rounded-xl text-sm font-bold
-                      hover:bg-amber-600 disabled:bg-gray-800 disabled:text-gray-600
-                      transition-all flex items-center gap-2"
                     onClick={handleSubmitSelection}
+                    className="px-5 py-2 rounded-lg bg-[#ff4017] text-white font-bold text-sm hover:bg-[#ff5b2f] disabled:bg-zinc-700 disabled:text-zinc-500"
                   >
                     {loadingState === 'submitting' ? (
-                      <Loader2 size={16} className="animate-spin" />
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin" /> جارٍ الإرسال
+                      </span>
                     ) : (
-                      <Send size={16} />
+                      <span className="inline-flex items-center gap-2">
+                        <Send size={14} /> تأكيد وإرسال
+                      </span>
                     )}
-                    <span>تأكيد وإرسال</span>
                   </button>
                 </div>
               </div>
             </header>
 
-            {/* Summary Stats */}
-            <div className="max-w-7xl mx-auto w-full px-6 py-6">
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-5 text-center">
-                  <p className="text-3xl font-black text-amber-500">{selectedCount}</p>
-                  <p className="text-xs text-gray-400 mt-1">صورة مختارة</p>
+            <div className="max-w-7xl mx-auto w-full p-4 md:p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div className="p-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 text-center">
+                  <p className="text-2xl font-black text-emerald-300">{selectedCount}</p>
+                  <p className="text-xs text-zinc-300">مقبولة</p>
                 </div>
-                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 text-center">
-                  <p className="text-3xl font-black text-gray-400">{totalCount - selectedCount}</p>
-                  <p className="text-xs text-gray-500 mt-1">لم تُختر</p>
+                <div className="p-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 text-center">
+                  <p className="text-2xl font-black text-rose-300">{rejectedCount}</p>
+                  <p className="text-xs text-zinc-300">مرفوضة</p>
                 </div>
-                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 text-center">
-                  <p className="text-3xl font-black text-white">{totalCount}</p>
-                  <p className="text-xs text-gray-500 mt-1">إجمالي الصور</p>
+                <div className="p-4 rounded-2xl border border-zinc-500/25 bg-zinc-500/10 text-center">
+                  <p className="text-2xl font-black text-zinc-200">{pendingCount}</p>
+                  <p className="text-xs text-zinc-300">معلقة</p>
+                </div>
+                <div className="p-4 rounded-2xl border border-white/10 bg-white/5 text-center">
+                  <p className="text-2xl font-black text-white">{totalCount}</p>
+                  <p className="text-xs text-zinc-400">إجمالي</p>
                 </div>
               </div>
 
-              {/* Selected Photos Grid */}
-              <h3 className="text-sm font-bold text-gray-300 mb-3">الصور المختارة:</h3>
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-                {selectedImages.map((img, idx) => (
-                  <motion.div
-                    key={img.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: idx * 0.03 }}
-                    className="relative aspect-square rounded-xl overflow-hidden border-2 border-amber-500/30 group"
-                  >
-                    <img
-                      src={img.thumbnailUrl || img.cloudUrl || ''}
-                      alt={img.fileName}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    {/* Remove button */}
-                    <button
-                      onClick={() => handleToggleStatus(img.id)}
-                      className="absolute top-2 left-2 w-6 h-6 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <XCircle size={14} className="text-white" />
-                    </button>
-                    {/* Number badge */}
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-black">{idx + 1}</span>
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                      <p className="text-[9px] text-white/70 font-mono truncate">{img.fileName}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {selectedCount === 0 && (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <HelpCircle size={40} className="text-gray-600 mb-3" />
-                  <p className="text-gray-500 text-sm">لم تختر أي صورة بعد</p>
-                  <button
-                    onClick={() => setPortalView('gallery')}
-                    className="mt-4 px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20 transition-colors"
-                  >
-                    العودة للمعرض
-                  </button>
+              {selectedImages.length > 0 ? (
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-200 mb-3">الصور المقبولة:</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {selectedImages.map((img, idx) => (
+                      <div
+                        key={img.id}
+                        className="relative aspect-square rounded-xl overflow-hidden border border-emerald-500/30 group"
+                      >
+                        <img
+                          src={img.thumbnailUrl || img.cloudUrl || ''}
+                          alt={img.fileName}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        <button
+                          onClick={() => setImageStatus(img.id, 'pending')}
+                          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-rose-500/90 hover:bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"
+                        >
+                          <XCircle size={13} />
+                        </button>
+                        <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">
+                          {idx + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-20 text-zinc-400">
+                  لم تحدد أي صورة كمقبولة بعد. ارجع للمعرض وعدّل الاختيارات.
                 </div>
               )}
+
+              <div className="mt-8 flex items-center gap-2">
+                <button
+                  onClick={() => setPortalView('gallery')}
+                  className="px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20"
+                >
+                  رجوع للمعرض
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
 
-        {/* ═══ VIEW 4: Done ═══ */}
         {portalView === 'done' && (
           <motion.div
-            key="success"
-            initial={{ opacity: 0, scale: 0.95 }}
+            key="done"
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             className="min-h-screen flex flex-col items-center justify-center p-6 text-center"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.2 }}
-              className="w-24 h-24 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mb-8 shadow-2xl shadow-green-500/20"
-            >
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mb-8 shadow-2xl shadow-emerald-500/20">
               <CheckCircle2 size={48} className="text-white" />
-            </motion.div>
-
-            <h2 className="text-2xl font-bold mb-3">تم إرسال اختيارك!</h2>
-            <p className="text-gray-400 text-sm max-w-md leading-relaxed mb-2">
-              شكرا لك! تم اختيار <span className="text-amber-500 font-bold">{selectedCount}</span>{' '}
-              صورة بنجاح. سيتم تعديلها وتجهيزها لك في أقرب وقت.
+            </div>
+            <h2 className="text-2xl font-black mb-3">تم إرسال اختيارك بنجاح</h2>
+            <p className="text-zinc-300 text-sm max-w-md leading-relaxed mb-7">
+              وصلنا اختيارك. تم اعتماد{' '}
+              <span className="text-emerald-300 font-bold">{selectedCount}</span> صورة للتعديل.
             </p>
-            <p className="text-gray-600 text-xs mb-8">سيتم إعلامك عند الانتهاء من التعديل.</p>
 
-            {/* Download selected after confirmation */}
             <button
               disabled={downloadState === 'downloading'}
-              className="bg-white/10 text-white px-6 py-3 rounded-xl text-sm font-medium
-                hover:bg-white/20 transition-all flex items-center gap-2 border border-white/10"
+              className="px-6 py-3 rounded-xl bg-white/10 border border-white/10 text-sm hover:bg-white/20"
               onClick={handleDownloadAll}
             >
               {downloadState === 'downloading' ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>
-                    {downloadProgress.current}/{downloadProgress.total}
-                  </span>
-                </>
-              ) : downloadState === 'done' ? (
-                <>
-                  <CheckCircle2 size={16} className="text-green-400" />
-                  <span>تم التحميل</span>
-                </>
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin" /> {downloadProgress.current}/
+                  {downloadProgress.total}
+                </span>
               ) : (
-                <>
-                  <Download size={16} />
-                  <span>تحميل الصور المختارة ({selectedCount})</span>
-                </>
+                <span className="inline-flex items-center gap-2">
+                  <Download size={14} /> تحميل الصور المقبولة
+                </span>
               )}
             </button>
-
-            <footer className="mt-16 text-center text-gray-600 text-xs">
-              &copy; {new Date().getFullYear()} Villa Hadad Studio
-            </footer>
           </motion.div>
         )}
       </AnimatePresence>
