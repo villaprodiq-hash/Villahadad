@@ -6,15 +6,44 @@ import {
   Heart,
   CheckCircle2,
   XCircle,
+  X,
   HelpCircle,
   Loader2,
   AlertCircle,
   Camera,
   Send,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
+
+// ─── Portal Edge Function Helper ────────────────────────────
+// supabase.functions.invoke fails without an auth session (portal is anonymous).
+// Use direct fetch with the anon key as Authorization instead.
+
+async function callPortal(body: Record<string, unknown>) {
+  const fnUrl = (supabase as any).functionsUrl || `${(supabase as any).supabaseUrl}/functions/v1`;
+  const anonKey = (supabase as any).supabaseKey;
+
+  const res = await fetch(`${fnUrl}/client-portal`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(errBody || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -50,7 +79,7 @@ const ClientPortal: React.FC = () => {
 
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [images, setImages] = useState<PortalImage[]>([]);
-  const [activePreview, setActivePreview] = useState<PortalImage | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
 
@@ -69,11 +98,8 @@ const ClientPortal: React.FC = () => {
     setErrorMsg('');
 
     try {
-      const { data, error } = await supabase.functions.invoke('client-portal', {
-        body: { action: 'get_photos', token },
-      });
+      const data = await callPortal({ action: 'get_photos', token });
 
-      if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
       setBooking(data.booking);
@@ -105,11 +131,41 @@ const ClientPortal: React.FC = () => {
     );
   }, []);
 
-  // ─── Image click: toggle in grid, preview in lightbox ────
+  // ─── Lightbox controls ────────────────────────────────────
 
-  const handleImageClick = useCallback((imageId: string) => {
-    handleToggleStatus(imageId);
-  }, [handleToggleStatus]);
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+  const openLightbox = useCallback((index: number) => setLightboxIndex(index), []);
+  const currentImage = lightboxIndex !== null ? images[lightboxIndex] : null;
+
+  const showNextImage = useCallback(() => {
+    if (lightboxIndex === null || images.length === 0) return;
+    setLightboxIndex((lightboxIndex + 1) % images.length);
+  }, [lightboxIndex, images.length]);
+
+  const showPrevImage = useCallback(() => {
+    if (lightboxIndex === null || images.length === 0) return;
+    setLightboxIndex((lightboxIndex - 1 + images.length) % images.length);
+  }, [lightboxIndex, images.length]);
+
+  const toggleCurrentFromLightbox = useCallback(() => {
+    if (!currentImage) return;
+    handleToggleStatus(currentImage.id);
+  }, [currentImage, handleToggleStatus]);
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowRight') showNextImage();
+      if (e.key === 'ArrowLeft') showPrevImage();
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = 'auto';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [lightboxIndex, closeLightbox, showNextImage, showPrevImage]);
 
   // ─── Go to review page ───────────────────────────────────
 
@@ -131,18 +187,14 @@ const ClientPortal: React.FC = () => {
         liked: img.status === 'selected',
       }));
 
-      const { data, error } = await supabase.functions.invoke('client-portal', {
-        body: { action: 'update_selection', token, selections },
-      });
+      const data = await callPortal({ action: 'update_selection', token, selections });
 
-      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
 
       // Confirm selection (locks it in, advances booking)
-      const { data: confirmData, error: confirmErr } = await supabase.functions.invoke('client-portal', {
-        body: { action: 'confirm_selection', token },
-      });
+      const confirmData = await callPortal({ action: 'confirm_selection', token });
 
-      if (confirmErr) throw new Error(confirmErr.message);
+      if (confirmData?.error) throw new Error(confirmData.error);
 
       setLoadingState('submitted');
       setPortalView('done');
@@ -161,11 +213,8 @@ const ClientPortal: React.FC = () => {
 
     try {
       // Get full-res URLs from Edge Function
-      const { data, error } = await supabase.functions.invoke('client-portal', {
-        body: { action: 'get_download_urls', token },
-      });
+      const data = await callPortal({ action: 'get_download_urls', token });
 
-      if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
       const downloads: { fileName: string; url: string }[] = data.downloads || [];
@@ -208,24 +257,17 @@ const ClientPortal: React.FC = () => {
 
   // ─── Counts ───────────────────────────────────────────────
 
-  const selectedCount = useMemo(
-    () => images.filter(i => i.status === 'selected').length,
-    [images]
-  );
+  const selectedCount = useMemo(() => images.filter(i => i.status === 'selected').length, [images]);
 
   const totalCount = images.length;
 
-  const selectedImages = useMemo(
-    () => images.filter(i => i.status === 'selected'),
-    [images]
-  );
+  const selectedImages = useMemo(() => images.filter(i => i.status === 'selected'), [images]);
 
   // ─── Render ───────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white font-sans" dir="rtl">
       <AnimatePresence mode="wait">
-
         {/* ═══ VIEW 1: Welcome Screen ═══ */}
         {portalView === 'welcome' && (
           <motion.div
@@ -255,9 +297,8 @@ const ClientPortal: React.FC = () => {
             >
               <h2 className="text-xl font-bold mb-4">!اهلا بك</h2>
               <p className="text-gray-400 mb-8 text-sm leading-relaxed">
-                أنت على وشك الدخول إلى معرض الصور الخاص بك. اضغط على الصور
-                لاختيارها، ثم راجع اختيارك وأرسله. الصور المختارة سيتم تعديلها
-                وتجهيزها لك.
+                أنت على وشك الدخول إلى معرض الصور الخاص بك. اضغط على الصور لاختيارها، ثم راجع
+                اختيارك وأرسله. الصور المختارة سيتم تعديلها وتجهيزها لك.
               </p>
 
               {!token && (
@@ -302,11 +343,11 @@ const ClientPortal: React.FC = () => {
             <header className="sticky top-0 z-50 bg-[#0f0f0f]/80 backdrop-blur-md border-b border-white/10 px-6 py-4">
               <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
-                  <h2 className="font-bold text-lg">
-                    {booking?.title || 'معرض الصور'}
-                  </h2>
+                  <h2 className="font-bold text-lg">{booking?.title || 'معرض الصور'}</h2>
                   <p className="text-xs text-gray-400">
-                    {booking?.clientName ? `مرحبا ${booking.clientName} — اضغط على الصور لاختيارها` : 'اضغط على الصور لاختيارها'}
+                    {booking?.clientName
+                      ? `مرحبا ${booking.clientName} — اضغط على الصور لاختيارها`
+                      : 'اضغط على الصور لاختيارها'}
                   </p>
                 </div>
 
@@ -348,7 +389,10 @@ const ClientPortal: React.FC = () => {
                 <div className="flex flex-col items-center justify-center py-32">
                   <AlertCircle size={48} className="text-red-400 mb-4" />
                   <p className="text-red-400 text-sm mb-4">{errorMsg}</p>
-                  <button onClick={fetchPhotos} className="px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20 transition-colors">
+                  <button
+                    onClick={fetchPhotos}
+                    className="px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20 transition-colors"
+                  >
                     إعادة المحاولة
                   </button>
                 </div>
@@ -362,45 +406,148 @@ const ClientPortal: React.FC = () => {
               )}
 
               {loadingState === 'loaded' && images.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {images.map((img) => (
-                    <motion.div
-                      key={img.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer
-                        transition-all duration-200 border-2
-                        ${img.status === 'selected'
-                          ? 'border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
-                          : 'border-transparent hover:border-white/20'
-                        }`}
-                      onClick={() => handleImageClick(img.id)}
-                    >
-                      <img
-                        src={img.thumbnailUrl || img.cloudUrl || ''}
-                        alt={img.fileName}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                      <div className={`absolute inset-0 transition-all duration-200 ${
-                        img.status === 'selected' ? 'bg-amber-500/10' : 'bg-black/0 hover:bg-black/20'
-                      }`} />
-                      {img.status === 'selected' && (
+                <>
+                  <div className="columns-1 sm:columns-2 lg:columns-4 gap-3 [column-fill:_balance]">
+                    {images.map((img, index) => {
+                      const selected = img.status === 'selected';
+                      return (
                         <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="absolute top-3 right-3 bg-amber-500 rounded-full p-1.5 shadow-lg"
+                          key={img.id}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.25, delay: index * 0.02 }}
+                          className="mb-3 break-inside-avoid"
                         >
-                          <CheckCircle2 size={18} className="text-white" />
+                          <button
+                            onClick={() => openLightbox(index)}
+                            className={`group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300
+                              ${
+                                selected
+                                  ? 'border-[#ff4017] shadow-[0_18px_40px_rgba(255,64,23,0.28)]'
+                                  : 'border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.35)] hover:border-white/25'
+                              }`}
+                          >
+                            <img
+                              src={img.thumbnailUrl || img.cloudUrl || ''}
+                              alt={img.fileName}
+                              className="w-full h-auto block object-contain transition-transform duration-500 group-hover:scale-[1.03]"
+                              loading="lazy"
+                            />
+                            <div
+                              className={`absolute inset-0 transition-colors duration-300 ${selected ? 'bg-[#ff4017]/10' : 'bg-black/0 group-hover:bg-black/20'}`}
+                            />
+                            {selected && (
+                              <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#ff4017] flex items-center justify-center">
+                                <CheckCircle2 size={16} className="text-white" />
+                              </div>
+                            )}
+                          </button>
                         </motion.div>
-                      )}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 hover:opacity-100 transition-opacity">
-                        <p className="text-[10px] text-white/70 font-mono truncate">{img.fileName}</p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Lightbox */}
+                  <AnimatePresence>
+                    {lightboxIndex !== null && currentImage && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1200] bg-black/95"
+                        onClick={closeLightbox}
+                      >
+                        <div className="absolute top-5 left-5 flex items-center gap-3 z-10">
+                          <div className="bg-[#ff4017] text-white px-4 py-2 rounded-full text-sm font-bold">
+                            {selectedCount} مختارة
+                          </div>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleGoToReview();
+                            }}
+                            className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                              selectedCount > 0
+                                ? 'bg-white text-[#251b18] hover:bg-[#ff8c42] hover:text-white'
+                                : 'bg-white/20 text-white/60 cursor-not-allowed'
+                            }`}
+                            disabled={selectedCount === 0}
+                          >
+                            مراجعة الاختيار
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            closeLightbox();
+                          }}
+                          className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center z-10"
+                          aria-label="Close"
+                        >
+                          <X size={18} />
+                        </button>
+
+                        <div className="h-full w-full flex flex-col items-center justify-center px-4">
+                          <button
+                            className="relative cursor-pointer"
+                            onClick={e => {
+                              e.stopPropagation();
+                              toggleCurrentFromLightbox();
+                            }}
+                          >
+                            <img
+                              src={currentImage.cloudUrl || currentImage.thumbnailUrl || ''}
+                              alt={currentImage.fileName}
+                              className="max-w-[90vw] max-h-[72vh] object-contain rounded-lg"
+                            />
+                            <div
+                              className={`absolute top-4 right-4 w-10 h-10 rounded-full border-4 flex items-center justify-center transition-all ${
+                                currentImage.status === 'selected'
+                                  ? 'border-[#ff4017] bg-[#ff4017]'
+                                  : 'border-white bg-black/20'
+                              }`}
+                            >
+                              <CheckCircle2
+                                size={18}
+                                className={`${currentImage.status === 'selected' ? 'text-white' : 'text-white/0'}`}
+                              />
+                            </div>
+                          </button>
+
+                          <p className="text-white/80 mt-4 text-sm">
+                            {currentImage.status === 'selected'
+                              ? 'تم اختيار الصورة'
+                              : 'اضغط على الصورة لاختيارها'}
+                          </p>
+                        </div>
+
+                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-3">
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              showPrevImage();
+                            }}
+                            className="w-14 h-10 rounded-lg bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
+                            aria-label="Previous"
+                          >
+                            <ChevronLeft size={18} />
+                          </button>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              showNextImage();
+                            }}
+                            className="w-14 h-10 rounded-lg bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
+                            aria-label="Next"
+                          >
+                            <ChevronRight size={18} />
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
               )}
             </main>
 
@@ -413,12 +560,14 @@ const ClientPortal: React.FC = () => {
               >
                 <div className="flex items-center justify-between max-w-7xl mx-auto">
                   <p className="text-sm text-gray-400">
-                    اخترت <span className="text-amber-500 font-bold">{selectedCount}</span> صورة
-                    من أصل <span className="text-white font-bold">{totalCount}</span>
+                    اخترت <span className="text-amber-500 font-bold">{selectedCount}</span> صورة من
+                    أصل <span className="text-white font-bold">{totalCount}</span>
                   </p>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setImages(prev => prev.map(i => ({ ...i, status: 'pending' as const })))}
+                      onClick={() =>
+                        setImages(prev => prev.map(i => ({ ...i, status: 'pending' as const })))
+                      }
                       className="text-xs text-gray-500 hover:text-red-400 transition-colors"
                     >
                       إلغاء الكل
@@ -475,7 +624,9 @@ const ClientPortal: React.FC = () => {
                     {downloadState === 'downloading' ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
-                        <span>{downloadProgress.current}/{downloadProgress.total}</span>
+                        <span>
+                          {downloadProgress.current}/{downloadProgress.total}
+                        </span>
                       </>
                     ) : downloadState === 'done' ? (
                       <>
@@ -596,13 +747,10 @@ const ClientPortal: React.FC = () => {
 
             <h2 className="text-2xl font-bold mb-3">تم إرسال اختيارك!</h2>
             <p className="text-gray-400 text-sm max-w-md leading-relaxed mb-2">
-              شكرا لك! تم اختيار{' '}
-              <span className="text-amber-500 font-bold">{selectedCount}</span> صورة بنجاح.
-              سيتم تعديلها وتجهيزها لك في أقرب وقت.
+              شكرا لك! تم اختيار <span className="text-amber-500 font-bold">{selectedCount}</span>{' '}
+              صورة بنجاح. سيتم تعديلها وتجهيزها لك في أقرب وقت.
             </p>
-            <p className="text-gray-600 text-xs mb-8">
-              سيتم إعلامك عند الانتهاء من التعديل.
-            </p>
+            <p className="text-gray-600 text-xs mb-8">سيتم إعلامك عند الانتهاء من التعديل.</p>
 
             {/* Download selected after confirmation */}
             <button
@@ -614,7 +762,9 @@ const ClientPortal: React.FC = () => {
               {downloadState === 'downloading' ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>{downloadProgress.current}/{downloadProgress.total}</span>
+                  <span>
+                    {downloadProgress.current}/{downloadProgress.total}
+                  </span>
                 </>
               ) : downloadState === 'done' ? (
                 <>
@@ -634,7 +784,6 @@ const ClientPortal: React.FC = () => {
             </footer>
           </motion.div>
         )}
-
       </AnimatePresence>
     </div>
   );
