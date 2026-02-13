@@ -135,6 +135,8 @@ const ClientPortal: React.FC = () => {
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [images, setImages] = useState<PortalImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
 
@@ -197,6 +199,14 @@ const ClientPortal: React.FC = () => {
   }, [images, statusFilter]);
 
   const selectedImages = useMemo(() => images.filter(i => i.status === 'selected'), [images]);
+  const compareImages = useMemo(
+    () =>
+      compareIds
+        .map(id => images.find(img => img.id === id))
+        .filter((img): img is PortalImage => !!img)
+        .slice(0, 2),
+    [compareIds, images]
+  );
 
   const closeLightbox = useCallback(() => setLightboxIndex(null), []);
   const openLightbox = useCallback((index: number) => setLightboxIndex(index), []);
@@ -329,6 +339,25 @@ const ClientPortal: React.FC = () => {
       .map(img => ({ fileName: img.fileName, url: (img.cloudUrl || img.thumbnailUrl) as string }));
     await handleDownloadBatch(list);
   }, [filteredImages, handleDownloadBatch]);
+
+  const toggleCompareCandidate = useCallback((imageId: string) => {
+    setCompareIds(prev => {
+      if (prev.includes(imageId)) return prev.filter(id => id !== imageId);
+      if (prev.length >= 2) return [prev[1], imageId];
+      return [...prev, imageId];
+    });
+  }, []);
+
+  const chooseComparedImage = useCallback(
+    (chosenId: string) => {
+      const otherId = compareIds.find(id => id !== chosenId);
+      setImageStatus(chosenId, 'selected');
+      if (otherId) setImageStatus(otherId, 'pending');
+      setCompareOpen(false);
+      setCompareIds([]);
+    },
+    [compareIds, setImageStatus]
+  );
 
   return (
     <div
@@ -536,6 +565,13 @@ const ClientPortal: React.FC = () => {
                       تحميل الظاهر
                     </button>
                     <button
+                      onClick={() => setCompareOpen(true)}
+                      disabled={compareImages.length !== 2}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-indigo-500/20 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/30 disabled:bg-zinc-700 disabled:border-zinc-600 disabled:text-zinc-500"
+                    >
+                      مقارنة ({compareImages.length}/2)
+                    </button>
+                    <button
                       disabled={selectedCount === 0}
                       onClick={handleGoToReview}
                       className="px-4 py-2 rounded-lg text-xs font-bold bg-white text-black hover:bg-zinc-200 disabled:bg-zinc-700 disabled:text-zinc-500"
@@ -622,6 +658,23 @@ const ClientPortal: React.FC = () => {
                           <div className="absolute bottom-2 left-2 right-2 text-right">
                             <p className="text-[10px] text-white/80 truncate">{img.fileName}</p>
                           </div>
+                          <div className="absolute top-3 left-3">
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                toggleCompareCandidate(img.id);
+                              }}
+                              className={`px-2 py-1 rounded-md text-[10px] border ${
+                                compareIds.includes(img.id)
+                                  ? 'bg-indigo-500 text-white border-indigo-400'
+                                  : 'bg-black/40 text-zinc-100 border-white/20 hover:bg-black/70'
+                              }`}
+                              title="إضافة للمقارنة"
+                              aria-label="إضافة للمقارنة"
+                            >
+                              {compareIds.includes(img.id) ? 'مضاف' : 'قارن'}
+                            </button>
+                          </div>
                           <div className="absolute bottom-2 left-2">
                             <button
                               onClick={e => {
@@ -639,6 +692,67 @@ const ClientPortal: React.FC = () => {
                       </motion.div>
                     ))}
                   </div>
+
+                  {/* Compare Modal */}
+                  <AnimatePresence>
+                    {compareOpen && compareImages.length === 2 && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1350] bg-black/95 p-4 md:p-8"
+                        onClick={() => setCompareOpen(false)}
+                      >
+                        <div className="max-w-7xl mx-auto h-full flex flex-col">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base md:text-lg font-black">
+                              مقارنة صورتين قبل الاختيار
+                            </h3>
+                            <button
+                              onClick={() => setCompareOpen(false)}
+                              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+
+                          <div
+                            className="grid md:grid-cols-2 gap-4 flex-1 min-h-0"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {compareImages.map((img, idx) => (
+                              <div
+                                key={img.id}
+                                className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col"
+                              >
+                                <div className="text-xs text-zinc-400 mb-2">
+                                  {idx === 0 ? 'الصورة الأولى' : 'الصورة الثانية'}
+                                </div>
+                                <div className="flex-1 min-h-0 rounded-xl overflow-hidden bg-black/35 flex items-center justify-center">
+                                  <img
+                                    src={img.cloudUrl || img.thumbnailUrl || ''}
+                                    alt={img.fileName}
+                                    className="max-h-[56vh] w-auto object-contain"
+                                  />
+                                </div>
+                                <div className="mt-3 flex items-center justify-between gap-2">
+                                  <p className="text-[11px] text-zinc-300 truncate">
+                                    {img.fileName}
+                                  </p>
+                                  <button
+                                    onClick={() => chooseComparedImage(img.id)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white"
+                                  >
+                                    اعتمد هذه الصورة
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <AnimatePresence>
                     {lightboxIndex !== null && currentImage && (
