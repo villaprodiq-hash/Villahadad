@@ -15,9 +15,14 @@ serve(async req => {
     const { action, data, entity, userId } = await req.json();
 
     // 🔒 SECURITY: Create admin client with service role key (server-side only)
+    const serviceRoleKey =
+      Deno.env.get('SERVICE_ROLE_KEY') ||
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+      '';
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') || '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      serviceRoleKey,
       {
         auth: {
           persistSession: false,

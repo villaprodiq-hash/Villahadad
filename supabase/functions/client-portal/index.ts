@@ -32,9 +32,14 @@ serve(async (req) => {
     }
 
     // Create admin client (server-side only)
+    const serviceRoleKey =
+      Deno.env.get('SERVICE_ROLE_KEY') ||
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+      '';
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') || '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      serviceRoleKey,
       { auth: { persistSession: false, autoRefreshToken: false } }
     );
 
@@ -79,11 +84,29 @@ async function handleGetPhotos(
   supabase: any,
   booking: { id: string; client_name: string; title: string; category: string; status: string }
 ) {
-  const { data: images, error } = await supabase
+  let images: any[] = [];
+  let error: any = null;
+
+  // Try full schema first.
+  let res = await supabase
     .from('session_images')
     .select('id, file_name, cloud_url, thumbnail_url, status, liked, notes, sort_order')
     .eq('booking_id', booking.id)
     .order('sort_order', { ascending: true });
+
+  images = res.data || [];
+  error = res.error;
+
+  // Fallback for older production schemas missing thumbnail_url / liked / notes / sort_order.
+  if (error) {
+    res = await supabase
+      .from('session_images')
+      .select('id, file_name, cloud_url, status')
+      .eq('booking_id', booking.id);
+
+    images = res.data || [];
+    error = res.error;
+  }
 
   if (error) throw error;
 
@@ -92,11 +115,11 @@ async function handleGetPhotos(
     id: img.id,
     fileName: img.file_name,
     cloudUrl: img.cloud_url,
-    thumbnailUrl: img.thumbnail_url,
-    status: img.status,
+    thumbnailUrl: img.thumbnail_url || null,
+    status: img.status || 'pending',
     liked: img.liked ? 1 : 0,
-    notes: img.notes,
-    sortOrder: img.sort_order,
+    notes: img.notes || null,
+    sortOrder: img.sort_order ?? 0,
   }));
 
   return jsonResponse({
@@ -216,13 +239,33 @@ async function handleGetDownloadUrls(
   supabase: any,
   booking: { id: string; client_name: string; title: string }
 ) {
-  const { data: images, error } = await supabase
+  let images: any[] = [];
+  let error: any = null;
+
+  // Try with sort_order first.
+  let res = await supabase
     .from('session_images')
     .select('id, file_name, cloud_url')
     .eq('booking_id', booking.id)
     .eq('status', 'selected')
     .not('cloud_url', 'is', null)
     .order('sort_order', { ascending: true });
+
+  images = res.data || [];
+  error = res.error;
+
+  // Fallback for schemas without sort_order.
+  if (error) {
+    res = await supabase
+      .from('session_images')
+      .select('id, file_name, cloud_url')
+      .eq('booking_id', booking.id)
+      .eq('status', 'selected')
+      .not('cloud_url', 'is', null);
+
+    images = res.data || [];
+    error = res.error;
+  }
 
   if (error) throw error;
 
