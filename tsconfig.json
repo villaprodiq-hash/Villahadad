@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "types": ["node"],
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Strict mode - phased rollout */
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitAny": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-*",
+    "electron-vite-react",
+    "components/_backup",
+    "components/manager_backup_2025_12_31",
+    "entry-points-backup",
+    "reception-legacy",
+    "backup_2026_01_06",
+    "_BACKUPS",
+    "_LEGACY_DATABASE_BACKUP_2026_01_12",
+    "supabase",
+    "playwright.config.ts",
+    "vite.config.ts",
+    "check-rls-step1.sql"
+  ]
+}

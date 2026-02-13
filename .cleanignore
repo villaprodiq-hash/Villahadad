@@ -1,0 +1,53 @@
+# 🧹 ملفات ومجلدات يجب حذفها لتنظيف المشروع
+
+# Build outputs (9GB من هنا!)
+release/
+dist/
+build/
+out/
+*.app
+
+# Dependencies (سيتم إعادة تثبيتها)
+node_modules/
+
+# Cache files
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+.nuxt/
+.next/
+.svelte-kit/
+
+# Test coverage
+coverage/
+.nyc_output/
+test-results/
+
+# IDE files (مؤقتة)
+.idea/
+.vscode/.history/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+tmp/
+
+# Electron specific
+.electron-builder-cache/

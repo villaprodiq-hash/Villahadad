@@ -1,0 +1,9 @@
+name: Reception Check
+jobs:
+  - name: Verify Dashboard Access
+    steps:
+      - run: Open the app
+      - run: Click on the text "الرسبشن"
+      - run: Click on the text "الحجوزات"
+      - run: Click on the text "حجز جديد"
+      - run: Verify the modal is visible

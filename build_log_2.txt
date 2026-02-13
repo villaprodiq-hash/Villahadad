@@ -1,0 +1,28 @@
+
+> villahadad-v2@0.0.0 build
+> vite build
+
+vite v6.4.1 building for production...
+transforming...
+[plugin vite:resolve] Module "path" has been externalized for browser compatibility, imported by "/Users/mohamedaljaff/Documents/MyApps/villahadad-v2 copy 2/src/services/db/index.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+✓ 3869 modules transformed.
+✗ Build failed in 5.86s
+error during build:
+src/services/db/services/UserService.ts (1:9): "userRepo" is not exported by "src/services/db/repositories/UserRepository.ts", imported by "src/services/db/services/UserService.ts".
+file: /Users/mohamedaljaff/Documents/MyApps/villahadad-v2 copy 2/src/services/db/services/UserService.ts:1:9
+
+1: import { userRepo } from '../repositories/UserRepository';
+            ^
+2: import { UserSchema } from '../validation';
+3: import { User } from '../../../types';
+
+    at getRollupError (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at error (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+    at Module.error (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:17022:16)
+    at Module.traceVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:17478:29)
+    at ModuleScope.findVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:15141:39)
+    at ChildScope.findVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:5688:38)
+    at ClassBodyScope.findVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:5688:38)
+    at ChildScope.findVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:5688:38)
+    at ChildScope.findVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:5688:38)
+    at FunctionScope.findVariable (file:///Users/mohamedaljaff/Documents/MyApps/villahadad-v2%20copy%202/node_modules/rollup/dist/es/shared/node-entry.js:5688:38)

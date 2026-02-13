@@ -1,0 +1,136 @@
+@import 'tailwindcss';
+
+@variant dark (&:where(.dark, .dark *));
+
+/* ⚡️ PERFORMANCE MODE - Disable animations for older Intel Macs */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 🚀 Force Performance Mode on Intel x64 (Detected via User Agent) */
+.performance-mode *,
+.performance-mode *::before,
+.performance-mode *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+.performance-mode .blur-\[60px\],
+.performance-mode .blur-xl,
+.performance-mode .backdrop-blur-md,
+.performance-mode .backdrop-blur-sm {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+@theme {
+  /* Phoenix Theme Colors */
+  --color-background: #0b0c10; /* Deep Void */
+  --color-background-paper: #14161c; /* Dark Surface */
+  --color-background-subtle: #1c1f26; /* Lighter Surface */
+
+  --color-primary: #ff6d00; /* Phoenix Orange */
+  --color-primary-hover: #ff8533;
+  --color-primary-light: #ffb080;
+  --color-primary-dark: #cc5700;
+
+  --color-studio-bg: #0b0c10;
+  --color-studio-card: #14161c;
+  --color-studio-accent: #ff6d00;
+
+  /* Fonts */
+  --font-sans: 'Cairo', 'IBM Plex Sans Arabic', sans-serif;
+
+  /* Shadows - Adjusted for darker depth */
+  --shadow-neu-flat: 10px 10px 20px #060709, -10px -10px 20px #1a1e26;
+  --shadow-neu-pressed: inset 6px 6px 14px #060709, inset -6px -6px 14px #1a1e26;
+  --shadow-neu-icon: 5px 5px 10px #060709, -5px -5px 10px #1a1e26;
+  --shadow-neu-icon-pressed: inset 3px 3px 6px #060709, inset -3px -3px 6px #1a1e26;
+
+  /* Borders */
+  --color-border-neu-edge: rgba(255, 255, 255, 0.08); /* Slightly stronger for contrast */
+}
+
+@layer utilities {
+  .dir-rtl {
+    direction: rtl;
+  }
+  .dir-ltr {
+    direction: ltr;
+  }
+
+  .font-handwriting {
+    font-family: 'Marhey', 'Kalam', cursive;
+  }
+
+  /* Custom Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #21242b;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #3f4452;
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #ec4899;
+  }
+
+  /* Animations */
+  @keyframes swing {
+    20% {
+      transform: rotate(15deg);
+    }
+    40% {
+      transform: rotate(-10deg);
+    }
+    60% {
+      transform: rotate(5deg);
+    }
+    80% {
+      transform: rotate(-5deg);
+    }
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+
+  .swing-animation {
+    animation: swing 0.5s ease-in-out;
+  }
+
+  @keyframes pulse-slow {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+body {
+  background-color: var(--color-background);
+  color: #ffffff;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}

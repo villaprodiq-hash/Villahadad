@@ -1,0 +1,51 @@
+.cursor-halo {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  will-change: transform, left, top;
+  transition: transform 0.1s ease-out;
+}
+
+.cursor-halo-circle {
+  position: relative;
+  background: transparent;
+  transition: border-color 0.3s ease;
+}
+
+.cursor-halo-image {
+  pointer-events: none;
+  user-select: none;
+}
+
+.cursor-halo-arc {
+  pointer-events: none;
+}
+
+.cursor-halo-arc-path {
+  animation: rotate-arc 3s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes rotate-arc {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Subtle pulse effect */
+.cursor-halo-circle {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}

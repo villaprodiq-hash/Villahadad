@@ -1,0 +1,108 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>Profile Cards Component</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&amp;family=Inter+Tight:wght@400;600&amp;display=swap" rel="stylesheet">
+   
+<style type="text/tailwindcss">@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .profile-card-clip {
+    clip-path: path("M 0 -50 L 200 -50 L 200 150 C 100 150 0 250 0 150 Z");
+  }
+
+  .profile-card:hover .profile-name {
+    opacity: 1 !important;
+    transform: translateY(-80px) !important;
+  }
+
+  .profile-card:hover .profile-img {
+    transform: scale(1) !important;
+    filter: drop-shadow(rgba(0, 0, 0, 0.3) 10px 10px 5px) !important;
+  }
+
+  .profile-card:hover .profile-bg {
+    filter: blur(2px) brightness(0.8) !important;
+  }
+}</style><script src="https://cdn.tailwindcss.com"></script><script>tailwind.config = {
+  important: '#app-root',
+  theme: {
+    extend: {
+      colors: {
+        'brand-primary': 'rgb(70, 130, 180)',
+        'neutral-background': 'rgb(255, 255, 255)',
+        'text-primary': 'rgb(0, 0, 0)',
+      },
+      fontFamily: {
+        'primary': ['Caveat', 'cursive', 'serif'],
+        'secondary': ['Inter Tight', 'sans-serif'],
+      },
+    }
+  },
+  plugins: [],
+}</script></head>
+<body id="app-root" class="bg-white min-h-screen flex items-center justify-center m-0">
+  <main><div class="flex items-center justify-center p-8 min-h-[813px] w-full max-w-[1332px]">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 justify-center items-center">
+    
+    <!-- Card 1: Marina -->
+    <div class="profile-card relative w-[200px] h-[200px] group cursor-pointer">
+      <div class="profile-card-clip relative w-[200px] h-[200px] overflow-visible">
+        <div class="profile-bg absolute inset-0 top-[100px] z-[-1] rounded-[20px] transition-all duration-300 ease-in-out" style="background: url('https://framerusercontent.com/images/52RbPIk3NIl1jrBXnyzhmW2Zaz0.jpg?width=1179&amp;height=884') 50% 50% / cover no-repeat;">
+        </div>
+        <img src="https://framerusercontent.com/images/JqnhcvxfvhozKWY8b0IsfuHi6g.png?width=400&amp;height=400" alt="Marina" class="profile-img w-full h-full object-cover origin-bottom transition-all duration-300 ease-in-out scale-[0.9] [filter:drop-shadow(rgba(0,0,0,0.5)_5px_5px_2px)]">
+      </div>
+      <p class="profile-name absolute bottom-4 right-4 font-primary text-[20px] font-semibold text-white opacity-0 transition-all duration-300 delay-150 ease-[cubic-bezier(0.47,1.64,0.41,0.8)] pointer-events-none">
+        Marina
+      </p>
+    </div>
+
+    <!-- Card 2: Aiden -->
+    <div class="profile-card relative w-[200px] h-[200px] group cursor-pointer">
+      <div class="profile-card-clip relative w-[200px] h-[200px] overflow-visible">
+        <div class="profile-bg absolute inset-0 top-[100px] z-[-1] rounded-[20px] transition-all duration-300 ease-in-out" style="background: url('https://framerusercontent.com/images/0VGHafMjCuKPZA2s0tEpzZMnnGQ.jpg?width=1280&amp;height=853') 50% 50% / cover no-repeat;">
+        </div>
+        <img src="https://framerusercontent.com/images/RzMurHJLi9LiPX4VHI43xcZVXg.png?width=400&amp;height=400" alt="Aiden" class="profile-img w-full h-full object-cover origin-bottom transition-all duration-300 ease-in-out scale-[0.9] [filter:drop-shadow(rgba(0,0,0,0.5)_5px_5px_2px)]">
+      </div>
+      <p class="profile-name absolute bottom-4 right-4 font-primary text-[20px] font-semibold text-white opacity-0 transition-all duration-300 delay-150 ease-[cubic-bezier(0.47,1.64,0.41,0.8)] pointer-events-none">
+        Aiden
+      </p>
+    </div>
+
+    <!-- Card 3: Camila -->
+    <div class="profile-card relative w-[200px] h-[200px] group cursor-pointer">
+      <div class="profile-card-clip relative w-[200px] h-[200px] overflow-visible">
+        <div class="profile-bg absolute inset-0 top-[100px] z-[-1] rounded-[20px] transition-all duration-300 ease-in-out" style="background: url('https://framerusercontent.com/images/oFFMMLKIldMHSdUz9DZ7HZ8qOc.jpg?width=1280&amp;height=970') 50% 50% / cover no-repeat;">
+        </div>
+        <img src="https://framerusercontent.com/images/Twmhc5UkdicPbR1meAIzAvpQBeY.png?width=400&amp;height=400" alt="Camila" class="profile-img w-full h-full object-cover origin-bottom transition-all duration-300 ease-in-out scale-[0.9] [filter:drop-shadow(rgba(0,0,0,0.5)_5px_5px_2px)]">
+      </div>
+      <p class="profile-name absolute bottom-4 right-4 font-primary text-[20px] font-semibold text-white opacity-0 transition-all duration-300 delay-150 ease-[cubic-bezier(0.47,1.64,0.41,0.8)] pointer-events-none">
+        Camila
+      </p>
+    </div>
+
+    <!-- Card 4: Elvira -->
+    <div class="profile-card relative w-[200px] h-[200px] group cursor-pointer">
+      <div class="profile-card-clip relative w-[200px] h-[200px] overflow-visible">
+        <div class="profile-bg absolute inset-0 top-[100px] z-[-1] rounded-[20px] transition-all duration-300 ease-in-out" style="background: url('https://framerusercontent.com/images/qNptQ8w4icQaCbddCNGTC6usom8.jpg?width=1280&amp;height=960') 50% 50% / cover no-repeat;">
+        </div>
+        <img src="https://framerusercontent.com/images/va3L0BHM56JtgpDcsBFiqPYo.png?width=400&amp;height=400" alt="Elvira" class="profile-img w-full h-full object-cover origin-bottom transition-all duration-300 ease-in-out scale-[0.9] [filter:drop-shadow(rgba(0,0,0,0.5)_5px_5px_2px)]">
+      </div>
+      <p class="profile-name absolute bottom-4 right-4 font-primary text-[20px] font-semibold text-white opacity-0 transition-all duration-300 delay-150 ease-[cubic-bezier(0.47,1.64,0.41,0.8)] pointer-events-none">
+        Elvira
+      </p>
+    </div>
+
+  </div>
+</div></main>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Global initialization if needed
+    });
+  </script>
+
+</body></html>

@@ -1,0 +1,5 @@
+{
+  "name": "VillaHadad v2",
+  "description": "A professional photography studio management system with simulated Electron IPC, NAS handling, and strict financial logic.",
+  "requestFramePermissions": ["microphone", "geolocation"]
+}

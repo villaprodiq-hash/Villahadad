@@ -1,0 +1,428 @@
+-- ============================================================================
+-- Villa Hadad Row Level Security (RLS) Policies
+-- ============================================================================
+-- Enterprise-Grade Security Layer for Multi-Role Access Control
+--
+-- Roles: ADMIN, MANAGER, RECEPTION, PHOTO_EDITOR, VIDEO_EDITOR, PRINTER, SELECTOR
+-- Strategy: DENY BY DEFAULT - Explicit grants only
+--
+-- CRITICAL: Run this AFTER enabling RLS on tables:
+--   ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+--   ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+--   ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+--   ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+-- ============================================================================
+
+-- Helper function to extract role from JWT (PUBLIC schema to avoid permission issues)
+CREATE OR REPLACE FUNCTION public.get_user_role()
+RETURNS TEXT AS $$
+  SELECT COALESCE(
+    (current_setting('request.jwt.claims', true)::json->>'user_metadata')::json->>'role',
+    (current_setting('request.jwt.claims', true)::json->>'app_metadata')::json->>'role',
+    'anonymous'
+  )::TEXT;
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
+
+
+-- ============================================================================
+-- BOOKINGS TABLE POLICIES
+-- ============================================================================
+
+-- Drop existing policies if any
+DROP POLICY IF EXISTS "admin_all_bookings" ON bookings;
+DROP POLICY IF EXISTS "manager_all_bookings" ON bookings;
+DROP POLICY IF EXISTS "reception_future_bookings" ON bookings;
+DROP POLICY IF EXISTS "photo_editor_assigned_bookings" ON bookings;
+DROP POLICY IF EXISTS "video_editor_assigned_bookings" ON bookings;
+DROP POLICY IF EXISTS "printer_print_ready_bookings" ON bookings;
+DROP POLICY IF EXISTS "selector_selection_bookings" ON bookings;
+
+-- ADMIN: Full access to all bookings (SELECT, INSERT, UPDATE, DELETE)
+CREATE POLICY "admin_all_bookings" ON bookings
+  FOR ALL
+  USING (auth.user_role() = 'admin')
+  WITH CHECK (auth.user_role() = 'admin');
+
+-- MANAGER: Full access to all bookings (SELECT, INSERT, UPDATE, DELETE)
+CREATE POLICY "manager_all_bookings" ON bookings
+  FOR ALL
+  USING (auth.user_role() = 'manager')
+  WITH CHECK (auth.user_role() = 'manager');
+
+-- RECEPTION: Only future bookings (shoot_date >= TODAY)
+-- Can SELECT, INSERT, UPDATE but NOT DELETE
+CREATE POLICY "reception_future_bookings" ON bookings
+  FOR SELECT
+  USING (
+    auth.user_role() = 'reception' 
+    AND shoot_date >= CURRENT_DATE::TEXT
+    AND deleted_at IS NULL
+  );
+
+CREATE POLICY "reception_insert_bookings" ON bookings
+  FOR INSERT
+  WITH CHECK (
+    auth.user_role() = 'reception'
+    AND shoot_date >= CURRENT_DATE::TEXT
+  );
+
+CREATE POLICY "reception_update_bookings" ON bookings
+  FOR UPDATE
+  USING (
+    auth.user_role() = 'reception'
+    AND shoot_date >= CURRENT_DATE::TEXT
+  )
+  WITH CHECK (
+    auth.user_role() = 'reception'
+    AND shoot_date >= CURRENT_DATE::TEXT
+  );
+
+-- PHOTO_EDITOR: Only bookings in editing workflow
+-- SELECT + UPDATE for statuses: 'Editing', 'Ready to Print', 'q_editing'
+CREATE POLICY "photo_editor_assigned_bookings" ON bookings
+  FOR SELECT
+  USING (
+    auth.user_role() = 'photo_editor'
+    AND status IN ('Editing', 'Ready to Print', 'q_editing', 'EDITING')
+    AND deleted_at IS NULL
+  );
+
+CREATE POLICY "photo_editor_update_bookings" ON bookings
+  FOR UPDATE
+  USING (
+    auth.user_role() = 'photo_editor'
+    AND status IN ('Editing', 'Ready to Print', 'q_editing', 'EDITING')
+  )
+  WITH CHECK (
+    auth.user_role() = 'photo_editor'
+    AND status IN ('Editing', 'Ready to Print', 'q_editing', 'EDITING')
+  );
+
+-- VIDEO_EDITOR: Only bookings in video workflow
+-- SELECT + UPDATE for statuses: 'Editing', 'Montage Completed'
+CREATE POLICY "video_editor_assigned_bookings" ON bookings
+  FOR SELECT
+  USING (
+    auth.user_role() = 'video_editor'
+    AND status IN ('Editing', 'Montage Completed', 'q_editing', 'EDITING')
+    AND deleted_at IS NULL
+  );
+
+CREATE POLICY "video_editor_update_bookings" ON bookings
+  FOR UPDATE
+  USING (
+    auth.user_role() = 'video_editor'
+    AND status IN ('Editing', 'Montage Completed', 'q_editing', 'EDITING')
+  )
+  WITH CHECK (
+    auth.user_role() = 'video_editor'
+    AND status IN ('Editing', 'Montage Completed', 'q_editing', 'EDITING')
+  );
+
+-- PRINTER: Only print-ready bookings
+-- SELECT + UPDATE for status: 'Ready to Print'
+CREATE POLICY "printer_print_ready_bookings" ON bookings
+  FOR SELECT
+  USING (
+    auth.user_role() = 'printer'
+    AND status IN ('Ready to Print', 'Printing')
+    AND deleted_at IS NULL
+  );
+
+CREATE POLICY "printer_update_bookings" ON bookings
+  FOR UPDATE
+  USING (
+    auth.user_role() = 'printer'
+    AND status IN ('Ready to Print', 'Printing')
+  )
+  WITH CHECK (
+    auth.user_role() = 'printer'
+    AND status IN ('Ready to Print', 'Printing', 'Delivered')
+  );
+
+-- SELECTOR: Only selection-phase bookings
+-- SELECT + UPDATE for statuses: 'Selection', 'SELECTION'
+CREATE POLICY "selector_selection_bookings" ON bookings
+  FOR SELECT
+  USING (
+    auth.user_role() = 'selector'
+    AND status IN ('Selection', 'SELECTION', 'q_selection')
+    AND deleted_at IS NULL
+  );
+
+CREATE POLICY "selector_update_bookings" ON bookings
+  FOR UPDATE
+  USING (
+    auth.user_role() = 'selector'
+    AND status IN ('Selection', 'SELECTION', 'q_selection')
+  )
+  WITH CHECK (
+    auth.user_role() = 'selector'
+    AND status IN ('Selection', 'SELECTION', 'Editing', 'q_selection', 'q_editing')
+  );
+
+-- ============================================================================
+-- EXPENSES TABLE POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "admin_all_expenses" ON expenses;
+DROP POLICY IF EXISTS "manager_all_expenses" ON expenses;
+DROP POLICY IF EXISTS "reception_read_expenses" ON expenses;
+DROP POLICY IF EXISTS "staff_no_expenses" ON expenses;
+
+-- ADMIN: Full access to all expenses
+CREATE POLICY "admin_all_expenses" ON expenses
+  FOR ALL
+  USING (auth.user_role() = 'admin')
+  WITH CHECK (auth.user_role() = 'admin');
+
+-- MANAGER: Full access to all expenses
+CREATE POLICY "manager_all_expenses" ON expenses
+  FOR ALL
+  USING (auth.user_role() = 'manager')
+  WITH CHECK (auth.user_role() = 'manager');
+
+-- RECEPTION: Read-only access to expenses
+CREATE POLICY "reception_read_expenses" ON expenses
+  FOR SELECT
+  USING (
+    auth.user_role() = 'reception'
+    AND deleted_at IS NULL
+  );
+
+-- STAFF (Photo/Video/Printer/Selector): NO ACCESS to expenses
+-- (No policy = no access due to RLS deny-by-default)
+
+-- ============================================================================
+-- USERS TABLE POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "admin_all_users" ON users;
+DROP POLICY IF EXISTS "manager_all_users" ON users;
+DROP POLICY IF EXISTS "staff_own_profile" ON users;
+DROP POLICY IF EXISTS "reception_team_users" ON users;
+
+-- ADMIN: Full access to all users
+CREATE POLICY "admin_all_users" ON users
+  FOR ALL
+  USING (auth.user_role() = 'admin')
+  WITH CHECK (auth.user_role() = 'admin');
+
+-- MANAGER: Full access to all users
+CREATE POLICY "manager_all_users" ON users
+  FOR ALL
+  USING (auth.user_role() = 'manager')
+  WITH CHECK (auth.user_role() = 'manager');
+
+-- RECEPTION: Read-only access to team members
+CREATE POLICY "reception_team_users" ON users
+  FOR SELECT
+  USING (
+    auth.user_role() = 'reception'
+    AND deleted_at IS NULL
+  );
+
+-- STAFF: Can only see and update their own profile
+CREATE POLICY "staff_own_profile" ON users
+  FOR SELECT
+  USING (
+    auth.user_role() IN ('photo_editor', 'video_editor', 'printer', 'selector')
+    AND id = auth.uid()::TEXT
+  );
+
+CREATE POLICY "staff_update_own_profile" ON users
+  FOR UPDATE
+  USING (
+    auth.user_role() IN ('photo_editor', 'video_editor', 'printer', 'selector')
+    AND id = auth.uid()::TEXT
+  )
+  WITH CHECK (
+    auth.user_role() IN ('photo_editor', 'video_editor', 'printer', 'selector')
+    AND id = auth.uid()::TEXT
+  );
+
+-- ============================================================================
+-- MESSAGES TABLE POLICIES (Team Chat)
+-- ============================================================================
+
+DROP POLICY IF EXISTS "admin_all_messages" ON messages;
+DROP POLICY IF EXISTS "manager_all_messages" ON messages;
+DROP POLICY IF EXISTS "reception_team_messages" ON messages;
+DROP POLICY IF EXISTS "editors_team_messages" ON messages;
+DROP POLICY IF EXISTS "staff_own_messages" ON messages;
+
+-- ADMIN: Full access to all messages
+CREATE POLICY "admin_all_messages" ON messages
+  FOR ALL
+  USING (auth.user_role() = 'admin')
+  WITH CHECK (auth.user_role() = 'admin');
+
+-- MANAGER: Full access to all messages
+CREATE POLICY "manager_all_messages" ON messages
+  FOR ALL
+  USING (auth.user_role() = 'manager')
+  WITH CHECK (auth.user_role() = 'manager');
+
+-- RECEPTION: Can see/send messages to team
+CREATE POLICY "reception_team_messages" ON messages
+  FOR SELECT
+  USING (
+    auth.user_role() = 'reception'
+    AND (
+      sender_id = auth.uid()::TEXT 
+      OR recipient_id = auth.uid()::TEXT
+      OR recipient_id IS NULL  -- Broadcast messages
+    )
+  );
+
+CREATE POLICY "reception_send_messages" ON messages
+  FOR INSERT
+  WITH CHECK (
+    auth.user_role() = 'reception'
+    AND sender_id = auth.uid()::TEXT
+  );
+
+-- EDITORS: Can see messages from managers/admins and other editors
+CREATE POLICY "editors_team_messages" ON messages
+  FOR SELECT
+  USING (
+    auth.user_role() IN ('photo_editor', 'video_editor')
+    AND (
+      sender_id = auth.uid()::TEXT
+      OR recipient_id = auth.uid()::TEXT
+      OR sender_role IN ('manager', 'admin', 'photo_editor', 'video_editor')
+    )
+  );
+
+CREATE POLICY "editors_send_messages" ON messages
+  FOR INSERT
+  WITH CHECK (
+    auth.user_role() IN ('photo_editor', 'video_editor')
+    AND sender_id = auth.uid()::TEXT
+  );
+
+-- PRINTER/SELECTOR: Can only see messages directed to them
+CREATE POLICY "staff_own_messages" ON messages
+  FOR SELECT
+  USING (
+    auth.user_role() IN ('printer', 'selector')
+    AND (
+      sender_id = auth.uid()::TEXT
+      OR recipient_id = auth.uid()::TEXT
+    )
+  );
+
+CREATE POLICY "staff_send_messages" ON messages
+  FOR INSERT
+  WITH CHECK (
+    auth.user_role() IN ('printer', 'selector')
+    AND sender_id = auth.uid()::TEXT
+  );
+
+-- ============================================================================
+-- PAYMENTS TABLE POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "admin_all_payments" ON payments;
+DROP POLICY IF EXISTS "manager_all_payments" ON payments;
+DROP POLICY IF EXISTS "reception_read_payments" ON payments;
+
+-- ADMIN: Full access to all payments
+CREATE POLICY "admin_all_payments" ON payments
+  FOR ALL
+  USING (auth.user_role() = 'admin')
+  WITH CHECK (auth.user_role() = 'admin');
+
+-- MANAGER: Full access to all payments
+CREATE POLICY "manager_all_payments" ON payments
+  FOR ALL
+  USING (auth.user_role() = 'manager')
+  WITH CHECK (auth.user_role() = 'manager');
+
+-- RECEPTION: Can see and add payments
+CREATE POLICY "reception_read_payments" ON payments
+  FOR SELECT
+  USING (
+    auth.user_role() = 'reception'
+    AND deleted_at IS NULL
+  );
+
+CREATE POLICY "reception_insert_payments" ON payments
+  FOR INSERT
+  WITH CHECK (
+    auth.user_role() = 'reception'
+  );
+
+-- ============================================================================
+-- ACTIVITY LOGS TABLE POLICIES
+-- ============================================================================
+
+DROP POLICY IF EXISTS "admin_all_logs" ON activity_logs;
+DROP POLICY IF EXISTS "manager_all_logs" ON activity_logs;
+
+-- ADMIN: Full access to all logs
+CREATE POLICY "admin_all_logs" ON activity_logs
+  FOR ALL
+  USING (auth.user_role() = 'admin')
+  WITH CHECK (auth.user_role() = 'admin');
+
+-- MANAGER: Read-only access to logs
+CREATE POLICY "manager_all_logs" ON activity_logs
+  FOR SELECT
+  USING (auth.user_role() = 'manager');
+
+-- ============================================================================
+-- ENABLE RLS ON ALL TABLES
+-- ============================================================================
+
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- VERIFICATION QUERIES
+-- ============================================================================
+
+-- Test as RECEPTION (should only see future bookings)
+-- SET request.jwt.claims = '{"user_metadata": {"role": "reception"}}';
+-- SELECT COUNT(*) FROM bookings;  -- Should exclude past bookings
+
+-- Test as PHOTO_EDITOR (should only see editing status)
+-- SET request.jwt.claims = '{"user_metadata": {"role": "photo_editor"}}';
+-- SELECT COUNT(*) FROM bookings;  -- Should only show Editing/Ready bookings
+
+-- Test as PRINTER (should only see print-ready)
+-- SET request.jwt.claims = '{"user_metadata": {"role": "printer"}}';
+-- SELECT COUNT(*) FROM bookings;  -- Should only show Ready to Print
+
+-- ============================================================================
+-- NOTES FOR IMPLEMENTATION
+-- ============================================================================
+--
+-- 1. JWT Token Setup:
+--    When users log in, ensure their JWT includes role in user_metadata:
+--    {
+--      "user_metadata": {
+--        "role": "reception|manager|admin|..."
+--      }
+--    }
+--
+-- 2. Application Layer:
+--    Remove client-side permission checks AFTER verifying RLS works.
+--    RLS is the single source of truth for security.
+--
+-- 3. Performance:
+--    These policies use indexes on:
+--    - bookings.status
+--    - bookings.shoot_date
+--    - bookings.deleted_at
+--    Ensure indexes exist for optimal performance.
+--
+-- 4. Testing:
+--    CRITICAL: Test each role thoroughly before deploying to production.
+--    Use Supabase SQL editor with SET request.jwt.claims to impersonate roles.
+--
+-- ============================================================================

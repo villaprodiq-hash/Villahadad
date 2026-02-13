@@ -1,0 +1,15 @@
+dist
+dist-*
+build
+release
+node_modules
+*.md
+public
+_BACKUPS
+_LEGACY_DATABASE_BACKUP_2026_01_12
+.git
+package-lock.json
+*.log
+*.db
+*.db-shm
+*.db-wal

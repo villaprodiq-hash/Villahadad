@@ -1,0 +1,59 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# ✅ SECURITY FIX: Protect sensitive credentials
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+
+# ⚠️ IMPORTANT: Only .env.example should be committed!
+# ✅ .env.example - OK to commit (template only)
+# ❌ .env - NEVER commit (contains real keys)
+# ❌ .env.production - NEVER commit
+# ❌ .env.development - NEVER commit
+*.pem
+*.key
+*.cert
+
+# Database files (contain sensitive data)
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+release/
+build/
+*.dmg
+*.exe
+*.AppImage
