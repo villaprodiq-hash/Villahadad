@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
-    Users, Phone, Search, Download, Crown, Heart, Star, TrendingUp,
-    Calendar, Clock, StickyNote, Wallet, Sparkles, MessageCircle, MapPin, ArrowLeftRight, Plus
+    Users, Phone, Search, Download, Crown, Heart, Star,
+    Calendar, StickyNote, MessageCircle, MapPin, ArrowLeftRight, Plus
 } from 'lucide-react';
 import { Booking } from '../../../types';
 import { cn } from '../../../lib/utils';
@@ -9,22 +9,19 @@ import ScrollReveal from '../../shared/ScrollReveal';
 import ClientBadge from '../../shared/ClientBadge';
 import { GlowCard } from '../../shared/GlowCard';
 import { format, isToday, isTomorrow, isSameWeek, parseISO, startOfToday } from 'date-fns';
-import { ar } from 'date-fns/locale';
 import ClientHeatmapWidget from './widgets/ClientHeatmapWidget';
 import FilterBar from '../../shared/FilterBar';
 import { FilterState, defaultFilterState, filterClientsByBookingType, getFilterStats } from '../../../utils/filterUtils';
-
-// Helper
-const getWhatsAppUrl = (phone: string, name: string) => {
-  const cleanPhone = phone.replace(/\D/g, '');
-  const message = `مرحباً ${name}، نحن من فيلا حداد...`;
-  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-};
+import { getWhatsAppUrl, openWhatsAppUrl } from '../../../utils/whatsapp';
 
 interface ClientsViewProps {
   bookings: Booking[];
   onRebookClient?: (clientName: string, clientPhone: string) => void;
 }
+
+type ArrivalFilter = 'today' | 'tomorrow' | 'week';
+
+const ARRIVAL_FILTERS: ArrivalFilter[] = ['today', 'tomorrow', 'week'];
 
 // Helper to safely format dates
 const safeFormatDate = (dateStr: string, formatStr: string) => {
@@ -42,13 +39,15 @@ const safeFormatDate = (dateStr: string, formatStr: string) => {
 const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onRebookClient }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<FilterState>(defaultFilterState);
-  const [arrivalFilter, setArrivalFilter] = useState<'today' | 'tomorrow' | 'week'>('today');
+  const [arrivalFilter, setArrivalFilter] = useState<ArrivalFilter>('today');
   
   // Show/Hide Heatmap
   const [showHeatmap, setShowHeatmap] = useState(false);
 
   // Exchange rate: USD → IQD
   const [exchangeRate, setExchangeRate] = useState(1500);
+
+  const buildWhatsAppMessage = (name: string) => `مرحباً ${name}، نحن من فيلا حداد...`;
 
   // 1. Data Processing (Identical logic to Reception for consistency)
   const clients = useMemo(() => {
@@ -253,20 +252,28 @@ const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onReboo
                    stats={filterStats}
                  />
 
-                 {/* Search - Slick */}
-                 <div className="relative group/search hidden sm:block">
-                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600 group-focus-within/search:text-blue-500 transition-colors" size={12} />
-                     <input 
+                   {/* Search - Slick */}
+                   <div className="relative group/search hidden sm:block">
+                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600 group-focus-within/search:text-blue-500 transition-colors" size={12} />
+                       <input 
                          type="text" 
                          placeholder="Quick search..."
                          value={searchTerm}
                          onChange={(e) => setSearchTerm(e.target.value)}
-                         className="h-8 w-40 bg-white/50 dark:bg-white/5 rounded-xl pr-9 pl-3 text-[10px] font-bold focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600 text-gray-900 dark:text-white"
-                     />
-                 </div>
+                           className="h-8 w-40 bg-white/50 dark:bg-white/5 rounded-xl pr-9 pl-3 text-[10px] font-bold focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600 text-gray-900 dark:text-white"
+                       />
+                   </div>
 
-             </div>
-        </div>
+                   <button
+                     onClick={handleExportCSV}
+                     className="h-8 px-3 hidden sm:flex items-center gap-1.5 rounded-xl bg-white/50 dark:bg-white/5 text-[10px] font-black text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 border border-white/10 dark:border-white/5 transition-all"
+                   >
+                     <Download size={12} />
+                     تصدير CSV
+                   </button>
+
+               </div>
+          </div>
 
         {/* Optional Heatmap Row */}
         {showHeatmap && (
@@ -284,11 +291,11 @@ const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onReboo
                  <div className="flex items-center justify-between mb-2">
                      <span className="flex items-center gap-2 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest"><Calendar size={12} /> Arrivals</span>
                      <div className="flex gap-1">
-                        {['today','tomorrow','week'].map(t => (
-                            <button key={t} onClick={() => setArrivalFilter(t as any)} className={`w-1 h-1 rounded-full ${arrivalFilter === t ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
-                        ))}
-                     </div>
-                 </div>
+                          {ARRIVAL_FILTERS.map(t => (
+                              <button key={t} onClick={() => setArrivalFilter(t)} className={`w-1 h-1 rounded-full ${arrivalFilter === t ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
+                          ))}
+                       </div>
+                   </div>
                  <div className="flex-1 overflow-y-auto no-scrollbar space-y-1.5">
                      {dailyArrivals.length > 0 ? dailyArrivals.map((c, i) => (
                          <div key={i} className="flex items-center gap-2 p-1.5 bg-white/40 dark:bg-white/5 rounded-xl">
@@ -355,7 +362,9 @@ const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onReboo
         <div className="flex-1 overflow-y-auto no-scrollbar pb-2">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 
-                {filteredClients.map((client, i) => (
+                {filteredClients.map((client, i) => {
+                    const clientPrimaryBooking = bookings.find(b => b.clientId === client.id) ?? bookings[0];
+                    return (
                     <ScrollReveal key={client.id} delay={Math.min(i * 0.05, 0.3)}>
                         <GlowCard variant="light" className="p-4 h-full flex flex-col relative overflow-hidden group bg-white dark:bg-[#1a1c22] border border-transparent dark:border-white/5 transition-colors duration-300">
                              {/* Hover Effect Background - Handled by GlowCard now, but keeping specific bg if needed */}
@@ -370,7 +379,9 @@ const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onReboo
                                          <p className="text-[10px] text-gray-400 dark:text-gray-500 tracking-wider">ID: {client.id.slice(0,6)}</p>
                                      </div>
                                  </div>
-                                 <ClientBadge booking={bookings.find(b => b.clientId === client.id) || bookings[0]} allBookings={bookings} compact />
+                                 {clientPrimaryBooking && (
+                                     <ClientBadge booking={clientPrimaryBooking} allBookings={bookings} compact />
+                                 )}
                              </div>
 
                              {/* Contact & Last Visit */}
@@ -378,7 +389,17 @@ const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onReboo
                                  <div className="flex items-center gap-2 text-[10px]">
                                      <div className="w-6 h-6 rounded-lg bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-400 dark:text-gray-500"><Phone size={12} /></div>
                                      <span dir="ltr" className="font-medium text-gray-600 dark:text-gray-400">{client.phone}</span>
-                                     <a href={getWhatsAppUrl(String(client.phone), client.name)} target="_blank" rel="noreferrer" className="text-green-500 hover:scale-110 transition-transform"><MessageCircle size={14} /></a>
+                                     <button
+                                       type="button"
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         void openWhatsAppUrl(getWhatsAppUrl(String(client.phone), buildWhatsAppMessage(client.name)));
+                                       }}
+                                       className="text-green-500 hover:scale-110 transition-transform"
+                                       title="واتساب"
+                                     >
+                                       <MessageCircle size={14} />
+                                     </button>
                                  </div>
                                  <div className="flex items-center gap-2 text-[10px]">
                                      <div className="w-6 h-6 rounded-lg bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-400 dark:text-gray-500"><Calendar size={12} /></div>
@@ -420,9 +441,9 @@ const ManagerClientsView: React.FC<ClientsViewProps> = ({ bookings = [], onReboo
                                      <StickyNote size={12} />
                                  </div>
                              )}
-                        </GlowCard>
-                    </ScrollReveal>
-                ))}
+                         </GlowCard>
+                     </ScrollReveal>
+                 )})}
             </div>
         </div>
     </div>

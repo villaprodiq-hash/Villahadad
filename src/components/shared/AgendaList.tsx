@@ -1,18 +1,15 @@
 import { Booking, BookingCategory, CategoryLabels } from '../../types';
 import { Bell, MoreHorizontal, MessageCircle } from 'lucide-react';
 import ClientBadge from './ClientBadge';
-
-const getWhatsAppUrl = (phone: string, name: string) => {
-  const cleanPhone = phone.replace(/\D/g, '');
-  const message = `مرحباً ${name}، نحن من فيلا حداد...`;
-  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-};
+import { getWhatsAppUrl, openWhatsAppUrl } from '../../utils/whatsapp';
 
 interface AgendaListProps {
   bookings: Booking[];
   onSelectBooking: (booking: Booking) => void;
   isManager?: boolean;
 }
+
+const buildWhatsAppMessage = (name: string) => `مرحباً ${name}، نحن من فيلا حداد...`;
 
 const AgendaList: React.FC<AgendaListProps> = ({ bookings, onSelectBooking, isManager = false }) => {
   const sortedBookings = [...bookings].sort((a, b) => new Date(a.shootDate).getTime() - new Date(b.shootDate).getTime());
@@ -54,7 +51,7 @@ const AgendaList: React.FC<AgendaListProps> = ({ bookings, onSelectBooking, isMa
                         
                         {/* Events List */}
                         <div className="space-y-4">
-                            {grouped[date].map(booking => (
+                            {(grouped[date] ?? []).map(booking => (
                                 <AgendaItem 
                                     key={booking.id} 
                                     booking={booking} 
@@ -107,7 +104,7 @@ const AgendaItem: React.FC<{ booking: Booking; allBookings: Booking[]; isManager
             {/* Content */}
             <div className={`flex-1 p-2 rounded-2xl transition-all ${isManager ? 'hover:bg-amber-50 group-hover:shadow-[0_4px_15px_rgba(0,0,0,0.02)]' : 'hover:bg-[#262626] hover:shadow-[5px_5px_10px_#16181d,-5px_-5px_10px_#2c3039]'} border border-transparent ${!isManager && 'hover:border-white/5'} flex items-center gap-3`}>
                 {/* Avatar */}
-                <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${getAvatarColor(booking.clientName)} flex items-center justify-center text-white font-bold text-[10px] shadow-sm shrink-0`}>
+                <div className={`h-8 w-8 rounded-full bg-linear-to-br ${getAvatarColor(booking.clientName)} flex items-center justify-center text-white font-bold text-[10px] shadow-sm shrink-0`}>
                     {booking.clientName.charAt(0)}
                 </div>
                 
@@ -121,16 +118,17 @@ const AgendaItem: React.FC<{ booking: Booking; allBookings: Booking[]; isManager
                     </p>
                 </div>
                 {booking.clientPhone && (
-                    <a 
-                        href={getWhatsAppUrl(booking.clientPhone, booking.clientName)} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
+                    <button
+                        type="button"
                         className={`p-2 ${isManager ? 'bg-amber-100/50 text-amber-600 hover:bg-amber-500 hover:text-white' : 'bg-white/5 hover:bg-green-500/20 text-green-500'} rounded-xl transition-all opacity-0 group-hover:opacity-100 shadow-lg`}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void openWhatsAppUrl(getWhatsAppUrl(booking.clientPhone, buildWhatsAppMessage(booking.clientName)));
+                        }}
                         title="واتساب"
                     >
                         <MessageCircle size={14} />
-                    </a>
+                    </button>
                 )}
             </div>
         </div>

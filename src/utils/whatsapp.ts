@@ -26,3 +26,30 @@ export const getWhatsAppUrl = (phone: string, message?: string) => {
     
     return baseUrl;
 };
+
+/**
+ * Open WhatsApp using Electron bridge when available, with browser fallback.
+ * This prevents opening WhatsApp inside an embedded/old Electron webview.
+ */
+export const openWhatsAppUrl = async (url: string) => {
+    if (!url) return;
+
+    if (window.electronAPI?.openWhatsApp) {
+        try {
+            const result = await window.electronAPI.openWhatsApp(url);
+            if (
+                result &&
+                typeof result === 'object' &&
+                'success' in result &&
+                (result as { success?: boolean }).success === false
+            ) {
+                throw new Error((result as { error?: string }).error || 'Failed to open WhatsApp');
+            }
+            return;
+        } catch {
+            // Fallback to browser if Electron open fails.
+        }
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+};

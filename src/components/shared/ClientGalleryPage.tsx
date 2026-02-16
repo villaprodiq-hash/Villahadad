@@ -19,16 +19,14 @@ import {
   Image as ImageIcon,
   Download,
   Link2,
-  Clock,
   X,
-  ChevronLeft,
-  ChevronRight,
   ZoomIn,
   Grid3X3,
   LayoutGrid,
   MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { openWhatsAppUrl } from '../../utils/whatsapp';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -98,7 +96,7 @@ const ClientGalleryPage: React.FC<ClientGalleryPageProps> = ({
   // Share via WhatsApp
   const shareViaWhatsApp = (message: string) => {
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    void openWhatsAppUrl(url);
   };
 
   // Generate share link with expiry
@@ -125,13 +123,13 @@ const ClientGalleryPage: React.FC<ClientGalleryPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white" dir="rtl">
+    <div className="min-h-screen bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white" dir="rtl">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-zinc-900/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-violet-500/25">
+              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-violet-500/25">
                 {clientName.charAt(0)}
               </div>
               <div>

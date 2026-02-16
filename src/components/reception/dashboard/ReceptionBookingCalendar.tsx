@@ -1,23 +1,27 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, MapPin, MoreHorizontal, Phone, Plus, Pencil, Trash2, MessageCircle, Camera, Check, Loader2, DollarSign, PlusCircle, Wallet } from 'lucide-react';
+import { Booking, BookingCategory, User } from '../../../types';
 
 // --- بيانات وهمية (Mock Data) ---
 interface BookingCalendarProps {
   searchQuery?: string;
   onEditBooking?: (bookingId: string) => void;
   onDeleteBooking?: (bookingId: string) => Promise<void> | void;
-  bookings?: any[];
+  bookings?: Booking[];
   onDateClick?: (date: Date) => void;
   onViewBooking?: (id: string) => void;
-  users?: any[]; // List of all users for photographer selection
-  onUpdateBooking?: (id: string, updates: any) => void; // Callback to update booking
+  users?: User[]; // List of all users for photographer selection
+  onUpdateBooking?: (id: string, updates: Partial<Booking>) => void; // Callback to update booking
   isLoading?: boolean; // Loading flag for async data fetch
 }
 
 const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onEditBooking, onDeleteBooking, bookings = [], onDateClick, onViewBooking, users = [], onUpdateBooking, isLoading = false }) => {
+  const isWeddingOrVenueCategory = (category: BookingCategory) =>
+    category === BookingCategory.WEDDING || category === BookingCategory.LOCATION;
+
   // استخدام الحجوزات الحقيقية فقط
-  const [localBookings, setLocalBookings] = useState<any[]>([]);
+  const [localBookings, setLocalBookings] = useState<Booking[]>([]);
 
   // Sync with props
   useEffect(() => {
@@ -82,6 +86,24 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onE
   const monthNames = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
   const weekDays = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
+  const openWhatsAppChat = (rawPhone?: string) => {
+    const phoneDigits = String(rawPhone || '').replace(/\D/g, '');
+    if (!phoneDigits) return;
+
+    const normalizedPhone = phoneDigits.startsWith('0')
+      ? `964${phoneDigits.slice(1)}`
+      : (phoneDigits.startsWith('964') ? phoneDigits : `964${phoneDigits}`);
+
+    const waUrl = `https://wa.me/${normalizedPhone}`;
+
+    if (window.electronAPI?.openWhatsApp) {
+      void window.electronAPI.openWhatsApp(waUrl);
+      return;
+    }
+
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
   // --- رسم الشبكة (Calendar Grid) ---
   const renderCalendarDays = () => {
     const daysInMonth = getDaysInMonth(currentDate);
@@ -89,7 +111,7 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onE
     const totalDaysShown = firstDay + daysInMonth;
     const rowsNeeded = Math.ceil(totalDaysShown / 7);
     const totalSlots = rowsNeeded * 7; 
-    const days = [];
+    const days: React.ReactNode[] = [];
 
     for (let i = 0; i < totalSlots; i++) {
         const dayNumber = i - firstDay + 1;
@@ -148,7 +170,7 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onE
                 
                 <div className="flex flex-col gap-1.5 flex-1 overflow-hidden">
                     {dayBookings.slice(0, 3).map((booking, idx) => (
-                        <div key={idx} className={`rounded p-1 text-[9px] flex items-center justify-between gap-1 border-r-2 ${isSelected(currentDate.getFullYear(), currentDate.getMonth(), dayNumber) ? 'bg-white/20 border-white text-white' : 'bg-[#18181b] border-l-0 text-gray-300'} ${booking.category === 'زفاف' || booking.category === 'Wedding' || booking.category === 'Venue' ? 'border-amber-500' : 'border-emerald-500'}`}>
+                        <div key={idx} className={`rounded p-1 text-[9px] flex items-center justify-between gap-1 border-r-2 ${isSelected(currentDate.getFullYear(), currentDate.getMonth(), dayNumber) ? 'bg-white/20 border-white text-white' : 'bg-[#18181b] border-l-0 text-gray-300'} ${isWeddingOrVenueCategory(booking.category) ? 'border-amber-500' : 'border-emerald-500'}`}>
                             <span className="truncate font-medium flex-1">{booking.clientName}</span>
                             <span className="opacity-70 text-[8px]">{booking.details?.startTime}</span>
                         </div>
@@ -338,7 +360,7 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onE
                         </div>
 
                          <div className="flex justify-between items-start mb-2">
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${booking.category === 'زفاف' || booking.category === 'Wedding' || booking.category === 'Venue' ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{booking.category}</span>
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${isWeddingOrVenueCategory(booking.category) ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{booking.category}</span>
                           </div>
                          <h4 className="text-white font-bold text-sm mb-1 ml-6">{booking.clientName}</h4>
                          <div className="flex justify-between items-start text-[10px] text-gray-400 mt-2">
@@ -451,8 +473,7 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onE
                             <button 
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    const phone = booking.clientPhone?.replace(/^0/, '964').replace(/\D/g, '') || '';
-                                    if(phone) window.open(`https://web.whatsapp.com/send?phone=${phone}`, 'whatsapp_popup', 'width=1000,height=700,menubar=no,toolbar=no,location=no,status=no');
+                                    openWhatsAppChat(booking.clientPhone);
                                 }} 
                                 className="flex-1 bg-[#18181b] hover:bg-green-600 hover:text-white text-gray-400 py-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1 transition-all"
                                 title="رسالة واتساب"
@@ -463,8 +484,7 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({ searchQuery = '', onE
                             <button 
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    const phone = booking.clientPhone?.replace(/^0/, '964').replace(/\D/g, '') || '';
-                                    if(phone) window.open(`https://web.whatsapp.com/send?phone=${phone}`, 'whatsapp_popup', 'width=1000,height=700,menubar=no,toolbar=no,location=no,status=no');
+                                    openWhatsAppChat(booking.clientPhone);
                                 }} 
                                 className="flex-1 bg-[#18181b] hover:bg-green-600 hover:text-white text-gray-400 py-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1 transition-all"
                                 title="اتصال واتساب"

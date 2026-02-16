@@ -4,6 +4,7 @@ const cp = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { pathToFileURL } = require('url');
 
 // Load environment files for R2 credentials and other config
 try {
@@ -79,6 +80,7 @@ try {
 const { DatabaseBridge } = require('./database-bridge.cjs');
 const { SessionDirectoryManager } = require('./services/SessionDirectoryManager.cjs');
 const { IngestionService } = require('./services/IngestionService.cjs');
+const { LanSyncService } = require('./services/LanSyncService.cjs');
 const { getInstance: getNasConfig } = require('./services/NasConfig.cjs');
 
 // ⚡️ PERFORMANCE: Force Discrete GPU on Intel Macs (instead of integrated)
@@ -90,6 +92,183 @@ if (process.arch === 'x64' && process.platform === 'darwin') {
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 let dbBridge;
+let lanSyncService = null;
+
+function normalizeWhatsAppPhone(rawPhone) {
+  return String(rawPhone || '').replace(/\D/g, '');
+}
+
+function extractWhatsAppPayload(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return { phone: '', text: '' };
+
+  try {
+    const parsed = new URL(rawUrl);
+    const protocol = parsed.protocol.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
+
+    if (protocol === 'whatsapp:') {
+      return {
+        phone: normalizeWhatsAppPhone(parsed.searchParams.get('phone')),
+        text: parsed.searchParams.get('text') || '',
+      };
+    }
+
+    if (hostname === 'wa.me') {
+      return {
+        phone: normalizeWhatsAppPhone(parsed.pathname.replace(/^\/+/, '')),
+        text: parsed.searchParams.get('text') || '',
+      };
+    }
+
+    if (
+      (hostname === 'api.whatsapp.com' || hostname === 'web.whatsapp.com') &&
+      parsed.pathname === '/send'
+    ) {
+      return {
+        phone: normalizeWhatsAppPhone(parsed.searchParams.get('phone')),
+        text: parsed.searchParams.get('text') || '',
+      };
+    }
+
+    return { phone: '', text: '' };
+  } catch {
+    return { phone: '', text: '' };
+  }
+}
+
+function buildWhatsAppTargets(rawUrl) {
+  const { phone, text } = extractWhatsAppPayload(rawUrl);
+  const params = new URLSearchParams();
+
+  if (phone) params.set('phone', phone);
+  if (text) params.set('text', text);
+
+  const query = params.toString();
+  const appUrl = query ? `whatsapp://send?${query}` : 'whatsapp://send';
+
+  let webUrl = 'https://wa.me/';
+  if (phone && text) {
+    webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  } else if (phone) {
+    webUrl = `https://wa.me/${phone}`;
+  } else if (text) {
+    webUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  }
+
+  return { appUrl, webUrl };
+}
+
+async function openFileInPhotoshop(targetPath) {
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new Error('Missing file path');
+  }
+
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`File not found: ${targetPath}`);
+  }
+
+  const photoshopCandidates = new Set([
+    'Adobe Photoshop 2026',
+    'Adobe Photoshop 2025',
+    'Adobe Photoshop 2024',
+    'Adobe Photoshop 2023',
+    'Adobe Photoshop 2022',
+    'Adobe Photoshop',
+    'Adobe Photoshop Beta',
+  ]);
+
+  const scanRoots = ['/Applications', path.join(app.getPath('home'), 'Applications')];
+  for (const root of scanRoots) {
+    try {
+      if (!fs.existsSync(root)) continue;
+      const entries = fs.readdirSync(root, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.name.toLowerCase().includes('photoshop')) continue;
+
+        if (entry.name.endsWith('.app')) {
+          photoshopCandidates.add(path.join(root, entry.name));
+          continue;
+        }
+
+        if (!entry.isDirectory()) continue;
+        const nestedApp = path.join(root, entry.name, `${entry.name}.app`);
+        if (fs.existsSync(nestedApp)) {
+          photoshopCandidates.add(nestedApp);
+        }
+      }
+    } catch {
+      // Ignore scan failures and continue with known candidates.
+    }
+  }
+
+  const openWith = (args) =>
+    new Promise((resolve, reject) => {
+      cp.execFile('open', args, err => {
+        if (err) reject(err);
+        else resolve(undefined);
+      });
+    });
+
+  const bundleCandidates = ['com.adobe.Photoshop', 'com.adobe.PhotoshopBeta'];
+  for (const bundleId of bundleCandidates) {
+    try {
+      await openWith(['-b', bundleId, targetPath]);
+      return { success: true, app: bundleId };
+    } catch {
+      // Try next bundle
+    }
+  }
+
+  for (const appName of photoshopCandidates) {
+    try {
+      await openWith(['-a', appName, targetPath]);
+      return { success: true, app: appName };
+    } catch {
+      // Try next candidate
+    }
+  }
+
+  throw new Error('Photoshop app not found on this device');
+}
+
+function sanitizeChatFileName(fileName) {
+  const baseName = String(fileName || 'attachment.bin').trim();
+  const safeName = baseName
+    .replace(/[^\w.\-()\u0600-\u06FF ]+/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 120);
+  return safeName || `attachment_${Date.now()}.bin`;
+}
+
+function coerceToBuffer(rawBuffer) {
+  if (!rawBuffer) return null;
+
+  if (Buffer.isBuffer(rawBuffer)) return rawBuffer;
+
+  if (Array.isArray(rawBuffer)) {
+    return Buffer.from(rawBuffer);
+  }
+
+  if (rawBuffer instanceof ArrayBuffer) {
+    return Buffer.from(rawBuffer);
+  }
+
+  if (ArrayBuffer.isView(rawBuffer)) {
+    return Buffer.from(rawBuffer.buffer, rawBuffer.byteOffset, rawBuffer.byteLength);
+  }
+
+  if (
+    typeof rawBuffer === 'object' &&
+    rawBuffer !== null &&
+    rawBuffer.type === 'Buffer' &&
+    Array.isArray(rawBuffer.data)
+  ) {
+    return Buffer.from(rawBuffer.data);
+  }
+
+  return null;
+}
 
 // Set database path for preload script (SQLite only)
 // Set database path (Local vs Synology)
@@ -314,6 +493,36 @@ function setupIPCHandlers() {
     return dbBridge.getStatus();
   });
 
+  ipcMain.handle('lan:publish', async (_event, payload) => {
+    try {
+      if (!lanSyncService) {
+        return { success: false, error: 'LAN sync not initialized' };
+      }
+
+      const channel =
+        payload && typeof payload === 'object' && typeof payload.channel === 'string'
+          ? payload.channel
+          : '';
+      const body =
+        payload && typeof payload === 'object' && 'payload' in payload
+          ? payload.payload
+          : null;
+
+      if (!channel) {
+        return { success: false, error: 'Missing LAN channel' };
+      }
+
+      const published = lanSyncService.publish(channel, body);
+      if (!published) {
+        return { success: false, error: 'Failed to publish LAN event' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
   console.log('✅ IPC Database Handlers registered');
 
   // --- Image Caching Handlers ---
@@ -456,6 +665,61 @@ function setupIPCHandlers() {
     }
   });
 
+  // Chat attachment storage (shared filesystem/NAS first, local cache fallback)
+  ipcMain.handle('chat:store-attachment', async (_event, payload = {}) => {
+    try {
+      const fileName = sanitizeChatFileName(payload?.fileName);
+      const mimeType =
+        typeof payload?.mimeType === 'string' && payload.mimeType.trim()
+          ? payload.mimeType
+          : 'application/octet-stream';
+      const sourcePath =
+        typeof payload?.sourcePath === 'string' && payload.sourcePath.trim()
+          ? payload.sourcePath
+          : null;
+      const binaryBuffer = coerceToBuffer(payload?.buffer);
+
+      if (!sourcePath && !binaryBuffer) {
+        return { success: false, error: 'Missing sourcePath or buffer' };
+      }
+
+      const now = new Date();
+      const year = String(now.getFullYear());
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+
+      const rootPath = getNasConfig().getAppFolderPath();
+      const chatFolder = path.join(rootPath, '_chat_attachments', year, month, day);
+      await fs.promises.mkdir(chatFolder, { recursive: true });
+
+      const finalName = `${Date.now()}_${fileName}`;
+      const targetPath = path.join(chatFolder, finalName);
+
+      if (sourcePath) {
+        if (!fs.existsSync(sourcePath)) {
+          return { success: false, error: 'Source file not found' };
+        }
+        await fs.promises.copyFile(sourcePath, targetPath);
+      } else if (binaryBuffer) {
+        await fs.promises.writeFile(targetPath, binaryBuffer);
+      }
+
+      const stats = await fs.promises.stat(targetPath);
+
+      return {
+        success: true,
+        path: targetPath,
+        fileUrl: pathToFileURL(targetPath).toString(),
+        fileName: finalName,
+        mimeType,
+        size: stats.size
+      };
+    } catch (error) {
+      console.error('[chat:store-attachment] failed:', error);
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
   // Clear Cache
   ipcMain.handle('file:clear-cache', async () => {
     try {
@@ -478,6 +742,59 @@ function setupIPCHandlers() {
     });
     if (result.canceled) return null;
     return result.filePaths[0];
+  });
+
+  // Open a specific file/folder path in OS shell
+  ipcMain.handle('file:open-path', async (_event, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') {
+        return { success: false, error: 'Missing path' };
+      }
+
+      const errorMessage = await shell.openPath(targetPath);
+      if (errorMessage) {
+        return { success: false, error: errorMessage };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
+  ipcMain.handle('file:show-in-folder', async (_event, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') {
+        return { success: false, error: 'Missing path' };
+      }
+
+      if (!fs.existsSync(targetPath)) {
+        return { success: false, error: 'Path not found' };
+      }
+
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        const openError = await shell.openPath(targetPath);
+        if (openError) {
+          return { success: false, error: openError };
+        }
+        return { success: true };
+      }
+
+      shell.showItemInFolder(targetPath);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
+  // Open a file directly in Photoshop (with fallback to default app)
+  ipcMain.handle('file:open-in-photoshop', async (_event, targetPath) => {
+    try {
+      return await openFileInPhotoshop(targetPath);
+    } catch (error) {
+      return { success: false, error: error?.message || String(error) };
+    }
   });
 
   // List Directory Contents
@@ -688,56 +1005,49 @@ function setupIPCHandlers() {
     }
   });
 
+  // Window always-on-top mode for "Task Pop"
+  ipcMain.handle('window:set-always-on-top', async (event, { enabled }) => {
+    try {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      if (!senderWindow) {
+        return { success: false, error: 'Window not found', enabled: false };
+      }
+
+      const shouldEnable = Boolean(enabled);
+      senderWindow.setAlwaysOnTop(shouldEnable, 'floating');
+      if (shouldEnable) {
+        senderWindow.moveTop();
+      }
+
+      return { success: true, enabled: senderWindow.isAlwaysOnTop() };
+    } catch (error) {
+      return {
+        success: false,
+        error: error?.message || String(error),
+        enabled: false,
+      };
+    }
+  });
+
   // 📱 WhatsApp Integration Handler
-  let whatsAppWindow = null;
-  ipcMain.handle('whatsapp:open', async (event, url) => {
-    // If window exists, just focus and load URL
-    if (whatsAppWindow && !whatsAppWindow.isDestroyed()) {
-      if (url) whatsAppWindow.loadURL(url);
-      whatsAppWindow.show();
-      whatsAppWindow.focus();
-      return;
+  ipcMain.handle('whatsapp:open', async (_event, url) => {
+    try {
+      const { appUrl, webUrl } = buildWhatsAppTargets(url);
+      let mode = 'app';
+
+      try {
+        await shell.openExternal(appUrl);
+      } catch (appError) {
+        mode = 'web';
+        console.warn('[whatsapp:open] App protocol failed. Falling back to web:', appError?.message || appError);
+        await shell.openExternal(webUrl);
+      }
+
+      return { success: true, mode, url: mode === 'app' ? appUrl : webUrl };
+    } catch (error) {
+      console.error('[whatsapp:open] Failed to open WhatsApp:', error);
+      return { success: false, error: error?.message || String(error) };
     }
-
-    // Get main window to be parent
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-
-    // Create new window
-    whatsAppWindow = new BrowserWindow({
-      width: 1100,
-      height: 750,
-      parent: mainWindow, // Make it a child of the main app
-      modal: false, // Not blocking the main app
-      title: 'WhatsApp Web',
-      backgroundColor: '#ece5dd', // WhatsApp default bg color
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true, // Crucial for security and anti-ban
-        partition: 'persist:whatsapp', // Keeps login session saved separately
-      },
-    });
-
-    // Set a realistic User Agent (looks exactly like Chrome to WhatsApp)
-    whatsAppWindow.webContents.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
-    // Handle external links inside WhatsApp (e.g. user clicks a link sent in chat)
-    whatsAppWindow.webContents.setWindowOpenHandler(({ url }) => {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    });
-
-    if (url) {
-      whatsAppWindow.loadURL(url);
-    } else {
-      whatsAppWindow.loadURL('https://web.whatsapp.com');
-    }
-
-    whatsAppWindow.on('closed', () => {
-      whatsAppWindow = null;
-    });
   });
 
   // 📦 BACKUP HANDLERS
@@ -913,6 +1223,16 @@ let ingestionService;
 
 app.whenReady().then(async () => {
   console.log('[Main] 🚀 App is ready, initializing...');
+
+  lanSyncService = new LanSyncService();
+  lanSyncService.start((packet) => {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('lan:sync-event', packet);
+      }
+    }
+  });
   
   // Initialize DatabaseBridge
   console.log('[Main] 📦 Initializing DatabaseBridge...');
@@ -942,8 +1262,6 @@ app.whenReady().then(async () => {
     const nasMountResult = await nasConfig.autoMountOnStartup();
     if (nasMountResult.success) {
       console.log('[Main] ✅ NAS auto-mounted:', nasMountResult.path, `(${nasMountResult.method})`);
-      // Update paths after successful mount
-      NAS_MOUNT_PATH = nasMountResult.path;
     } else {
       console.log('[Main] ⚠️ NAS auto-mount failed:', nasMountResult.error);
       console.log('[Main]   Will use local cache or require manual connection');
@@ -989,6 +1307,14 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  try {
+    lanSyncService?.stop();
+  } catch (error) {
+    console.error('[Main] Failed to stop LAN sync service:', error?.message || error);
+  }
 });
 
 app.on('window-all-closed', () => {

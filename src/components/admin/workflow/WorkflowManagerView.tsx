@@ -1,14 +1,14 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Booking, BookingStatus, User } from '../../../types';
 import { 
-  Camera, Calendar, Clock, Phone, MessageCircle, AlertTriangle, 
-  CheckCircle2, ArrowRight, User as UserIcon, Bell, Filter, Search,
-  CalendarCheck2, StopCircle
+  Camera, Phone, MessageCircle, 
+  CheckCircle2, User as UserIcon, Filter, Search,
+  CalendarCheck2
 } from 'lucide-react';
-import { format, parseISO, differenceInDays } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { parseISO, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
+import { getWhatsAppUrl, openWhatsAppUrl } from '../../../utils/whatsapp';
 
 interface WorkflowManagerViewProps {
   bookings: Booking[];
@@ -19,10 +19,11 @@ interface WorkflowManagerViewProps {
 
 const WorkflowManagerView: React.FC<WorkflowManagerViewProps> = ({
   bookings,
-  users,
+  users: _users,
   onSelectBooking,
   onUpdateBooking
 }) => {
+  const buildWhatsAppMessage = (name: string) => `مرحباً ${name}، نحن من فيلا حداد...`;
 
   // --- 1. Waiting Queue (Call List - Clients who finished shooting) ---
   const waitingQueue = bookings.filter(b => b.status === BookingStatus.SHOOTING_COMPLETED);
@@ -112,9 +113,13 @@ const WorkflowManagerView: React.FC<WorkflowManagerViewProps> = ({
                                 <a href={`tel:${booking.clientPhone}`} className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg flex items-center justify-center gap-2 text-zinc-300 text-xs font-bold transition-colors">
                                     <Phone size={14} className="text-blue-400" /> اتصال
                                 </a>
-                                <a href={`https://wa.me/${booking.clientPhone}`} target="_blank" className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg flex items-center justify-center gap-2 text-zinc-300 text-xs font-bold transition-colors" rel="noreferrer">
+                                <button
+                                  type="button"
+                                  onClick={() => void openWhatsAppUrl(getWhatsAppUrl(booking.clientPhone || '', buildWhatsAppMessage(booking.clientName)))}
+                                  className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg flex items-center justify-center gap-2 text-zinc-300 text-xs font-bold transition-colors"
+                                >
                                     <MessageCircle size={14} className="text-green-400" /> واتساب
-                                </a>
+                                </button>
                             </div>
 
                             {/* Appointment Setter */}

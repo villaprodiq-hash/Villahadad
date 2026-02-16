@@ -1,9 +1,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { 
-    Users, Phone, Mail, Search, Download, Crown, Heart, Star, TrendingUp, 
-    Filter, Calendar, Clock, StickyNote, ChevronLeft, ChevronRight,
-    MapPin, Wallet, Sparkles, UserCheck, AlertCircle, Info, MessageCircle
+    Users, Phone, Search, Crown, Heart, Star, TrendingUp, 
+    Calendar, Clock, StickyNote, Wallet, Sparkles, AlertCircle, MessageCircle
 } from 'lucide-react';
 import { Booking, BookingCategory } from '../../../types';
 import ScrollReveal from '../../shared/ScrollReveal';
@@ -11,12 +10,7 @@ import ReceptionPageWrapper from '../../reception/layout/ReceptionPageWrapper';
 import ClientBadge from '../../shared/ClientBadge';
 import { format, isToday, isTomorrow, isSameWeek, parseISO, startOfToday } from 'date-fns';
 import { ar } from 'date-fns/locale';
-
-const getWhatsAppUrl = (phone: string, name: string) => {
-  const cleanPhone = phone.replace(/\D/g, '');
-  const message = `مرحباً ${name}، نحن من فيلا حداد...`;
-  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-};
+import { getWhatsAppUrl, openWhatsAppUrl } from '../../../utils/whatsapp';
 
 interface ClientsViewProps {
   bookings: Booking[];
@@ -28,6 +22,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'sura' | 'villa'>('all');
   const [arrivalFilter, setArrivalFilter] = useState<'today' | 'tomorrow' | 'week'>('today');
+  const buildWhatsAppMessage = (name: string) => `مرحباً ${name}، نحن من فيلا حداد...`;
 
   // 1. Core Client Data with CRM Insights
   const clients = useMemo(() => {
@@ -128,11 +123,6 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
       .sort((a, b) => a.bookingTime.localeCompare(b.bookingTime));
   }, [bookings, arrivalFilter, clients]);
 
-  // 4. Widget Calculations (Reactive)
-  const vipStats = useMemo(() => filteredClients.filter(c => c.isVIP).length, [filteredClients]);
-  const loyalStats = useMemo(() => filteredClients.filter(c => c.isLoyal).length, [filteredClients]);
-  const starStats = useMemo(() => filteredClients.filter(c => c.isFamous).length, [filteredClients]);
-
   const vipStatsList = useMemo(() => {
     return [...filteredClients].filter(c => c.isVIP).sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 3);
   }, [filteredClients]);
@@ -144,43 +134,6 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
   const celebrityStatsList = useMemo(() => {
     return filteredClients.filter(c => c.isFamous).slice(0, 3);
   }, [filteredClients]);
-
-
-  const handleExportCSV = () => {
-    // 1. Define Headers
-    const headers = ['Client ID', 'Name', 'Email', 'Phone', 'Bookings Count', 'Total Spent'];
-
-    // 2. Format Rows
-    const rows = filteredClients.map(client => {
-        // Escape quotes within data to avoid CSV breakage
-        const safeName = `"${client.name.replace(/"/g, '""')}"`;
-        const safeEmail = client.email ? `"${client.email}"` : '';
-        const safePhone = client.phone ? `"${client.phone}"` : ''; // Force string for phone to keep leading zeros
-
-        return [
-            client.id,
-            safeName,
-            safeEmail,
-            safePhone,
-            client.bookingsCount,
-            client.totalSpent
-        ].join(',');
-    });
-
-    // 3. Combine with BOM for Arabic support in Excel
-    const BOM = "\uFEFF"; 
-    const csvContent = BOM + [headers.join(','), ...rows].join('\n');
-
-    // 4. Create Blob and Trigger Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `clients_export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   return (
     <ReceptionPageWrapper isReception={isReception} isManager={isManager}>
@@ -198,7 +151,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                 <div className={`hidden lg:flex ${isManager ? 'bg-gray-100/50 border-gray-200' : 'bg-[#18181b] border-white/5'} p-1 rounded-xl border gap-0.5`}>
                     <button 
                         onClick={() => setActiveFilter('all')}
-                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${activeFilter === 'all' ? (isManager ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/20' : 'bg-[#F7931E] text-white shadow-lg shadow-[#F7931E]/20') : (isManager ? 'text-gray-500 hover:text-gray-800 hover:bg-white' : 'text-gray-500 hover:text-white hover:bg-white/5')}`}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${activeFilter === 'all' ? (isManager ? 'bg-linear-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/20' : 'bg-[#F7931E] text-white shadow-lg shadow-[#F7931E]/20') : (isManager ? 'text-gray-500 hover:text-gray-800 hover:bg-white' : 'text-gray-500 hover:text-white hover:bg-white/5')}`}
                     >
                         الكل
                     </button>
@@ -263,7 +216,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
             {/* 1. Daily Arrivals Widget (Show only if priority clients exist) */}
             {dailyArrivals.length > 0 && (
                 <div className={`${isManager ? 'bg-white/60 backdrop-blur-3xl border-white/40 ring-1 ring-white/60 shadow-sm' : 'bg-[#18181b] border-white/10'} p-4 rounded-3xl border relative overflow-hidden group flex flex-col`}>
-                    <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-blue-500/5' : 'bg-blue-500/10'} rounded-full blur-[40px] group-hover:bg-blue-500/20 transition-all`}></div>
+                    <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-blue-500/5' : 'bg-blue-500/10'} rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all`}></div>
                     <div className="flex items-center justify-between mb-4 relative z-10">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400">
@@ -307,7 +260,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
 
             {/* 2. VIP Clients List */}
             <div className={`${isManager ? 'bg-white/60 backdrop-blur-3xl border-white/40 ring-1 ring-white/60 shadow-sm' : 'bg-[#18181b] border-white/10'} p-4 rounded-3xl border relative overflow-hidden group flex flex-col`}>
-                <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-purple-500/5' : 'bg-purple-500/10'} rounded-full blur-[40px] group-hover:bg-purple-500/20 transition-all`}></div>
+                <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-purple-500/5' : 'bg-purple-500/10'} rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all`}></div>
                 <div className="flex items-center gap-3 mb-4 relative z-10">
                     <div className="p-2 bg-purple-500/10 rounded-xl text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
                         <Crown size={20} />
@@ -321,7 +274,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                     {vipStatsList.map((client, i) => (
                         <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group/item">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white shadow-xl flex-shrink-0 transition-transform group-hover/item:scale-110 ${i===0 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : 'bg-[#262626] border border-white/10'}`}>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white shadow-xl shrink-0 transition-transform group-hover/item:scale-110 ${i===0 ? 'bg-linear-to-r from-yellow-400 to-yellow-600' : 'bg-[#262626] border border-white/10'}`}>
                                     {client.name.charAt(0)}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -340,7 +293,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
 
             {/* 3. Loyal Clients List */}
             <div className={`${isManager ? 'bg-white/60 backdrop-blur-3xl border-white/40 ring-1 ring-white/60 shadow-sm' : 'bg-[#18181b] border-white/10'} p-4 rounded-3xl border relative overflow-hidden group flex flex-col`}>
-                <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-pink-500/5' : 'bg-pink-500/10'} rounded-full blur-[40px] group-hover:bg-pink-500/20 transition-all`}></div>
+                <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-pink-500/5' : 'bg-pink-500/10'} rounded-full blur-2xl group-hover:bg-pink-500/20 transition-all`}></div>
                 <div className="flex items-center gap-3 mb-4 relative z-10">
                     <div className="p-2 bg-pink-500/10 rounded-xl text-pink-400 shadow-[0_0_10px_rgba(236,72,153,0.2)]">
                         <Heart size={20} />
@@ -354,7 +307,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                     {loyalStatsList.map((client, i) => (
                         <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group/item">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white shadow-xl flex-shrink-0 transition-transform group-hover/item:scale-110 ${i===0 ? 'bg-gradient-to-r from-pink-500 to-rose-500' : 'bg-[#262626] border border-white/10'}`}>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white shadow-xl shrink-0 transition-transform group-hover/item:scale-110 ${i===0 ? 'bg-linear-to-r from-pink-500 to-rose-500' : 'bg-[#262626] border border-white/10'}`}>
                                     {client.name.charAt(0)}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -373,7 +326,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
 
             {/* 4. Celebrities List */}
             <div className={`${isManager ? 'bg-white/60 backdrop-blur-3xl border-white/40 ring-1 ring-white/60 shadow-sm' : 'bg-[#18181b] border-white/10'} p-4 rounded-3xl border relative overflow-hidden group flex flex-col`}>
-                <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-amber-500/5' : 'bg-yellow-500/10'} rounded-full blur-[40px] group-hover:bg-yellow-500/20 transition-all`}></div>
+                <div className={`absolute top-0 right-0 w-24 h-24 ${isManager ? 'bg-amber-500/5' : 'bg-yellow-500/10'} rounded-full blur-2xl group-hover:bg-yellow-500/20 transition-all`}></div>
                 <div className="flex items-center gap-3 mb-4 relative z-10">
                     <div className="p-2 bg-yellow-500/10 rounded-xl text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.2)]">
                         <Star size={20} />
@@ -388,7 +341,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                         celebrityStatsList.map((client, i) => (
                             <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group/item">
                                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white shadow-xl flex-shrink-0 bg-gradient-to-br from-yellow-400 to-amber-600 transition-transform group-hover/item:scale-110">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white shadow-xl shrink-0 bg-linear-to-br from-yellow-400 to-amber-600 transition-transform group-hover/item:scale-110">
                                         {client.name.charAt(0)}
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -418,18 +371,23 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                 <p className="font-bold">قاعدة بيانات العملاء خالية من النتائج المطابقة</p>
             </div>
         ) : (
-            filteredClients.map((client, index) => (
+            filteredClients.map((client, index) => {
+                const clientPrimaryBooking = bookings.find(b => b.clientId === client.id) ?? bookings[0];
+
+                return (
                 <ScrollReveal key={client.id} delay={Math.min(index * 0.05, 0.3)}>
-                    <div className={`${isManager ? 'bg-white/40 hover:bg-white/60 border-white/40 hover:border-amber-400/30 hover:shadow-amber-500/5' : 'bg-[#09090b]/40 hover:bg-[#18181b]/60 border-white/5 hover:border-[#F7931E]/40 hover:shadow-[#F7931E]/5'} backdrop-blur-md rounded-[1.5rem] p-4 border transition-all group h-full flex flex-col shadow-lg hover:-translate-y-1 duration-300`}>
+                    <div className={`${isManager ? 'bg-white/40 hover:bg-white/60 border-white/40 hover:border-amber-400/30 hover:shadow-amber-500/5' : 'bg-[#09090b]/40 hover:bg-[#18181b]/60 border-white/5 hover:border-[#F7931E]/40 hover:shadow-[#F7931E]/5'} backdrop-blur-md rounded-3xl p-4 border transition-all group h-full flex flex-col shadow-lg hover:-translate-y-1 duration-300`}>
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-gray-800 to-gray-900 border border-white/5 flex items-center justify-center text-sm font-black text-white shadow-xl shrink-0 group-hover:scale-110 transition-transform">
+                                <div className="h-10 w-10 rounded-xl bg-linear-to-br from-gray-800 to-gray-900 border border-white/5 flex items-center justify-center text-sm font-black text-white shadow-xl shrink-0 group-hover:scale-110 transition-transform">
                                     {client.name.charAt(0)}
                                 </div>
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-1.5 mb-0.5">
                                         <h3 className={`font-bold ${isManager ? 'text-gray-800' : 'text-white'} text-[13px] truncate`}>{client.name}</h3>
-                                        <ClientBadge booking={bookings.find(b => b.clientId === client.id) || bookings[0]} allBookings={bookings} compact />
+                                        {clientPrimaryBooking && (
+                                            <ClientBadge booking={clientPrimaryBooking} allBookings={bookings} compact />
+                                        )}
                                     </div>
                                     <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">ID: {client.id.slice(0, 8)}</p>
                                 </div>
@@ -453,16 +411,17 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                                 <Phone size={12} className="text-gray-500" /> 
                                 <span dir="ltr" className="font-medium flex-1">{client.phone || '---'}</span>
                                 {client.phone && (
-                                    <a 
-                                        href={getWhatsAppUrl(client.phone, client.name)} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer" 
+                                    <button
+                                        type="button"
                                         className="p-1.5 hover:bg-green-500/20 text-green-500 rounded-lg transition-all"
-                                        onClick={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void openWhatsAppUrl(getWhatsAppUrl(client.phone, buildWhatsAppMessage(client.name)));
+                                        }}
                                         title="مراسلة عبر واتساب"
                                     >
                                         <MessageCircle size={14} />
-                                    </a>
+                                    </button>
                                 )}
                             </div>
                             <div className={`flex items-center gap-2 text-[11px] text-gray-400 ${isManager ? 'bg-white/40 border-gray-100 hover:bg-white/60' : 'bg-white/5 border-white/5 group-hover:bg-white/10'} px-2 py-1.5 rounded-lg border transition-colors`}>
@@ -492,7 +451,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ bookings, isReception = true,
                         </div>
                     </div>
                 </ScrollReveal>
-            ))
+            )})
         )}
       </div>
         </div>

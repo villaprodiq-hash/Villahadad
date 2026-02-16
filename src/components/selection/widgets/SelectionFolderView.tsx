@@ -1,15 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import type { LucideIcon } from 'lucide-react';
 import {
   MoreVertical,
   Search,
   Filter,
-  PieChart,
   Clock,
   Check,
   CheckCircle2,
   XCircle,
-  AlertCircle,
   ArrowUpDown,
   Star,
   HelpCircle,
@@ -17,17 +16,13 @@ import {
   ArrowRight,
   Upload,
   Image as ImageIcon,
-  Video,
-  Folder,
   Download,
   Loader2,
-  Trash2,
   Share2,
   Link2,
   Send,
   Copy,
   Check as CheckIcon,
-  MessageCircle,
   FolderOpen,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -39,6 +34,7 @@ import SelectionBatchBar from './SelectionBatchBar';
 import { Booking } from '../../../types';
 import { toast } from 'sonner';
 import { buildClientPortalUrl, getClientPortalLinkError } from '../../../utils/clientPortal';
+import { openWhatsAppUrl } from '../../../utils/whatsapp';
 
 interface SelectionFolderViewProps {
   folder: GalleryFolder;
@@ -56,6 +52,37 @@ interface SelectionFolderViewProps {
   /** Batch status change for multiple items */
   onBatchStatusChange?: (ids: number[], status: 'approved' | 'rejected' | 'maybe') => void;
 }
+
+type SelectionFilter = 'ALL' | 'APPROVED' | 'REJECTED' | 'MAYBE';
+type SelectionSort = 'DEFAULT' | 'NEWEST' | 'OLDEST' | 'RATING';
+type FilterColor = 'gray' | 'green' | 'red' | 'amber';
+
+interface SortOption {
+  id: SelectionSort;
+  label: string;
+  icon: LucideIcon;
+}
+
+interface FilterOption {
+  id: SelectionFilter;
+  label: string;
+  icon: LucideIcon;
+  color: FilterColor;
+}
+
+const SORT_OPTIONS: SortOption[] = [
+  { id: 'DEFAULT', label: 'تسلسل (افتراضي)', icon: MoreVertical },
+  { id: 'NEWEST', label: 'الأحدث أولاً', icon: Clock },
+  { id: 'OLDEST', label: 'الأقدم أولاً', icon: Clock },
+  { id: 'RATING', label: 'حسب النجوم', icon: Star },
+];
+
+const FILTER_OPTIONS: FilterOption[] = [
+  { id: 'ALL', label: 'عرض الكل', icon: MoreVertical, color: 'gray' },
+  { id: 'APPROVED', label: 'المختارة (Approved)', icon: CheckCircle2, color: 'green' },
+  { id: 'REJECTED', label: 'المرفوضة (Rejected)', icon: XCircle, color: 'red' },
+  { id: 'MAYBE', label: 'حاير (Confused)', icon: HelpCircle, color: 'amber' },
+];
 
 const THEME_COLORS = {
   selection: {
@@ -89,7 +116,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
   onUpload,
   onItemClick,
   onRate,
-  showRatings = true,
+  showRatings: _showRatings = true,
   theme = 'selection',
   booking,
   nasPath,
@@ -98,12 +125,8 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
 }) => {
   const colors = THEME_COLORS[theme];
   // Local State
-  const [currentFilter, setCurrentFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED' | 'MAYBE'>(
-    'ALL'
-  );
-  const [currentSort, setCurrentSort] = useState<'DEFAULT' | 'NEWEST' | 'OLDEST' | 'RATING'>(
-    'DEFAULT'
-  );
+  const [currentFilter, setCurrentFilter] = useState<SelectionFilter>('ALL');
+  const [currentSort, setCurrentSort] = useState<SelectionSort>('DEFAULT');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -200,7 +223,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
     }
     
     try {
-      const electronAPI = (window as any).electronAPI;
+      const electronAPI = window.electronAPI;
       if (electronAPI?.fileSystem?.openDirectory) {
         await electronAPI.fileSystem.openDirectory(nasPath);
         toast.success('تم فتح المجلد');
@@ -237,18 +260,16 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
       ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
       : `https://wa.me/?text=${encodeURIComponent(message)}`;
     
-    window.open(waUrl, '_blank');
+    void openWhatsAppUrl(waUrl);
   };
 
   const handleDownloadAll = async () => {
     setIsDownloadingAll(true);
     setDownloadProgress(0);
     try {
-      // @ts-ignore
       if (window.electronAPI?.fileSystem) {
         const paths = items.map(i => i.image);
-        // @ts-ignore
-        await window.electronAPI.fileSystem.cacheMultipleImages(paths);
+        await window.electronAPI.fileSystem.cacheMultipleImages?.(paths);
         // Mock Progress Animation
         for (let i = 0; i <= 100; i += 10) {
           setDownloadProgress(i);
@@ -365,7 +386,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
           {nasPath && (
             <button
               onClick={handleOpenNasFolder}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/20 transition-all hover:scale-105 active:scale-95 ml-2"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-linear-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/20 transition-all hover:scale-105 active:scale-95 ml-2"
               title="فتح مجلد NAS"
             >
               <FolderOpen size={16} />
@@ -376,7 +397,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
           {/* Portal Link Button */}
           <button
             onClick={handleOpenPortalLink}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg shadow-amber-500/20 transition-all hover:scale-105 active:scale-95 ml-2"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-linear-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg shadow-amber-500/20 transition-all hover:scale-105 active:scale-95 ml-2"
             title="إرسال رابط البوابة للعميل"
           >
             <Link2 size={16} />
@@ -594,16 +615,11 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
                       exit={{ opacity: 0, y: 10 }}
                       className="absolute top-full left-0 mt-2 w-40 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 z-50 overflow-hidden"
                     >
-                      {[
-                        { id: 'DEFAULT', label: 'تسلسل (افتراضي)', icon: MoreVertical },
-                        { id: 'NEWEST', label: 'الأحدث أولاً', icon: Clock },
-                        { id: 'OLDEST', label: 'الأقدم أولاً', icon: Clock },
-                        { id: 'RATING', label: 'حسب النجوم', icon: Star },
-                      ].map(opt => (
+                      {SORT_OPTIONS.map(opt => (
                         <button
                           key={opt.id}
                           onClick={() => {
-                            setCurrentSort(opt.id as any);
+                            setCurrentSort(opt.id);
                             setIsSortOpen(false);
                           }}
                           className={`w-full text-right px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${
@@ -655,26 +671,11 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
                       exit={{ opacity: 0, y: 10 }}
                       className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 z-50 overflow-hidden"
                     >
-                      {[
-                        { id: 'ALL', label: 'عرض الكل', icon: MoreVertical, color: 'gray' },
-                        {
-                          id: 'APPROVED',
-                          label: 'المختارة (Approved)',
-                          icon: CheckCircle2,
-                          color: 'green',
-                        },
-                        {
-                          id: 'REJECTED',
-                          label: 'المرفوضة (Rejected)',
-                          icon: XCircle,
-                          color: 'red',
-                        },
-                        { id: 'MAYBE', label: 'حاير (Confused)', icon: HelpCircle, color: 'amber' },
-                      ].map(opt => (
+                      {FILTER_OPTIONS.map(opt => (
                         <button
                           key={opt.id}
                           onClick={() => {
-                            setCurrentFilter(opt.id as any);
+                            setCurrentFilter(opt.id);
                             setIsFilterOpen(false);
                           }}
                           className={`w-full text-right px-3 py-2 rounded-lg text-xs font-bold mb-0.5 flex items-center justify-between transition-colors ${
@@ -821,7 +822,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
 
       {/* Portal Link Modal */}
       {isPortalLinkModalOpen && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-100000 flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -837,7 +838,7 @@ const SelectionFolderView: React.FC<SelectionFolderViewProps> = ({
             dir="rtl"
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 flex justify-between items-center">
+            <div className="bg-linear-to-r from-amber-500 to-orange-500 px-6 py-4 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
                   <Link2 className="text-white" size={20} />
