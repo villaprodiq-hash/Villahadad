@@ -28,7 +28,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { formatMoney } from '../utils/formatMoney';
-import { printReceipt, ReceiptType } from '../utils/printReceipt';
+import { printReceipt } from '../utils/printReceipt';
 import { toast } from 'sonner';
 
 import { ZainCashPayment } from './shared/ZainCashPayment';
@@ -73,7 +73,6 @@ const BookingDetailsView: React.FC<BookingDetailsViewProps> = ({
   // Session lifecycle for photo management
   const {
     session,
-    images,
     selectedCount,
     totalCount,
   } = useSessionLifecycle({
@@ -163,12 +162,12 @@ const BookingDetailsView: React.FC<BookingDetailsViewProps> = ({
         });
       } else {
         // Different currency → store in addOnTotal, do NOT mix into totalAmount
-        const currentAddOnTotal = (booking as any).addOnTotal || 0;
+        const currentAddOnTotal = booking.addOnTotal || 0;
         onUpdateBooking(booking.id, {
           addOnTotal: currentAddOnTotal + amount,
           originalPackagePrice: booking.originalPackagePrice || booking.totalAmount,
           details: { ...booking.details, extraItems: updatedExtraItems },
-        } as any);
+        });
       }
 
       toast.success('تم إضافة الخدمة الإضافية بنجاح وتم تحديث المجموع');
@@ -179,6 +178,10 @@ const BookingDetailsView: React.FC<BookingDetailsViewProps> = ({
   };
 
   const remainingAmount = booking.totalAmount - booking.paidAmount;
+  const appliedDiscount = booking.details?.discount;
+  const hasAppliedDiscount = Boolean(
+    appliedDiscount && Number(appliedDiscount.discountAmount || 0) > 0
+  );
 
   return (
     <div className="bg-[#21242b] min-h-screen p-6 font-sans" dir="rtl">
@@ -444,8 +447,39 @@ const BookingDetailsView: React.FC<BookingDetailsViewProps> = ({
 
                 {/* Summary */}
                 <div className="pt-4 border-t border-white/10 space-y-3">
+                  {hasAppliedDiscount && appliedDiscount && (
+                    <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-amber-200 font-bold">قبل الخصم</span>
+                        <span className="text-white font-semibold">
+                          {formatMoney(appliedDiscount.subtotalAmount, booking.currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-amber-200 font-bold">قيمة الخصم</span>
+                        <span className="text-rose-300 font-semibold">
+                          -{formatMoney(appliedDiscount.discountAmount, booking.currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-white/10">
+                        <span className="text-emerald-300 font-bold">بعد الخصم</span>
+                        <span className="text-emerald-300 font-bold">
+                          {formatMoney(booking.totalAmount, booking.currency)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-amber-100/90 flex flex-wrap items-center gap-2">
+                        <span className="font-bold">كود: {appliedDiscount.code}</span>
+                        {appliedDiscount.reason ? (
+                          <span className="text-gray-300">السبب: {appliedDiscount.reason}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-400">الإجمالي</span>
+                    <span className="text-sm font-medium text-gray-400">
+                      {hasAppliedDiscount ? 'الإجمالي بعد الخصم' : 'الإجمالي'}
+                    </span>
                     <span className="text-lg font-bold text-white">
                       {formatMoney(booking.totalAmount, booking.currency)}
                     </span>
@@ -513,7 +547,7 @@ const BookingDetailsView: React.FC<BookingDetailsViewProps> = ({
                     onClick={() => printReceipt({
                       booking,
                       type: 'addon',
-                      amount: (booking as any).addOnTotal || 0,
+                      amount: booking.addOnTotal || 0,
                       currency: booking.currency,
                       description: 'مبلغ الخدمات الإضافية',
                     })}
@@ -546,7 +580,7 @@ const BookingDetailsView: React.FC<BookingDetailsViewProps> = ({
                     paymentMethod: 'ZainCash',
                     zainCashTransactionId: transactionId,
                     status: BookingStatus.CONFIRMED,
-                  } as any);
+                  });
                 }}
               />
             </div>

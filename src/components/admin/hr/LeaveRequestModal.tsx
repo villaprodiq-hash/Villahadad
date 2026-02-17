@@ -4,7 +4,7 @@ import { X, Calendar, Check, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { leaveService } from '../../../services/db/services/LeaveService';
 import { toast } from 'sonner';
-import { useAuth } from '../../../providers/AuthProvider';
+import { useAuth } from '../../../hooks/useAuth';
 import { UserRole } from '../../../types';
 
 interface LeaveRequestModalProps {
@@ -91,7 +91,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ isOpen, onClose, 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="relative w-full max-w-md bg-[#111] border border-white/[0.06] shadow-2xl p-6 overflow-hidden"
+            className="relative w-full max-w-md bg-[#111] border border-white/6 shadow-2xl p-6 overflow-hidden"
             dir="rtl"
           >
             <div className="flex items-center justify-between mb-6">
@@ -117,7 +117,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ isOpen, onClose, 
                     value={selectedUserId}
                     onChange={e => setSelectedUserId(e.target.value)}
                     required
-                    className="w-full bg-[#0a0a0a] border border-white/[0.06] px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-[#ff6d00]/50 transition-all appearance-none"
+                    className="w-full bg-[#0a0a0a] border border-white/6 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-[#ff6d00]/50 transition-all appearance-none"
                   >
                     <option value="">— اختر موظف —</option>
                     {staffList.map(user => (
@@ -138,7 +138,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ isOpen, onClose, 
                     required
                     value={formData.startDate}
                     onChange={e => setFormData({...formData, startDate: e.target.value})}
-                    className="w-full bg-[#0a0a0a] border border-white/[0.06] px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-[#ff6d00]/50 transition-all"
+                    className="w-full bg-[#0a0a0a] border border-white/6 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-[#ff6d00]/50 transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -148,7 +148,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ isOpen, onClose, 
                     required
                     value={formData.endDate}
                     onChange={e => setFormData({...formData, endDate: e.target.value})}
-                    className="w-full bg-[#0a0a0a] border border-white/[0.06] px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-[#ff6d00]/50 transition-all"
+                    className="w-full bg-[#0a0a0a] border border-white/6 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-[#ff6d00]/50 transition-all"
                   />
                 </div>
               </div>
@@ -165,7 +165,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ isOpen, onClose, 
                         className={`py-2 text-xs font-bold transition-all ${
                           formData.type === type
                           ? 'bg-[#ff6d00] text-black'
-                          : 'bg-white/[0.03] text-zinc-500 hover:text-white border border-white/[0.06]'
+                          : 'bg-white/[0.03] text-zinc-500 hover:text-white border border-white/6'
                         }`}
                       >
                         {type === 'Sick' ? 'مرضية' :
@@ -183,7 +183,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ isOpen, onClose, 
                   rows={3}
                   value={formData.reason}
                   onChange={e => setFormData({...formData, reason: e.target.value})}
-                  className="w-full bg-[#0a0a0a] border border-white/[0.06] px-3 py-2.5 text-sm text-white outline-none focus:border-[#ff6d00]/50 transition-all resize-none"
+                  className="w-full bg-[#0a0a0a] border border-white/6 px-3 py-2.5 text-sm text-white outline-none focus:border-[#ff6d00]/50 transition-all resize-none"
                   placeholder="اكتب سبب الإجازة هنا..."
                 />
               </div>

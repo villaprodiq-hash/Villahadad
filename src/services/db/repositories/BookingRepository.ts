@@ -21,7 +21,7 @@ export const BookingRepository = {
 
       // RBAC ENFORCEMENT
       if (role === 'reception' || role === UserRole.RECEPTION) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0] ?? '';
         query = query.where('shootDate', '>=', today);
       }
 
@@ -30,15 +30,15 @@ export const BookingRepository = {
         .execute();
 
       return bookings.map(b => {
-        const details = safeJsonParse(b.details, undefined);
+        const details = safeJsonParse<Record<string, unknown> | undefined>(b.details, undefined);
         return {
           ...b,
           category: b.category as BookingCategory,
           status: b.status as BookingStatus,
           details,
           extras: [],
-          nasStatus: b.nasStatus as any,
-          statusHistory: safeJsonParse(b.statusHistory, []) as any,
+          nasStatus: (b.nasStatus ?? 'none') as Booking['nasStatus'],
+          statusHistory: safeJsonParse(b.statusHistory, []) as Booking['statusHistory'],
           paymentHistory: safeJsonParse(b.paymentHistory, undefined),
           invoiceHistory: safeJsonParse(b.invoiceHistory, undefined),
           isVIP: Boolean(details?.isVIP),
@@ -66,8 +66,8 @@ export const BookingRepository = {
         category: b.category as BookingCategory,
         status: b.status as BookingStatus,
         details: safeJsonParse(b.details, undefined),
-        nasStatus: b.nasStatus as any,
-        statusHistory: safeJsonParse(b.statusHistory, []) as any,
+        nasStatus: (b.nasStatus ?? 'none') as Booking['nasStatus'],
+        statusHistory: safeJsonParse(b.statusHistory, []) as Booking['statusHistory'],
         paymentHistory: safeJsonParse(b.paymentHistory, undefined),
         invoiceHistory: safeJsonParse(b.invoiceHistory, undefined),
       } as unknown as Booking;
@@ -229,14 +229,14 @@ export const BookingRepository = {
         .execute();
 
       return bookings.map(b => {
-        const details = safeJsonParse(b.details, undefined);
+        const details = safeJsonParse<Record<string, unknown> | undefined>(b.details, undefined);
         return {
           ...b,
           category: b.category as BookingCategory,
           status: b.status as BookingStatus,
           details,
-          nasStatus: b.nasStatus as any,
-          statusHistory: safeJsonParse(b.statusHistory, []) as any,
+          nasStatus: (b.nasStatus ?? 'none') as Booking['nasStatus'],
+          statusHistory: safeJsonParse(b.statusHistory, []) as Booking['statusHistory'],
           paymentHistory: safeJsonParse(b.paymentHistory, undefined),
           invoiceHistory: safeJsonParse(b.invoiceHistory, undefined),
           isVIP: Boolean(details?.isVIP),

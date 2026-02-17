@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  Users, CheckCircle2, AlertCircle, Activity, MapPin, LayoutGrid,
-  Lock, Search, ShieldAlert, Smartphone, UserCheck, Eye, DollarSign,
+  CheckCircle2, AlertCircle, Activity, MapPin, LayoutGrid,
+  Lock, ShieldAlert, UserCheck, Eye,
   Camera, Palette, Printer, Package, PhoneCall, Scissors
 } from 'lucide-react';
-import { User, Booking, BookingStatus, UserRole } from '../../../types';
+import { User, Booking, BookingStatus, UserRole, StatusHistoryItem } from '../../../types';
 import { toast } from 'sonner';
 import { presenceService } from '../../../services/db/services/PresenceService';
 
@@ -16,6 +16,19 @@ interface AdminGeniusDashboardProps {
   onUpdateBooking?: (id: string, updates: Partial<Booking>) => void;
 }
 
+interface AdminVaultStats {
+  totalInDrawer?: number;
+  deposits?: number;
+  finals?: number;
+  outstanding?: number;
+}
+
+interface AdminStatsSnapshot {
+  vault?: AdminVaultStats;
+}
+
+type BookingHistoryEntry = StatusHistoryItem & { date?: string };
+
 const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
   bookings,
   users,
@@ -23,7 +36,7 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
   onUpdateBooking
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [realStats, setRealStats] = useState<any>(null);
+  const [realStats, setRealStats] = useState<AdminStatsSnapshot | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
 
   // Real audit count: pending approvals + overdue deliveries
@@ -98,7 +111,7 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
   };
 
   // --- Today's date (shared) ---
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   // --- 4. FINANCIAL DATA (Computed from bookings — always accurate) ---
   const financialVault = useMemo(() => {
@@ -108,8 +121,8 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
     // Today's bookings for deposits
     const todayBookingsPayments = active.filter(b => {
       // Check if booking was created today (first status history entry)
-      const history = b.statusHistory as any;
-      const firstEntry = Array.isArray(history) ? history[0] : null;
+      const history: BookingHistoryEntry[] = Array.isArray(b.statusHistory) ? b.statusHistory as BookingHistoryEntry[] : [];
+      const firstEntry = history[0] ?? null;
       const created = firstEntry?.date || firstEntry?.timestamp || '';
       return String(created).startsWith(todayStr);
     });
@@ -131,11 +144,12 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
 
     // Use realStats if available (from payments table), fallback to bookings calculation
     if (realStats?.vault) {
+      const outstandingFromReal = Number(realStats.vault.outstanding ?? 0);
       return {
         totalInDrawer: realStats.vault.totalInDrawer || depositsToday,
         deposits: realStats.vault.deposits || depositsToday,
         finals: realStats.vault.finals || 0,
-        outstanding: realStats.vault.outstanding > 0 ? realStats.vault.outstanding : totalOutstanding,
+        outstanding: outstandingFromReal > 0 ? outstandingFromReal : totalOutstanding,
       };
     }
 
@@ -145,7 +159,7 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
       totalInDrawer: depositsToday,
       outstanding: totalOutstanding,
     };
-  }, [bookings, realStats, today]);
+  }, [bookings, realStats]);
 
   // --- 5. TODAY'S BOOKINGS FOR VENUE GRID ---
   const todayBookings = useMemo(() => {
@@ -299,7 +313,7 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
                                                         {user.avatar ? (
                                                             <img src={user.avatar} className="w-full h-full object-cover" alt={user.name} />
                                                         ) : (
-                                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-tr from-zinc-700 to-zinc-600 text-[9px] text-white font-bold">
+                                                            <div className="w-full h-full flex items-center justify-center bg-linear-to-tr from-zinc-700 to-zinc-600 text-[9px] text-white font-bold">
                                                                 {user.name?.[0]?.toUpperCase() || '?'}
                                                             </div>
                                                         )}
@@ -481,7 +495,7 @@ const AdminGeniusDashboard: React.FC<AdminGeniusDashboardProps> = ({
                 </div>
 
                 {/* Rush Card */}
-                <div className="bg-gradient-to-br from-rose-900/20 to-black border border-rose-500/20 rounded-2xl p-4">
+                <div className="bg-linear-to-br from-rose-900/20 to-black border border-rose-500/20 rounded-2xl p-4">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="text-rose-400 font-bold text-sm flex items-center gap-2">
                             <AlertCircle size={14} />

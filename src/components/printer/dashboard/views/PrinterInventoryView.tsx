@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
-import { 
-  Package, Search, Filter, Plus, Edit, Trash2, 
-  AlertTriangle, DollarSign
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Package, Search, Plus, Edit, Trash2, AlertTriangle, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface InventoryItem {
   id: string;
@@ -16,121 +14,191 @@ interface InventoryItem {
   description: string;
 }
 
+type InventoryCategory = InventoryItem['category'];
+
+const STORAGE_KEY = 'printer_inventory_items_v1';
+const DEFAULT_PRODUCT_IMAGE_PATH = 'images/products/services_list.jpg';
+
+const resolveProductImageSrc = (path?: string): string => {
+  if (!path) {
+    return `${import.meta.env.BASE_URL}${DEFAULT_PRODUCT_IMAGE_PATH}`;
+  }
+
+  // Keep external or data/blob URLs as-is.
+  if (/^(https?:|file:|data:|blob:)/i.test(path)) {
+    return path;
+  }
+
+  const cleanedPath = path.replace(/^\/+/, '');
+  return `${import.meta.env.BASE_URL}${cleanedPath}`;
+};
+
+const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
+  // --- Album Sets (Seetat) ---
+  {
+    id: 'set-1',
+    name: 'السيت الأول: قديفة مع زجاج',
+    category: 'set',
+    price: 85000,
+    stock: 5,
+    minStock: 2,
+    image: '/images/products/album_set_1.jpg',
+    description:
+      'بوكس كبير فخم + ألبوم كبير 30x40 + ألبوم مني + 2 منضديات + جدارية. (ألوان بيجي/أسود)'
+  },
+  {
+    id: 'set-2',
+    name: 'السيت الثاني: خشب مع الجام',
+    category: 'set',
+    price: 85000,
+    stock: 3,
+    minStock: 1,
+    image: '/images/products/album_set_2.jpg',
+    description:
+      'بوكس خشبي فخم + ألبوم كبير 30x40 (قديفة لون خشبي/زيتوني) + ألبوم مني + 2 منضديات + جدارية.'
+  },
+  {
+    id: 'set-3',
+    name: 'السيت الثالث: الاكريليك وقديفة',
+    category: 'set',
+    price: 85000,
+    stock: 4,
+    minStock: 1,
+    image: '/images/products/album_set_3.jpg',
+    description: 'بوكس كبير + ألبوم كبير 30x40 (بيجي/أسود/زيتوني) + ألبوم مني + 2 منضديات + جدارية.'
+  },
+  {
+    id: 'set-4',
+    name: 'السيت الرابع: قديفة فيونكة',
+    category: 'set',
+    price: 85000,
+    stock: 6,
+    minStock: 2,
+    image: '/images/products/album_set_1.jpg',
+    description: 'بوكس خشبي فخم + ألبوم كبير 30x40 (بيجي/أبيض/زيتوني) + ألبوم مني + 2 منضديات + جدارية.'
+  },
+  {
+    id: 'set-5',
+    name: 'السيت السادس: قديفة متعدد',
+    category: 'set',
+    price: 65000,
+    stock: 8,
+    minStock: 3,
+    image: '/images/products/album_set_3.jpg',
+    description: 'مقاس 50x25 (جلد/شاموا/قديفة). بوكس قديفة + ألبوم كبير + ألبوم مني + 2 منضديات + جدارية.'
+  },
+
+  // --- Single Album Packages ---
+  {
+    id: 'pkg-1',
+    name: 'البكج الأول: ألبوم قديفة 30x40',
+    category: 'album',
+    price: 48000,
+    stock: 10,
+    minStock: 4,
+    image: '/images/products/velvet_albums.jpg',
+    description: 'طباعة حرارية، حفر الأسماء مجاني. 16 صورة.'
+  },
+  {
+    id: 'pkg-2',
+    name: 'البكج الثاني: ألبوم كامل',
+    category: 'album',
+    price: 75000,
+    stock: 8,
+    minStock: 3,
+    image: '/images/products/velvet_albums.jpg',
+    description: 'ألبوم 30x40 + منضدية 6x8 + جدارية A4. عدد 24 صورة.'
+  },
+  {
+    id: 'pkg-3',
+    name: 'البكج الثالث: ألبوم 15x20',
+    category: 'album',
+    price: 29000,
+    stock: 15,
+    minStock: 5,
+    image: '/images/products/mini_albums.jpg',
+    description: 'ألبوم مني (8 ورقيات فوجي) + 8 صور ألبوم + 16 صورة مجموع.'
+  },
+
+  // --- Photo Packages ---
+  {
+    id: 'print-6x8',
+    name: 'طباعة صور 6x8 (بكج)',
+    category: 'package',
+    price: 75000,
+    stock: 50,
+    minStock: 10,
+    image: '/images/products/paper_photos.jpg',
+    description: '50 صورة بـ 75 ألف | 100 بـ 125 ألف | 200 بـ 200 ألف. ورق فوجي.'
+  },
+  {
+    id: 'instant-100',
+    name: 'صور فورية (100 صورة)',
+    category: 'package',
+    price: 69000,
+    stock: 20,
+    minStock: 5,
+    image: '/images/products/instant_photos.jpg',
+    description: 'نفس تصميم وقياس الصور الفورية. مع توصيل مجاني وهدية.'
+  },
+];
+
+const getInitialInventory = (): InventoryItem[] => {
+  if (typeof window === 'undefined') return DEFAULT_INVENTORY_ITEMS;
+
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (!saved) return DEFAULT_INVENTORY_ITEMS;
+
+    const parsed = JSON.parse(saved) as unknown;
+    if (!Array.isArray(parsed)) return DEFAULT_INVENTORY_ITEMS;
+
+    const normalized = parsed
+      .filter((item): item is InventoryItem => {
+        return (
+          typeof item === 'object' &&
+          item !== null &&
+          'id' in item &&
+          'name' in item &&
+          'category' in item &&
+          'price' in item &&
+          'stock' in item &&
+          'minStock' in item &&
+          'image' in item &&
+          'description' in item
+        );
+      })
+      .map(item => ({
+        ...item,
+        price: Number(item.price) || 0,
+        stock: Number(item.stock) || 0,
+        minStock: Number(item.minStock) || 0,
+        image: typeof item.image === 'string' && item.image.trim() ? item.image : DEFAULT_PRODUCT_IMAGE_PATH,
+      }));
+
+    return normalized.length > 0 ? normalized : DEFAULT_INVENTORY_ITEMS;
+  } catch (error) {
+    console.error('[PrinterInventoryView] Failed to restore local inventory:', error);
+    return DEFAULT_INVENTORY_ITEMS;
+  }
+};
+
 const PrinterInventoryView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<'all' | 'album' | 'frame' | 'set' | 'package'>('all');
-  
-  // State for Items
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
-    // --- Album Sets (Seetat) ---
-    { 
-      id: 'set-1', 
-      name: 'السيت الأول: قديفة مع زجاج', 
-      category: 'set', 
-      price: 85000, 
-      stock: 5, 
-      minStock: 2, 
-      image: '/images/products/album_set_1.jpg', 
-      description: 'بوكس كبير فخم + ألبوم كبير 30x40 + ألبوم مني + 2 منضديات + جدارية. (ألوان بيجي/أسود)'
-    },
-    { 
-      id: 'set-2', 
-      name: 'السيت الثاني: خشب مع الجام', 
-      category: 'set', 
-      price: 85000, 
-      stock: 3, 
-      minStock: 1, 
-      image: '/images/products/album_set_2.jpg', 
-      description: 'بوكس خشبي فخم + ألبوم كبير 30x40 (قديفة لون خشبي/زيتوني) + ألبوم مني + 2 منضديات + جدارية.'
-    },
-    { 
-      id: 'set-3', 
-      name: 'السيت الثالث: الاكريليك وقديفة', 
-      category: 'set', 
-      price: 85000, 
-      stock: 4, 
-      minStock: 1, 
-      image: '/images/products/album_set_3.jpg', 
-      description: 'بوكس كبير + ألبوم كبير 30x40 (بيجي/أسود/زيتوني) + ألبوم مني + 2 منضديات + جدارية.'
-    },
-    { 
-      id: 'set-4', 
-      name: 'السيت الرابع: قديفة فيونكة', 
-      category: 'set', 
-      price: 85000, 
-      stock: 6, 
-      minStock: 2, 
-      image: '/images/products/album_set_1.jpg', 
-      description: 'بوكس خشبي فخم + ألبوم كبير 30x40 (بيجي/أبيض/زيتوني) + ألبوم مني + 2 منضديات + جدارية.'
-    },
-    { 
-      id: 'set-5', 
-      name: 'السيت السادس: قديفة متعدد', 
-      category: 'set', 
-      price: 65000, 
-      stock: 8, 
-      minStock: 3, 
-      image: '/images/products/album_set_3.jpg', 
-      description: 'مقاس 50x25 (جلد/شاموا/قديفة). بوكس قديفة + ألبوم كبير + ألبوم مني + 2 منضديات + جدارية.'
-    },
-
-    // --- Single Album Packages ---
-    { 
-      id: 'pkg-1', 
-      name: 'البكج الأول: ألبوم قديفة 30x40', 
-      category: 'album', 
-      price: 48000, 
-      stock: 10, 
-      minStock: 4, 
-      image: '/images/products/velvet_albums.jpg', 
-      description: 'طباعة حرارية، حفر الأسماء مجاني. 16 صورة.'
-    },
-    { 
-      id: 'pkg-2', 
-      name: 'البكج الثاني: ألبوم كامل', 
-      category: 'album', 
-      price: 75000, 
-      stock: 8, 
-      minStock: 3, 
-      image: '/images/products/velvet_albums.jpg', 
-      description: 'ألبوم 30x40 + منضدية 6x8 + جدارية A4. عدد 24 صورة.'
-    },
-    { 
-      id: 'pkg-3', 
-      name: 'البكج الثالث: ألبوم 15x20', 
-      category: 'album', 
-      price: 29000, 
-      stock: 15, 
-      minStock: 5, 
-      image: '/images/products/mini_albums.jpg', 
-      description: 'ألبوم مني (8 ورقيات فوجي) + 8 صور ألبوم + 16 صورة مجموع.'
-    },
-
-    // --- Photo Packages ---
-    { 
-      id: 'print-6x8', 
-      name: 'طباعة صور 6x8 (بكج)', 
-      category: 'package', 
-      price: 75000, 
-      stock: 50, 
-      minStock: 10, 
-      image: '/images/products/paper_photos.jpg', 
-      description: '50 صورة بـ 75 ألف | 100 بـ 125 ألف | 200 بـ 200 ألف. ورق فوجي.'
-    },
-    { 
-      id: 'instant-100', 
-      name: 'صور فورية (100 صورة)', 
-      category: 'package', 
-      price: 69000, 
-      stock: 20, 
-      minStock: 5, 
-      image: '/images/products/instant_photos.jpg', 
-      description: 'نفس تصميم وقياس الصور الفورية. مع توصيل مجاني وهدية.'
-    },
-  ]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(getInitialInventory);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({ category: 'package', image: '/images/products/services_list.jpg' });
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({ category: 'package', image: DEFAULT_PRODUCT_IMAGE_PATH });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(inventoryItems));
+    } catch (error) {
+      console.error('[PrinterInventoryView] Failed to persist local inventory:', error);
+    }
+  }, [inventoryItems]);
 
   const filteredItems = inventoryItems.filter(item => {
     const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
@@ -138,24 +206,66 @@ const PrinterInventoryView: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
-  const handleAddItem = (e: React.FormEvent) => {
+  const resetForm = () => {
+    setEditingItemId(null);
+    setNewItem({ category: 'package', image: DEFAULT_PRODUCT_IMAGE_PATH });
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (item: InventoryItem) => {
+    setEditingItemId(item.id);
+    setNewItem(item);
+    setShowAddModal(true);
+  };
+
+  const closeModal = () => {
+    setShowAddModal(false);
+    resetForm();
+  };
+
+  const handleDeleteItem = (item: InventoryItem) => {
+    const confirmed = window.confirm(`هل أنت متأكد من حذف المنتج: ${item.name} ؟`);
+    if (!confirmed) return;
+
+    setInventoryItems(prev => prev.filter(entry => entry.id !== item.id));
+    toast.success('تم حذف المنتج من المخزن');
+  };
+
+  const handleSubmitItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.name || !newItem.price) return;
-    
+    if (!newItem.name?.trim()) {
+      toast.error('يرجى إدخال اسم المنتج');
+      return;
+    }
+
+    const price = Math.max(0, Number(newItem.price) || 0);
+    const stock = Math.max(0, Number(newItem.stock) || 0);
+    const minStock = Math.max(0, Number(newItem.minStock) || 0);
+
     const item: InventoryItem = {
-      id: `new-${Date.now()}`,
-      name: newItem.name,
-      category: newItem.category as any || 'package',
-      price: Number(newItem.price),
-      stock: Number(newItem.stock) || 0,
-      minStock: Number(newItem.minStock) || 5,
-      image: newItem.image || '/images/products/services_list.jpg',
+      id: editingItemId || `new-${Date.now()}`,
+      name: newItem.name.trim(),
+      category: (newItem.category as InventoryCategory) || 'package',
+      price,
+      stock,
+      minStock,
+      image: newItem.image || DEFAULT_PRODUCT_IMAGE_PATH,
       description: newItem.description || '',
     };
 
-    setInventoryItems([item, ...inventoryItems]);
-    setShowAddModal(false);
-    setNewItem({ category: 'package', image: '/images/products/services_list.jpg' });
+    if (editingItemId) {
+      setInventoryItems(prev => prev.map(entry => (entry.id === editingItemId ? item : entry)));
+      toast.success('تم تحديث المنتج بنجاح');
+    } else {
+      setInventoryItems(prev => [item, ...prev]);
+      toast.success('تمت إضافة المنتج للمخزن');
+    }
+
+    closeModal();
   };
 
   return (
@@ -217,7 +327,7 @@ const PrinterInventoryView: React.FC = () => {
         </div>
 
         <button 
-          onClick={() => setShowAddModal(true)}
+          onClick={openAddModal}
           className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20"
         >
            <Plus size={16} />
@@ -231,7 +341,7 @@ const PrinterInventoryView: React.FC = () => {
           <AnimatePresence>
             {/* Add New Quick Card */}
             <button 
-              onClick={() => setShowAddModal(true)}
+              onClick={openAddModal}
               className="border-2 border-dashed border-white/5 hover:border-emerald-500/30 rounded-2xl flex flex-col items-center justify-center gap-3 text-gray-500 hover:text-emerald-400 transition-all min-h-[300px] group order-first"
             >
                <div className="w-12 h-12 rounded-full bg-white/5 group-hover:bg-emerald-500/10 flex items-center justify-center transition-colors">
@@ -259,20 +369,28 @@ const PrinterInventoryView: React.FC = () => {
                 </div>
 
                 {/* Aspect Ratio Image Placeholder */}
-                <div className="aspect-[4/3] bg-gradient-to-br from-gray-800 to-black rounded-xl border border-white/5 overflow-hidden relative group-hover:scale-[1.02] transition-transform duration-500">
+                <div className="aspect-[4/3] bg-linear-to-br from-gray-800 to-black rounded-xl border border-white/5 overflow-hidden relative group-hover:scale-[1.02] transition-transform duration-500">
                    <img 
-                      src={item.image} 
+                      src={resolveProductImageSrc(item.image)} 
                       alt={item.name}
                       className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
                       onError={(e) => {
-                         (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x400?text=No+Image';
+                         (e.currentTarget as HTMLImageElement).src = resolveProductImageSrc(DEFAULT_PRODUCT_IMAGE_PATH);
                       }}
                    />
                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <button className="p-2 bg-white/10 hover:bg-emerald-500 text-white rounded-full backdrop-blur-sm transition-colors" title="تعديل">
+                      <button
+                        onClick={() => openEditModal(item)}
+                        className="p-2 bg-white/10 hover:bg-emerald-500 text-white rounded-full backdrop-blur-sm transition-colors"
+                        title="تعديل"
+                      >
                          <Edit size={16} />
                       </button>
-                      <button className="p-2 bg-white/10 hover:bg-rose-500 text-white rounded-full backdrop-blur-sm transition-colors" title="حذف">
+                      <button
+                        onClick={() => handleDeleteItem(item)}
+                        className="p-2 bg-white/10 hover:bg-rose-500 text-white rounded-full backdrop-blur-sm transition-colors"
+                        title="حذف"
+                      >
                          <Trash2 size={16} />
                       </button>
                    </div>
@@ -304,7 +422,7 @@ const PrinterInventoryView: React.FC = () => {
       {/* Add Product Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -312,11 +430,13 @@ const PrinterInventoryView: React.FC = () => {
               className="bg-[#1a1f1d] border border-white/10 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                <h2 className="text-lg font-bold text-white">إضافة منتج جديد للمخزن</h2>
-                <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white">✕</button>
+                <h2 className="text-lg font-bold text-white">
+                  {editingItemId ? 'تعديل منتج المخزن' : 'إضافة منتج جديد للمخزن'}
+                </h2>
+                <button onClick={closeModal} className="text-gray-400 hover:text-white">✕</button>
               </div>
               
-              <form onSubmit={handleAddItem} className="p-6 space-y-4">
+              <form onSubmit={handleSubmitItem} className="p-6 space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs text-gray-400">اسم المنتج / البكج</label>
                   <input 
@@ -333,7 +453,7 @@ const PrinterInventoryView: React.FC = () => {
                     <label className="text-xs text-gray-400">التصنيف</label>
                     <select 
                       value={newItem.category || 'package'}
-                      onChange={e => setNewItem({...newItem, category: e.target.value as any})}
+                      onChange={e => setNewItem({...newItem, category: e.target.value as InventoryCategory})}
                       className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-emerald-500/50 outline-none"
                     >
                       <option value="set">سيت ألبوم</option>
@@ -391,7 +511,7 @@ const PrinterInventoryView: React.FC = () => {
                 <div className="pt-4 flex gap-3">
                   <button 
                     type="button" 
-                    onClick={() => setShowAddModal(false)}
+                    onClick={closeModal}
                     className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-colors"
                   >
                     إلغاء
@@ -400,7 +520,7 @@ const PrinterInventoryView: React.FC = () => {
                     type="submit"
                     className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shadow-lg shadow-emerald-600/20"
                   >
-                    إضافة للمخزن
+                    {editingItemId ? 'حفظ التعديلات' : 'إضافة للمخزن'}
                   </button>
                 </div>
               </form>

@@ -12,7 +12,8 @@
 import React, { useCallback, useState } from 'react';
 import { useSessionLifecycle } from '../../hooks/useSessionLifecycle';
 import { SessionImage } from '../../hooks/useSessionLifecycle';
-import { Check, X, Image as ImageIcon, Upload, Filter, Grid, CheckSquare } from 'lucide-react';
+import { Check, X, Image as ImageIcon, Upload, Grid, CheckSquare } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface SelectionDashboardProps {
   bookingId: string;
@@ -82,6 +83,44 @@ export function SelectionDashboard({ bookingId, clientName, onComplete }: Select
   const selectionProgress = totalCount > 0 
     ? Math.round((selectedCount / totalCount) * 100) 
     : 0;
+
+  const handleCompleteSelection = useCallback(async () => {
+    if (selectedCount === 0) return;
+
+    const selectedFileNames = images
+      .filter(img => img.isSelected)
+      .map(img => img.fileName)
+      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
+
+    if (!selectedFileNames.length) {
+      toast.error('لا توجد صور مختارة');
+      return;
+    }
+
+    const sessionPath =
+      typeof session?.folderPath === 'string' && session.folderPath.trim().length > 0
+        ? session.folderPath
+        : '';
+
+    const copyToSelected = window.electronAPI?.sessionLifecycle?.copyToSelected;
+    if (!sessionPath || !copyToSelected) {
+      toast.error('تعذر تحديد مسار الجلسة لنسخ الصور المختارة');
+      return;
+    }
+
+    const copyResult = await copyToSelected(sessionPath, selectedFileNames);
+    const copied = Number(copyResult?.copied || 0);
+    const failed = Number(copyResult?.failed || 0);
+    const expected = selectedFileNames.length;
+
+    if (copied < expected || failed > 0) {
+      toast.error(`تم نسخ ${copied}/${expected} فقط. أكمل النسخ قبل الإرسال للمحرر.`);
+      return;
+    }
+
+    toast.success(`تم نسخ ${copied} صورة إلى مجلد 02_SELECTED`);
+    onComplete?.();
+  }, [images, onComplete, selectedCount, session?.folderPath]);
 
   return (
     <div className="w-full h-full flex flex-col bg-[#21242b]">
@@ -227,7 +266,9 @@ export function SelectionDashboard({ bookingId, clientName, onComplete }: Select
               {selectedCount} صورة مختارة من {totalCount}
             </span>
             <button
-              onClick={onComplete}
+              onClick={() => {
+                void handleCompleteSelection();
+              }}
               disabled={selectedCount === 0}
               className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
             >
@@ -292,10 +333,10 @@ function ImageCard({ image, onToggle }: ImageCardProps) {
           </div>
         )}
         <img
-          src={image.cloudUrl}
+          src={image.cloudUrl ?? undefined}
           alt={image.fileName}
           className={`
-            w-full h-full object-cover transition-opacity duration-300
+            w-full h-full object-contain bg-black/30 transition-opacity duration-300
             ${isLoaded ? 'opacity-100' : 'opacity-0'}
           `}
           onLoad={() => setIsLoaded(true)}
@@ -321,7 +362,7 @@ function ImageCard({ image, onToggle }: ImageCardProps) {
       </div>
 
       {/* Filename */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+      <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-2">
         <p className="text-xs text-white truncate">{image.fileName}</p>
       </div>
 

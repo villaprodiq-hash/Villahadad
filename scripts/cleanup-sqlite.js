@@ -15,10 +15,11 @@
  *   2. Local: ~/Library/Application Support/VillaHadad/villahaddad_desktop.db
  */
 
-const Database = require('better-sqlite3');
-const path = require('path');
-const os = require('os');
-const fs = require('fs');
+import Database from 'better-sqlite3';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
+import readline from 'node:readline';
 
 // Configuration
 const TEST_PATTERNS = {
@@ -266,7 +267,7 @@ Test Data Patterns:
     console.log('✅ Connected to database\n');
 
     // Preview
-    const { bookings, totalRecords } = previewDeletions(db);
+    const { bookings } = previewDeletions(db);
 
     if (bookings.length === 0) {
       console.log('\n✅ Nothing to clean up!');
@@ -277,7 +278,6 @@ Test Data Patterns:
     // Execute if not dry run
     if (!isDryRun) {
       // Confirm
-      const readline = require('readline');
       const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -293,7 +293,7 @@ Test Data Patterns:
         }
 
         // Execute
-        const deleted = executeCleanup(db);
+        const deleted = executeCleanup(db, bookings);
 
         // Verify
         verifyCleanup(db);

@@ -1,10 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Search, Grid3x3, List, FolderOpen, Image as ImageIcon, RefreshCw } from 'lucide-react';
-import { AlbumImage } from '../PhotoEditorDashboard';
+import type { AlbumImage } from '../types';
 
 interface GalleryViewProps {
   onOpenImage: (image: AlbumImage) => void;
 }
+
+interface DirectoryImageEntry {
+  name: string;
+  path: string;
+}
+
+const FILTER_OPTIONS: Array<{ value: 'all' | 'pending' | 'completed'; label: string }> = [
+  { value: 'all', label: 'الكل' },
+  { value: 'pending', label: 'معلق' },
+  { value: 'completed', label: 'مكتمل' },
+];
 
 const GalleryView: React.FC<GalleryViewProps> = ({ onOpenImage }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,13 +30,21 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onOpenImage }) => {
     if (!folderPath) return;
     setLoading(true);
     try {
-      const api = (window as any).electronAPI;
+      const api = window.electronAPI;
       if (api?.fileSystem?.listDirectory) {
         const files = await api.fileSystem.listDirectory(folderPath);
         if (files && Array.isArray(files)) {
           const imageFiles = files
-            .filter((f: any) => /\.(jpg|jpeg|png|raw|cr2|arw|heic|webp|tif|tiff)$/i.test(f.name))
-            .map((f: any, index: number) => ({
+            .filter((entry): entry is DirectoryImageEntry => (
+              typeof entry === 'object' &&
+              entry !== null &&
+              'name' in entry &&
+              'path' in entry &&
+              typeof (entry as { name: unknown }).name === 'string' &&
+              typeof (entry as { path: unknown }).path === 'string'
+            ))
+            .filter((f: DirectoryImageEntry) => /\.(jpg|jpeg|png|raw|cr2|arw|heic|webp|tif|tiff)$/i.test(f.name))
+            .map((f: DirectoryImageEntry, index: number) => ({
               id: `nas-${index}`,
               filename: f.name,
               path: f.path,
@@ -66,15 +85,15 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onOpenImage }) => {
         </div>
 
         <div className="flex gap-2">
-          {['all', 'pending', 'completed'].map((f) => (
+          {FILTER_OPTIONS.map((f) => (
             <button
-              key={f}
-              onClick={() => setFilterStatus(f as any)}
+              key={f.value}
+              onClick={() => setFilterStatus(f.value)}
               className={`px-3 py-1.5 rounded text-xs font-bold ${
-                filterStatus === f ? 'bg-blue-600 text-white' : 'bg-[#2d2d2d] text-gray-400'
+                filterStatus === f.value ? 'bg-blue-600 text-white' : 'bg-[#2d2d2d] text-gray-400'
               }`}
             >
-              {f === 'all' ? 'الكل' : f === 'pending' ? 'معلق' : 'مكتمل'}
+              {f.label}
             </button>
           ))}
         </div>
@@ -123,7 +142,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onOpenImage }) => {
             <ImageIcon size={48} className="text-gray-700 mb-4" />
             <p className="text-gray-400 text-lg font-bold mb-2">لا توجد صور محملة</p>
             <p className="text-gray-600 text-sm max-w-md">
-              أدخل مسار مجلد NAS أعلاه واضغط "تحميل" لعرض الصور،
+              أدخل مسار مجلد NAS أعلاه واضغط &quot;تحميل&quot; لعرض الصور،
               أو افتح مشروع من قائمة المشاريع
             </p>
           </div>

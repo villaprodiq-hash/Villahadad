@@ -25,8 +25,14 @@ export class AttendanceService {
   private readonly LATE_THRESHOLD_HOUR = 10;
   private readonly LATE_THRESHOLD_MINUTE = 15;
 
+  private isValidUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    );
+  }
+
   private getTodayDateString(): string {
-     return new Date().toISOString().split('T')[0];
+     return new Date().toISOString().slice(0, 10);
   }
 
   /**
@@ -81,8 +87,17 @@ export class AttendanceService {
       await db
           .insertInto('daily_attendance')
           .values({
-              ...newRecord,
+              id: newRecord.id,
+              userId: newRecord.userId,
+              userName: newRecord.userName,
+              date: newRecord.date,
+              checkIn: newRecord.checkIn ?? null,
+              checkOut: newRecord.checkOut ?? null,
+              status: newRecord.status,
+              totalHours: newRecord.totalHours,
               isFrozen: newRecord.isFrozen ? 1 : 0,
+              createdAt: newRecord.createdAt,
+              updatedAt: newRecord.updatedAt,
           })
           .execute();
 
@@ -167,6 +182,15 @@ export class AttendanceService {
   // --- Private Helpers ---
 
   private async syncToCloud(record: DailyAttendance) {
+      // Attendance table in Supabase expects UUID user_id.
+      // Local role IDs look like "u_..." and should stay local-only.
+      if (!this.isValidUuid(record.userId)) {
+          console.warn(
+              `⚠️ Attendance cloud sync skipped for non-UUID userId: ${record.userId}`
+          );
+          return;
+      }
+
       const dbObject = {
           id: record.id,
           user_id: record.userId,
@@ -189,7 +213,12 @@ export class AttendanceService {
       }
   }
 
-  private async syncUpdateToCloud(id: string, updates: any) {
+  private async syncUpdateToCloud(id: string, updates: Record<string, unknown>) {
+      if (!this.isValidUuid(id)) {
+          console.warn(`⚠️ Attendance update sync skipped for non-UUID id: ${id}`);
+          return;
+      }
+
       if (navigator.onLine) {
           const { error } = await supabase.from('daily_attendance').update(updates).eq('id', id);
           if (error) await SyncQueueService.enqueue('update', 'attendance', { id, ...updates });

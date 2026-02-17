@@ -2,7 +2,7 @@ import React from 'react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 interface SparklineProps {
-    data: any[];
+    data: Array<Record<string, number | string>>;
     dataKey: string;
     color: string;
     height?: number;

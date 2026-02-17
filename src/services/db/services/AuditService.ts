@@ -12,7 +12,7 @@ export const auditService = {
    * @param action - The action name (e.g., "DELETE_BOOKING")
    * @param details - JSON object or string details
    */
-  log: async (userName: string, action: string, details: any) => {
+  log: async (userName: string, action: string, details: unknown) => {
     await activityLogService.logAction(
       action,
       'AUDIT',

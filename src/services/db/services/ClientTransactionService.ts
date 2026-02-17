@@ -4,9 +4,7 @@ import {
   CreateClientTransactionDTO, 
   ReverseClientTransactionDTO,
   ClientBalance,
-  ClientTransactionSummary,
-  ClientTransactionType,
-  ClientTransactionStatus
+  ClientTransactionSummary
 } from '../../../types/client-transaction.types';
 import { Currency } from '../../../types/shared.types';
 import { activityLogService } from './ActivityLogService';

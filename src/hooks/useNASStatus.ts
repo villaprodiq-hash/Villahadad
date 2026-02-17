@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { StorageAPI } from '../types/electron';
 
 export interface NASStatus {
   connected: boolean;
@@ -33,6 +34,14 @@ export interface NASStatus {
   };
 }
 
+type NASCheckResult = Awaited<ReturnType<StorageAPI['checkNAS']>>;
+
+const isNASResultObject = (
+  value: NASCheckResult
+): value is Exclude<NASCheckResult, boolean> => {
+  return typeof value === 'object' && value !== null;
+};
+
 const initialStatus: NASStatus = {
   connected: false,
   basePath: null,
@@ -57,34 +66,32 @@ export function useNASStatus(refreshInterval = 30000) {
 
   const checkStatus = useCallback(async () => {
     try {
-      // @ts-ignore - electronAPI is exposed via preload
       if (!window.electronAPI?.storage?.checkNAS) {
         setStatus(prev => ({ ...prev, loading: false, error: 'API not available' }));
         return;
       }
 
-      // @ts-ignore
       const result = await window.electronAPI.storage.checkNAS();
+      const nasResult = isNASResultObject(result) ? result : undefined;
       
-      // @ts-ignore
       const cacheStatus = await window.electronAPI.storage.getCacheStatus?.();
       
       const newStatus: NASStatus = {
-        connected: result.connected ?? false,
-        basePath: result.basePath ?? null,
-        photoFolderPath: result.photoFolderPath ?? null,
-        appFolderPath: result.appFolderPath ?? null,
-        isLocalCache: result.isLocalCache ?? true,
-        localCachePath: result.localCachePath ?? '',
-        smbUrl: result.smbUrl ?? '',
-        photoFolder: result.photoFolder ?? 'Gallery',
-        appSubfolder: result.appSubfolder ?? 'VillaApp',
-        platform: result.platform ?? 'darwin',
-        timestamp: result.timestamp ?? new Date().toISOString(),
+        connected: nasResult?.connected ?? false,
+        basePath: nasResult?.basePath ?? null,
+        photoFolderPath: nasResult?.photoFolderPath ?? null,
+        appFolderPath: nasResult?.appFolderPath ?? null,
+        isLocalCache: nasResult?.isLocalCache ?? true,
+        localCachePath: nasResult?.localCachePath ?? '',
+        smbUrl: nasResult?.smbUrl ?? '',
+        photoFolder: nasResult?.photoFolder ?? 'Gallery',
+        appSubfolder: nasResult?.appSubfolder ?? 'VillaApp',
+        platform: nasResult?.platform ?? 'darwin',
+        timestamp: nasResult?.timestamp ?? new Date().toISOString(),
         loading: false,
         error: null,
-        photoFolderStatus: result.photoFolderStatus,
-        appFolderStatus: result.appFolderStatus,
+        photoFolderStatus: nasResult?.photoFolderStatus,
+        appFolderStatus: nasResult?.appFolderStatus,
       };
 
       setStatus(newStatus);
@@ -142,7 +149,6 @@ export function useNASStatus(refreshInterval = 30000) {
   // Open NAS folder in Finder
   const openFolder = useCallback(async (subPath = '') => {
     try {
-      // @ts-ignore
       return await window.electronAPI?.nasConfig?.openFolder?.(subPath);
     } catch (error) {
       console.error('[useNASStatus] openFolder error:', error);
@@ -153,7 +159,6 @@ export function useNASStatus(refreshInterval = 30000) {
   // Open App folder specifically
   const openAppFolder = useCallback(async () => {
     try {
-      // @ts-ignore
       return await window.electronAPI?.nasConfig?.openAppFolder?.();
     } catch (error) {
       console.error('[useNASStatus] openAppFolder error:', error);
@@ -164,7 +169,6 @@ export function useNASStatus(refreshInterval = 30000) {
   // 🔌 NEW: Mount/Connect to NAS
   const mountNas = useCallback(async () => {
     try {
-      // @ts-ignore
       const result = await window.electronAPI?.nasConfig?.mount?.();
       // Refresh status after mounting attempt
       await checkStatus();
@@ -178,7 +182,6 @@ export function useNASStatus(refreshInterval = 30000) {
   // 🔍 NEW: Auto-detect NAS
   const detectNas = useCallback(async () => {
     try {
-      // @ts-ignore
       const result = await window.electronAPI?.nasConfig?.detect?.();
       // Refresh status if NAS was found
       if (result?.found) {

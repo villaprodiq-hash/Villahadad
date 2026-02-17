@@ -3,8 +3,6 @@ import { toast } from 'sonner';
 import { Booking, Expense } from '../../../types';
 import { electronBackend } from '../../../services/mockBackend';
 import ProductTradingDashboard from './widgets/trading/ProductTradingDashboard';
-import { Printer } from 'lucide-react'; // ✅ Import Printer
-import { printFinancialReport } from '../../../utils/printFinancialReport'; // ✅ Import Utility
 
 interface FinancialViewProps {
   bookings: Booking[];
@@ -14,7 +12,6 @@ interface FinancialViewProps {
 const ManagerFinancialOverview: React.FC<FinancialViewProps> = ({ bookings, onUpdateBooking }) => {
   // Mock Expenses State (Initial fallback, will be updated by loadData)
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [isDataLoading, setIsDataLoading] = useState(true);
 
   const loadExpenses = async () => {
     try {
@@ -22,8 +19,6 @@ const ManagerFinancialOverview: React.FC<FinancialViewProps> = ({ bookings, onUp
       setExpenses(data);
     } catch (e) {
       console.error(e);
-    } finally {
-      setIsDataLoading(false);
     }
   };
 

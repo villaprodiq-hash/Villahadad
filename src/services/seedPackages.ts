@@ -26,7 +26,7 @@ export async function seedPackages() {
 
     // Seed all packages from PACKAGES_DATA
     let seededCount = 0;
-    for (const pkg of PACKAGES_DATA as any[]) {
+    for (const pkg of PACKAGES_DATA) {
       await PackageService.createPackage({
         category: pkg.categoryId,
         name: pkg.title,
@@ -35,7 +35,7 @@ export async function seedPackages() {
         currency: pkg.currency || 'IQD',
         isCustom: false,
         isActive: true,
-        isBestseller: pkg.isBestseller || false,
+        isBestseller: false,
         features: pkg.features || [],
       });
       seededCount++;

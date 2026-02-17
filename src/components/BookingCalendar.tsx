@@ -142,7 +142,7 @@ const BookingCalendar: React.FC<BookingCalendarProps> = ({
         {/* Selected Date Header */}
         <div className="relative overflow-hidden rounded-2xl bg-[#18181b] border border-white/5 p-6">
           {/* Decorative Blur Background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[#C94557]/20 to-transparent blur-3xl opacity-30"></div>
+          <div className="absolute inset-0 bg-linear-to-br from-[#C94557]/20 to-transparent blur-3xl opacity-30"></div>
           
           <div className="relative z-10">
             <p className="text-gray-400 text-sm mb-1">التاريخ المحدد</p>

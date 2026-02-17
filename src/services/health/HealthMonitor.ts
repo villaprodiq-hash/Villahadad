@@ -108,15 +108,16 @@ class HealthMonitor {
         checks.push(result.value);
         this.checks.set(result.value.name, result.value);
       } else {
+        const failedName = names[index] ?? `check_${index + 1}`;
         const failedCheck: HealthCheck = {
-          name: names[index],
+          name: failedName,
           status: 'unhealthy',
           responseTime: 0,
           lastChecked: new Date(),
           error: result.reason?.message || 'Check failed'
         };
         checks.push(failedCheck);
-        this.checks.set(names[index], failedCheck);
+        this.checks.set(failedName, failedCheck);
       }
     });
 

@@ -43,13 +43,13 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ tasks, onToggleTask, newTaskT
             className="w-full p-3 rounded-lg bg-[#2d2d2d] hover:bg-[#3d3d3d] border border-transparent hover:border-blue-600/50 transition-all text-right"
           >
             <div className="flex items-start gap-2">
-              <div className="w-4 h-4 rounded border-2 border-gray-500 mt-0.5 flex-shrink-0" />
+              <div className="w-4 h-4 rounded border-2 border-gray-500 mt-0.5 shrink-0" />
               
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-white text-xs font-bold truncate">{task.title}</p>
                   {task.priority === 'high' && (
-                    <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
+                    <AlertTriangle size={12} className="text-amber-500 shrink-0" />
                   )}
                 </div>
                 
@@ -81,7 +81,7 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ tasks, onToggleTask, newTaskT
                 className="w-full p-3 rounded-lg bg-[#1e1e1e] opacity-60 hover:opacity-100 transition-all text-right"
               >
                 <div className="flex items-start gap-2">
-                  <div className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center mt-0.5 flex-shrink-0">
+                  <div className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center mt-0.5 shrink-0">
                     <CheckSquare size={12} className="text-white" />
                   </div>
                   

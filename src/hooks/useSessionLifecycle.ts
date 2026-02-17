@@ -42,13 +42,6 @@ export function useSessionLifecycle({ bookingId, clientName, autoInitialize = tr
     setSelectedCount(selected);
   }, []);
 
-  // Initialize session on mount
-  useEffect(() => {
-    if (autoInitialize) {
-      void initializeSession();
-    }
-  }, [bookingId, clientName, autoInitialize]);
-
   // Load images from database using Supabase
   const loadImages = useCallback(async () => {
     try {
@@ -150,7 +143,7 @@ export function useSessionLifecycle({ bookingId, clientName, autoInitialize = tr
         
         // Create NAS folder via Electron
         const electronAPI = getElectronAPI();
-        let folderPath = null;
+        let folderPath: string | null = null;
         
         if (electronAPI?.sessionLifecycle?.createSessionDirectory) {
           const result = await electronAPI.sessionLifecycle.createSessionDirectory(
@@ -184,7 +177,14 @@ export function useSessionLifecycle({ bookingId, clientName, autoInitialize = tr
     } catch (error) {
       console.error('Failed to initialize session:', error);
     }
-  }, [bookingId, clientName]);
+  }, [bookingId, clientName, updateCounts]);
+
+  // Initialize session on mount
+  useEffect(() => {
+    if (autoInitialize) {
+      void initializeSession();
+    }
+  }, [autoInitialize, initializeSession]);
 
   // Upload files (Drag & Drop)
   const uploadFiles = useCallback(async (files: FileList | File[]) => {

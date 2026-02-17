@@ -1,13 +1,13 @@
 import React from 'react';
 import { 
-  Trophy, Target, TrendingUp, Award, Crown,
+  Target, Award, Crown,
   Users, Briefcase, Camera, Video, Printer, Shield, Palette,
   CheckCircle2, BarChart3
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuth } from '../../../providers/AuthProvider';
-import { useData } from '../../../providers/DataProvider';
-import { UserRole, RoleLabels } from '../../../types';
+import { useAuth } from '../../../hooks/useAuth';
+import { useData } from '../../../hooks/useData';
+import { UserRole, RoleLabels, BookingStatus } from '../../../types';
 
 const getRoleIcon = (role: UserRole) => {
   switch (role) {
@@ -59,8 +59,8 @@ const AdminPerformanceView = () => {
             b.details?.editor === user.name
         );
 
-        const completedBookings = bookings.filter(b => 
-            b.status === 'delivered' || b.status === 'completed'
+        const completedBookings = bookings.filter(
+            b => b.status === BookingStatus.DELIVERED || b.status === BookingStatus.ARCHIVED
         );
 
         // Calculate a performance score based on role
@@ -84,11 +84,13 @@ const AdminPerformanceView = () => {
     // Summary stats
     const totalStaff = staffPerformance.length;
     const totalBookings = bookings.length;
-    const completedBookings = bookings.filter(b => 
-        b.status === 'delivered' || b.status === 'completed'
+    const completedBookings = bookings.filter(
+        b => b.status === BookingStatus.DELIVERED || b.status === BookingStatus.ARCHIVED
     ).length;
     const activeBookings = bookings.filter(b => 
-        b.status !== 'cancelled' && !b.deletedAt
+        b.status !== BookingStatus.DELIVERED &&
+        b.status !== BookingStatus.ARCHIVED &&
+        !b.deletedAt
     ).length;
 
     return (
@@ -98,7 +100,7 @@ const AdminPerformanceView = () => {
             <div className="px-6 pt-6 pb-4 space-y-4 shrink-0">
                 <div className="flex items-center justify-between">
                     <h3 className="text-xl font-black text-white flex items-center gap-3">
-                        <div className="p-2 bg-gradient-to-br from-amber-500/20 to-orange-600/20 rounded-xl border border-amber-500/20">
+                        <div className="p-2 bg-linear-to-br from-amber-500/20 to-orange-600/20 rounded-xl border border-amber-500/20">
                             <BarChart3 className="text-amber-500" size={20} />
                         </div>
                         مؤشرات أداء الفريق
@@ -107,19 +109,19 @@ const AdminPerformanceView = () => {
 
                 {/* KPI Summary Bar */}
                 <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-xl p-3 text-center">
+                    <div className="bg-linear-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-xl p-3 text-center">
                         <div className="text-2xl font-black text-blue-400">{totalStaff}</div>
                         <div className="text-[10px] font-bold text-zinc-400 mt-0.5">أعضاء الفريق</div>
                     </div>
-                    <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 rounded-xl p-3 text-center">
+                    <div className="bg-linear-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 rounded-xl p-3 text-center">
                         <div className="text-2xl font-black text-emerald-400">{totalBookings}</div>
                         <div className="text-[10px] font-bold text-zinc-400 mt-0.5">إجمالي الحجوزات</div>
                     </div>
-                    <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-xl p-3 text-center">
+                    <div className="bg-linear-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-xl p-3 text-center">
                         <div className="text-2xl font-black text-amber-400">{activeBookings}</div>
                         <div className="text-[10px] font-bold text-zinc-400 mt-0.5">حجوزات نشطة</div>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-xl p-3 text-center">
+                    <div className="bg-linear-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-xl p-3 text-center">
                         <div className="text-2xl font-black text-purple-400">{completedBookings}</div>
                         <div className="text-[10px] font-bold text-zinc-400 mt-0.5">مكتملة</div>
                     </div>
@@ -135,10 +137,10 @@ const AdminPerformanceView = () => {
                             initial={{ y: 20, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: index * 0.06 }}
-                            className={`relative group rounded-2xl p-5 border bg-gradient-to-br ${getRoleGradient(staff.role as UserRole)} backdrop-blur-xl shadow-lg overflow-hidden hover:-translate-y-1 transition-transform duration-300`}
+                            className={`relative group rounded-2xl p-5 border bg-linear-to-br ${getRoleGradient(staff.role as UserRole)} backdrop-blur-xl shadow-lg overflow-hidden hover:-translate-y-1 transition-transform duration-300`}
                         >
                             {/* Shiny hover effect */}
-                            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                            <div className="absolute inset-0 bg-linear-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
                             {/* Header: Avatar + Name */}
                             <div className="flex items-start gap-3 mb-4 relative z-10">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Check, XCircle, MessageSquare, Info, Calendar, Camera, Hash, Tag } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Check, XCircle, MessageSquare, Calendar, Camera, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
@@ -37,7 +37,7 @@ const ManagerLightbox: React.FC<ManagerLightboxProps> = ({
   onPrev,
   onApprove,
   onReject,
-  onAddNote,
+  onAddNote: _onAddNote,
   availableTags,
   onToggleTag
 }) => {
@@ -65,7 +65,7 @@ const ManagerLightbox: React.FC<ManagerLightboxProps> = ({
     if (newScale === 1) setPosition({ x: 0, y: 0 });
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
+  const handleDoubleClick = (_e: React.MouseEvent) => {
      if (scale > 1) {
         setScale(1);
         setPosition({ x: 0, y: 0 });
@@ -116,7 +116,7 @@ const ManagerLightbox: React.FC<ManagerLightboxProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, onNext, onPrev]);
+  }, [isOpen, onClose, onNext, onPrev, scale]);
 
   if (!isOpen || !image) return null;
 
@@ -126,7 +126,7 @@ const ManagerLightbox: React.FC<ManagerLightboxProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-black/95 flex flex-col md:flex-row overflow-hidden"
+        className="fixed inset-0 z-9999 bg-black/95 flex flex-col md:flex-row overflow-hidden"
       >
         {/* Main Image Area */}
         <div className="flex-1 relative flex items-center justify-center p-4 md:p-8 bg-black">

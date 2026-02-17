@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { User, UserRole } from '../../types';
-import { LogOut, Camera, User as UserIcon, Settings } from 'lucide-react';
-import { useAuth } from '../../providers/AuthProvider';
+import { LogOut, Camera, Settings } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
 
 interface ProfileDropdownProps {
@@ -14,7 +14,14 @@ interface ProfileDropdownProps {
   dropDirection?: 'up' | 'left' | 'right' | 'down';
 }
 
-export default function ProfileDropdown({ currentUser, onLogout, onOpenSettings, collapsed = false, minimal = false, dropDirection = 'up' }: ProfileDropdownProps) {
+export default function ProfileDropdown({
+  currentUser,
+  onLogout,
+  onOpenSettings,
+  collapsed = false,
+  minimal: _minimal = false,
+  dropDirection = 'up',
+}: ProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isChangingAvatar, setIsChangingAvatar] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -137,9 +144,9 @@ export default function ProfileDropdown({ currentUser, onLogout, onOpenSettings,
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className={`absolute ${positionClasses[dropDirection]} w-56 bg-[#111] border border-white/[0.06] rounded-xl shadow-2xl overflow-hidden z-[100]`}>
+        <div className={`absolute ${positionClasses[dropDirection]} w-56 bg-[#111] border border-white/6 rounded-xl shadow-2xl overflow-hidden z-100`}>
           {/* User Info Header */}
-          <div className="p-4 border-b border-white/[0.06] flex items-center gap-3">
+          <div className="p-4 border-b border-white/6 flex items-center gap-3">
             <div className="relative group">
               <div className="w-11 h-11 bg-zinc-800 border border-white/10 overflow-hidden flex items-center justify-center">
                 {getAvatarContent()}

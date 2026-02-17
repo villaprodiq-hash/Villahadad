@@ -1,4 +1,4 @@
-د/**
+/**
  * NASStatusIndicator
  * 
  * Shows NAS connection status in the header/sidebar
@@ -20,7 +20,6 @@ import {
   Loader2,
   ChevronDown,
   Server,
-  Shield,
 } from 'lucide-react';
 import { useNASStatus } from '../../hooks/useNASStatus';
 
@@ -42,8 +41,6 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
     isLocalCache,
     pendingSync,
     appFolderPath,
-    photoFolderPath,
-    smbUrl,
     refresh,
     openAppFolder,
     mountNas,
@@ -79,10 +76,18 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
   const checkR2Status = async () => {
     setIsCheckingR2(true);
     try {
-      // @ts-ignore - electronAPI
       const status = await window.electronAPI?.sessionLifecycle?.getR2Status?.();
       console.log('[R2 Diagnostic]', status);
-      setR2Status(status);
+      setR2Status(
+        status
+          ? {
+              enabled: Boolean(status.enabled),
+              bucket: status.bucket ?? null,
+              hasCredentials: Boolean(status.enabled && status.bucket),
+              lastError: status.lastError ?? null,
+            }
+          : { enabled: false, bucket: null, hasCredentials: false }
+      );
     } catch (err) {
       console.error('[R2 Diagnostic] Failed:', err);
       setR2Status({ enabled: false, bucket: null, hasCredentials: false });
@@ -106,10 +111,10 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
     setMountMessage(null);
     const result = await mountNas();
     setIsMounting(false);
-    if (result.success) {
-      setMountMessage(result.alreadyConnected ? 'NAS متصل بالفعل!' : 'تم فتح نافذة Finder. اختر Gallery واضغط Connect');
+    if (result?.success) {
+      setMountMessage(result.path ? 'تم الاتصال وفتح المسار بنجاح' : 'تم فتح نافذة Finder. اختر Gallery واضغط Connect');
     } else {
-      setMountMessage('فشل الاتصال: ' + result.error);
+      setMountMessage(`فشل الاتصال: ${result?.error ?? 'Unknown error'}`);
     }
     setTimeout(() => setMountMessage(null), 5000);
   };
@@ -118,7 +123,7 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
     setIsMounting(true);
     setDetectAttempts([]);
     const result = await detectNas();
-    setDetectAttempts(result.attempts || []);
+    setDetectAttempts(result?.attempts ?? []);
     setShowDetectDetails(true);
     setIsMounting(false);
   };
@@ -384,7 +389,7 @@ export const NASStatusIndicator: React.FC<NASStatusIndicatorProps> = ({
                       </div>
                     )}
                     {r2Status.lastError && (
-                      <p className="text-amber-400 mt-1 break-words">Last Error: {r2Status.lastError}</p>
+                      <p className="text-amber-400 mt-1 wrap-break-word">Last Error: {r2Status.lastError}</p>
                     )}
                     {!r2Status.enabled && !r2Status.diagnostics?.envKeyIdExists && (
                       <p className="text-orange-400 mt-1">⚠️ ملف .env.local غير موجود أو غير صحيح</p>

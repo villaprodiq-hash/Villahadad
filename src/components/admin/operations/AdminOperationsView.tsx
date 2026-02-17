@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, Calendar, Target, Activity, 
-  Terminal as TerminalIcon, ShieldAlert, ChevronRight,
-  Download, Plus, Clock, Package, Briefcase, Globe, User, 
-  CheckCircle2, AlertTriangle, Command
+  Terminal as TerminalIcon, ChevronRight,
+  Clock, CheckCircle2, Command
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Booking, BookingStatus, StatusLabels, CategoryLabels, User as UserType } from '../../../types';
 import { format, parseISO } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,12 +17,21 @@ interface AdminOperationsViewProps {
   onAddBooking: () => void;
 }
 
+type ActiveTab = 'all' | 'pending' | 'processing' | 'completed';
+
 const AdminOperationsView: React.FC<AdminOperationsViewProps> = ({ 
-  bookings, users = [], onSelectBooking, onAddBooking 
+  bookings, users: _users = [], onSelectBooking: _onSelectBooking, onAddBooking: _onAddBooking 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'processing' | 'completed'>('all');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('all');
   const [selectedOp, setSelectedOp] = useState<Booking | null>(null);
+
+  const tabs: Array<{ id: ActiveTab; label: string; icon: LucideIcon }> = [
+    { id: 'all', label: 'الكل', icon: Command },
+    { id: 'pending', label: 'قيد الانتظار', icon: Clock },
+    { id: 'processing', label: 'جاري التنفيذ', icon: Activity },
+    { id: 'completed', label: 'مكتمل', icon: CheckCircle2 },
+  ];
 
   const filteredBookings = useMemo(() => {
     return bookings.filter(b => {
@@ -59,15 +68,10 @@ const AdminOperationsView: React.FC<AdminOperationsViewProps> = ({
              </div>
 
              <div className="flex items-center gap-3 bg-zinc-900/60 p-1.5 rounded-2xl border border-white/5 backdrop-blur-md shadow-lg">
-                {[
-                  { id: 'all', label: 'الكل', icon: Command },
-                  { id: 'pending', label: 'قيد الانتظار', icon: Clock },
-                  { id: 'processing', label: 'جاري التنفيذ', icon: Activity },
-                  { id: 'completed', label: 'مكتمل', icon: CheckCircle2 }
-                ].map(tab => (
+                {tabs.map(tab => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
+                        onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
                             activeTab === tab.id 
                             ? 'bg-linear-to-br from-zinc-800 to-zinc-900 text-white shadow-lg border border-white/10' 

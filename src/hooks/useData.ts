@@ -2,7 +2,9 @@
  * Custom hook for data access
  * Provides bookings, notifications, and sync status
  */
-import { useData } from '../providers/DataProvider';
+import { useDataContextValue } from '../providers/data-context';
+
+export const useData = useDataContextValue;
 
 export const useBookings = () => {
   const { bookings, updateBooking, addBooking, deleteBooking } = useData();

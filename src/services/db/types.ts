@@ -1,5 +1,3 @@
-import { Generated, JSONColumnType } from 'kysely';
-
 // ===== Users Table =====
 export interface UsersTable {
   id: string; // UUID
@@ -145,10 +143,8 @@ export interface ActivityLogsTable {
 // ===== Daily Attendance Table =====
 export interface DailyAttendanceTable {
   id: string;
-  userId: string; // Keep for legacy
-  user_id: string; // ✅ FIX: Added for snake_case map
-  userName: string; // Keep for legacy
-  user_name: string; // ✅ FIX: Added for snake_case map
+  userId: string;
+  userName: string;
   date: string;
   checkIn: string | null;
   checkOut: string | null;
@@ -156,9 +152,12 @@ export interface DailyAttendanceTable {
   totalHours: number | null;
   isFrozen: number | null;
   createdAt: string;
-  created_at: string; // ✅ FIX: Added snake_case
   updatedAt: string;
-  updated_at: string; // ✅ FIX: Added snake_case
+  // Optional snake_case compatibility for cloud payload mapping
+  user_id?: string;
+  user_name?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ===== Messages Table =====
@@ -194,6 +193,42 @@ export interface PackagesTable {
   createdAt: string;
   updatedAt: string;
   deletedAt: number | null;
+}
+
+// ===== Discount Codes Table =====
+export interface DiscountCodesTable {
+  id: string;
+  code: string;
+  type: string; // 'percentage' | 'fixed'
+  value: number;
+  startAt: string;
+  endAt: string | null;
+  isActive: number;
+  isPublished: number;
+  createdBy: string;
+  createdByName: string;
+  notes: string | null;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: number | null;
+}
+
+// ===== Discount Redemptions Table =====
+export interface DiscountRedemptionsTable {
+  id: string;
+  discountCodeId: string;
+  bookingId: string;
+  code: string;
+  type: string; // 'percentage' | 'fixed'
+  value: number;
+  discountAmount: number;
+  subtotalAmount: number;
+  finalAmount: number;
+  reason: string | null;
+  appliedBy: string;
+  appliedByName: string;
+  appliedAt: string;
 }
 
 // ===== Add-Ons Table =====
@@ -271,6 +306,7 @@ export interface SessionsTable {
   bookingId: string | null;
   clientName: string;
   nasPath: string | null;
+  folderPath?: string | null; // Legacy alias used by session UI
   cloudGalleryUrl: string | null;
   status: 'ingesting' | 'selecting' | 'editing' | 'printing' | 'completed';
   totalImages: number;
@@ -296,6 +332,7 @@ export interface SessionImagesTable {
   cloudUrl: string | null;
   thumbnailUrl: string | null;
   status: 'pending' | 'selected' | 'rejected' | 'editing' | 'final';
+  isSelected?: boolean; // Legacy UI alias; maps to status === 'selected'
   selectedBy: string | null;
   selectedAt: string | null;
   liked: number; // 0 or 1
@@ -304,6 +341,32 @@ export interface SessionImagesTable {
   uploadedAt: string;
   updatedAt: string | null;
   syncedToCloud: number; // 0 or 1
+}
+
+// ===== Inventory Tables =====
+export interface InventoryTable {
+  id: string;
+  name: string;
+  type: string;
+  icon: string | null;
+  status: string | null;
+  assignedTo: string | null;
+  batteryCharged: number | null;
+  batteryTotal: number | null;
+  memoryFree: number | null;
+  memoryTotal: number | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface InventoryLogsTable {
+  id: string;
+  itemId: string;
+  action: string;
+  userId: string;
+  details: string | null;
+  createdAt: string;
 }
 
 // For UI state management (not in DB)
@@ -323,9 +386,13 @@ export interface Database {
   daily_attendance: DailyAttendanceTable;
   messages: MessagesTable;
   packages: PackagesTable;
+  discount_codes: DiscountCodesTable;
+  discount_redemptions: DiscountRedemptionsTable;
   add_ons: AddOnsTable;
   add_on_audit: AddOnAuditTable;
   client_transactions: ClientTransactionsTable;
   sessions: SessionsTable;
   session_images: SessionImagesTable;
+  inventory: InventoryTable;
+  inventory_logs: InventoryLogsTable;
 }

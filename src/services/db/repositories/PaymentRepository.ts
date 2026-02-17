@@ -1,8 +1,22 @@
 import { db } from '../index';
-import { Payment } from '../../../../types'; // You might need to define Payment interface if not in types.ts
+
+interface PaymentRecord {
+  id: string;
+  bookingId: string;
+  amount: number;
+  date: string;
+  method: string;
+  collectedBy: string;
+  notes?: string | null;
+  currency?: string | null;
+  exchangeRate?: number | null;
+  convertedAmount?: number | null;
+  type?: string | null;
+  relatedAddOnId?: string | null;
+}
 
 export const PaymentRepository = {
-  async getByBookingId(bookingId: string): Promise<any[]> {
+  async getByBookingId(bookingId: string): Promise<PaymentRecord[]> {
     try {
       return await db
         .selectFrom('payments')
@@ -16,7 +30,7 @@ export const PaymentRepository = {
     }
   },
 
-  async create(payment: any): Promise<void> {
+  async create(payment: PaymentRecord): Promise<void> {
     try {
       await db
         .insertInto('payments')

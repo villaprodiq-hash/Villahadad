@@ -7,7 +7,7 @@ export class PackageSyncService {
     * Get merged packages (DB + Static)
     * This ensures any updates in DB override the static definitions
     */
-  static async getMergedPackages(): Promise<any[]> {
+  static async getMergedPackages(): Promise<unknown[]> {
     try {
         // Fetch DB packages directly (Kysely)
         const result = await db
@@ -26,7 +26,7 @@ export class PackageSyncService {
             features: row.features ? JSON.parse(row.features) : [],
         }));
 
-        const dbPackageMap = new Map(dbPackages.map((p: any) => [p.id, p]));
+        const dbPackageMap = new Map(dbPackages.map(p => [p.id, p]));
         
         const allStaticPackages = [
             ...PACKAGES_DATA,
@@ -55,8 +55,8 @@ export class PackageSyncService {
         // Add NEW packages from DB that don't exist in static list
         const staticIds = new Set(allStaticPackages.map(p => p.id));
         const newDbPackages = dbPackages
-            .filter((dbPkg: any) => !staticIds.has(dbPkg.id))
-            .map((dbPkg: any) => ({
+            .filter(dbPkg => !staticIds.has(dbPkg.id))
+            .map(dbPkg => ({
                 id: dbPkg.id,
                 title: dbPkg.name,
                 price: dbPkg.currentPrice,

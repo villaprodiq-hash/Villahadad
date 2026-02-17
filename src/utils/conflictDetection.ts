@@ -29,7 +29,7 @@ function doTimeSlotsOverlap(
   if (date1 !== date2) return false;
   
   const toMinutes = (time: string) => {
-    const [h, m] = time.split(':').map(Number);
+    const [h = 0, m = 0] = time.split(':').map(Number);
     return h * 60 + m;
   };
   

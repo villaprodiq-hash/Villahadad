@@ -64,6 +64,7 @@ try {
 class IngestionService {
   constructor(config = {}) {
     this.lastR2Error = null;
+    this.sessionImagesColumns = null;
     const DEFAULT_R2_PUBLIC_URL = 'https://media.villahadad.org';
 
     const readEnv = (...keys) => {
@@ -231,8 +232,7 @@ class IngestionService {
       try {
         // Generate unique filename
         const uniqueId = `${Date.now()}_${i}`;
-        const ext = path.extname(fileName);
-        const baseName = path.basename(fileName, ext);
+        const isRawFile = this.isRawExtension(fileName);
 
         // Path A: Copy to NAS/Cache (Raw folder)
         console.log(`[IngestionService] Path A: Copying ${fileName} to NAS/Cache...`);
@@ -240,26 +240,35 @@ class IngestionService {
         results.localPaths.push(localDestPath);
         console.log(`[IngestionService] Path A ✅: ${localDestPath}`);
 
-        // Path B: Resize and upload to R2 (JPEG 4000px - gallery + client download)
-        console.log(`[IngestionService] Path B: Uploading ${fileName} to R2...`);
+        // RAW files stay local only (cache/NAS) and never go to R2.
         let cloudUrl = null;
-        try {
-          cloudUrl = await this.uploadToR2(filePath, sessionInfo, uniqueId);
-        } catch (r2Error) {
-          console.error(`[IngestionService] Path B failed for ${fileName}:`, r2Error.message);
-          // Keep processing even if cloud upload fails.
+        if (isRawFile) {
+          console.log(`[IngestionService] Path B skipped for RAW file: ${fileName}`);
+        } else {
+          // Path B: Resize and upload to R2 (JPEG 4000px - gallery + client download)
+          console.log(`[IngestionService] Path B: Uploading ${fileName} to R2...`);
+          try {
+            cloudUrl = await this.uploadToR2(filePath, sessionInfo, uniqueId);
+          } catch (r2Error) {
+            console.error(`[IngestionService] Path B failed for ${fileName}:`, r2Error.message);
+            // Keep processing even if cloud upload fails.
+          }
         }
         results.cloudUrls.push(cloudUrl);
         console.log(`[IngestionService] Path B ${cloudUrl ? '✅' : '⚠️ skipped'}: ${cloudUrl || 'no R2'}`);
 
-        // Path C: Generate thumbnail and upload to R2
+        // Path C: Generate thumbnail and upload to R2 (skip RAW)
         console.log(`[IngestionService] Path C: Uploading thumbnail...`);
         let thumbnailUrl = null;
-        try {
-          thumbnailUrl = await this.uploadThumbnailToR2(filePath, sessionInfo, uniqueId);
-        } catch (thumbError) {
-          console.error(`[IngestionService] Path C failed for ${fileName}:`, thumbError.message);
-          // Non-fatal: image can still be used via original cloud/local path.
+        if (isRawFile) {
+          console.log(`[IngestionService] Path C skipped for RAW file: ${fileName}`);
+        } else {
+          try {
+            thumbnailUrl = await this.uploadThumbnailToR2(filePath, sessionInfo, uniqueId);
+          } catch (thumbError) {
+            console.error(`[IngestionService] Path C failed for ${fileName}:`, thumbError.message);
+            // Non-fatal: image can still be used via original cloud/local path.
+          }
         }
         results.thumbnailUrls.push(thumbnailUrl);
         console.log(`[IngestionService] Path C ${thumbnailUrl ? '✅' : '⚠️ skipped'}: ${thumbnailUrl || 'no R2'}`);
@@ -287,7 +296,7 @@ class IngestionService {
           cloud: cloudUrl,
           thumbnail: thumbnailUrl,
           fileName,
-          r2Error: cloudUrl ? null : (this.lastR2Error || null),
+          r2Error: isRawFile ? 'RAW_LOCAL_ONLY' : (cloudUrl ? null : (this.lastR2Error || null)),
         });
 
       } catch (error) {
@@ -490,6 +499,29 @@ class IngestionService {
   /**
    * Insert a record into local session_images table via dbBridge.
    */
+  async getSessionImagesColumns() {
+    if (this.sessionImagesColumns) return this.sessionImagesColumns;
+    if (!this.dbBridge?.query) return null;
+
+    try {
+      const rows = await this.dbBridge.query(`PRAGMA table_info('session_images')`);
+      const columnSet = new Set(
+        (Array.isArray(rows) ? rows : [])
+          .map((row) => (row && typeof row === 'object' ? String(row.name || '').trim() : ''))
+          .filter((name) => name.length > 0)
+      );
+      this.sessionImagesColumns = columnSet;
+      return columnSet;
+    } catch {
+      return null;
+    }
+  }
+
+  async hasSessionImagesColumn(columnName) {
+    const columns = await this.getSessionImagesColumns();
+    return !!(columns && columns.has(columnName));
+  }
+
   async insertSessionImage(record) {
     if (!this.dbBridge) {
       console.warn('[IngestionService] No dbBridge — skipping session_images insert');
@@ -514,24 +546,52 @@ class IngestionService {
         record.uploadedAt,
         record.syncedToCloud,
       ]);
+
+      // Compatibility sync for mixed legacy schemas (fileName <-> file_name).
+      const hasSnakeFileName = await this.hasSessionImagesColumn('file_name');
+      const hasCamelFileName = await this.hasSessionImagesColumn('fileName');
+
+      if (hasSnakeFileName) {
+        await this.dbBridge.query(
+          `UPDATE session_images
+           SET file_name = ?
+           WHERE id = ? AND (file_name IS NULL OR TRIM(file_name) = '')`,
+          [record.fileName, record.id]
+        );
+      }
+
+      if (hasCamelFileName) {
+        await this.dbBridge.query(
+          `UPDATE session_images
+           SET fileName = ?
+           WHERE id = ? AND (fileName IS NULL OR TRIM(fileName) = '')`,
+          [record.fileName, record.id]
+        );
+      }
     } catch (err) {
       console.error('[IngestionService] Failed to insert session_image:', err.message);
     }
 
-    // Enqueue for Supabase sync (snake_case for Supabase)
-    await this.enqueueSyncItem('upsert', 'session_image', {
-      id: record.id,
-      session_id: record.sessionId,
-      booking_id: record.bookingId,
-      file_name: record.fileName,
-      original_path: record.originalPath,
-      cloud_url: record.cloudUrl,
-      thumbnail_url: record.thumbnailUrl,
-      status: record.status,
-      sort_order: record.sortOrder,
-      uploaded_at: record.uploadedAt,
-      synced_to_cloud: record.syncedToCloud === 1,
-    });
+    // Only enqueue cloud-backed images; local-only files (RAW/offline) cannot be synced to Supabase.
+    if (record.cloudUrl) {
+      await this.enqueueSyncItem('upsert', 'session_image', {
+        id: record.id,
+        session_id: record.sessionId,
+        booking_id: record.bookingId,
+        file_name: record.fileName,
+        original_path: record.originalPath,
+        cloud_url: record.cloudUrl,
+        thumbnail_url: record.thumbnailUrl,
+        status: record.status,
+        sort_order: record.sortOrder,
+        uploaded_at: record.uploadedAt,
+        synced_to_cloud: record.syncedToCloud === 1,
+      });
+    } else {
+      console.log(
+        `[IngestionService] Skipping session_image sync enqueue (no cloud_url): ${record.fileName}`
+      );
+    }
   }
 
   /**
@@ -909,6 +969,14 @@ class IngestionService {
       '.gif': 'image/gif',
     };
     return map[ext.toLowerCase()] || 'application/octet-stream';
+  }
+
+  /**
+   * RAW formats should remain local-only (cache/NAS), not cloud-uploaded.
+   */
+  isRawExtension(fileName) {
+    const ext = path.extname(fileName || '').toLowerCase();
+    return ['.raw', '.cr2', '.cr3', '.arw', '.nef', '.dng', '.orf', '.rw2'].includes(ext);
   }
 
   /**

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Sparkles, File, BarChart3, Briefcase, Settings, PlusCircle, Check } from 'lucide-react';
+import React from 'react';
+import { Sparkles } from 'lucide-react';
 import ManagerDashboardCard from './ManagerDashboardCard';
 import ManagerWeatherWidget from './ManagerWeatherWidget';
 

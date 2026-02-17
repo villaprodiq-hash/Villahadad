@@ -6,13 +6,12 @@ import {
   MessageCircle,
   Mail,
   Globe,
-  Link as LinkIcon,
   Download,
   Eye,
   HardDrive,
   Share2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 interface ShareModalProps {
@@ -71,8 +70,8 @@ const ShareModal: React.FC<ShareModalProps> = ({
       ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`;
 
-    if ((window as any).electronAPI?.openWhatsApp) {
-      (window as any).electronAPI.openWhatsApp(waUrl);
+    if (window.electronAPI?.openWhatsApp) {
+      void window.electronAPI.openWhatsApp(waUrl);
     } else {
       window.open(waUrl, '_blank');
     }

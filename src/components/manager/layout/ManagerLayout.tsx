@@ -12,7 +12,7 @@ interface ManagerLayoutProps {
   onOpenSettings?: () => void;
   onOpenDeletedBookings?: () => void;
   hideHeader?: boolean;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 

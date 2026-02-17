@@ -29,7 +29,7 @@ const ManagerPaymentGatewayView: React.FC = () => {
 
           {/* Side Info / Security Status */}
           <div className="space-y-6">
-            <div className="bg-white dark:bg-[#1a1c22] p-6 rounded-[2rem] border border-gray-200 dark:border-white/5 shadow-sm">
+            <div className="bg-white dark:bg-[#1a1c22] p-6 rounded-4xl border border-gray-200 dark:border-white/5 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-3 bg-green-500/10 rounded-full text-green-500">
                   <ShieldCheck size={24} />
@@ -53,7 +53,7 @@ const ManagerPaymentGatewayView: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-linear-to-br from-[#C94557] to-rose-600 p-6 rounded-[2rem] text-white shadow-xl shadow-rose-500/20 relative overflow-hidden">
+            <div className="bg-linear-to-br from-[#C94557] to-rose-600 p-6 rounded-4xl text-white shadow-xl shadow-rose-500/20 relative overflow-hidden">
               <div className="relative z-10">
                 <h3 className="font-bold text-lg mb-2">هل تحتاج مساعدة؟</h3>
                 <p className="text-white/80 text-sm mb-4 leading-relaxed">

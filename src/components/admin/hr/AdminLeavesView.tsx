@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  CalendarDays, CheckCircle2, XCircle, Clock,
-  FileText, Plus, AlertTriangle
+  CalendarDays, CheckCircle2, XCircle,
+  FileText, Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -85,7 +85,7 @@ const AdminLeavesView = () => {
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-1 mb-6 bg-[#0a0a0a] p-1 border border-white/[0.06] w-fit">
+            <div className="flex gap-1 mb-6 bg-[#0a0a0a] p-1 border border-white/6 w-fit">
                 {(['All', 'Pending', 'Approved', 'Rejected'] as const).map((f) => (
                     <button
                         key={f}
@@ -115,7 +115,7 @@ const AdminLeavesView = () => {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0 }}
-                            className={`bg-[#111] border border-white/[0.06] p-5 relative flex flex-col ${
+                            className={`bg-[#111] border border-white/6 p-5 relative flex flex-col ${
                                 leave.status === 'Pending' ? 'border-r-2 border-r-amber-500' : ''
                             }`}
                         >
@@ -161,13 +161,13 @@ const AdminLeavesView = () => {
                             {/* Reason */}
                             {leave.reason && (
                                 <div className="text-[11px] text-zinc-400 italic mb-3 bg-white/[0.02] p-2 border border-white/[0.04]">
-                                    "{leave.reason}"
+                                    &quot;{leave.reason}&quot;
                                 </div>
                             )}
 
                             {/* Actions (Only Pending) */}
                             {leave.status === 'Pending' ? (
-                                <div className="flex gap-2 mt-auto pt-3 border-t border-white/[0.06]">
+                                <div className="flex gap-2 mt-auto pt-3 border-t border-white/6">
                                     <button
                                         onClick={() => handleAction(leave.id, 'Approved')}
                                         className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white text-xs font-bold transition-all border border-emerald-500/20 flex items-center justify-center gap-1"
@@ -182,7 +182,7 @@ const AdminLeavesView = () => {
                                     </button>
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-2 mt-auto pt-3 border-t border-white/[0.06] text-[10px] text-zinc-500">
+                                <div className="flex items-center gap-2 mt-auto pt-3 border-t border-white/6 text-[10px] text-zinc-500">
                                     <CheckCircle2 size={12} /> تمت المعالجة بواسطة {leave.approvedBy || 'Admin'}
                                 </div>
                             )}

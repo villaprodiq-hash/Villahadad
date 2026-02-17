@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell,
-  HardDrive,
-  UploadCloud,
   Sparkles,
   CheckCheck,
   Calendar,
@@ -17,10 +15,8 @@ import {
 } from 'lucide-react';
 import { AppNotification, User, UserRole } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import ProfileDropdown from './shared/ProfileDropdown';
 import NetworkStatusWidget from './shared/NetworkStatusWidget';
 import HealthIndicator from './shared/HealthIndicator';
-import { offlineManager } from '../services/offline/OfflineManager';
 import { healthMonitor } from '../services/health/HealthMonitor';
 
 interface HeaderProps {
@@ -56,14 +52,8 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({
   currentUser,
-  allUsers,
-  onSwitchUser,
-  onLogout,
-  onOpenSettings,
   notifications = [],
   onMarkAllRead,
-  isUploading = false,
-  uploadProgress = 0,
   isSnowing = false,
   onToggleSnow,
   isHeartTrail = false,
@@ -75,8 +65,6 @@ const Header: React.FC<HeaderProps> = ({
   isDraggable = false,
   onToggleDraggable,
   onResetLayout,
-  onExportLayout,
-  onImportLayout,
   activeSection,
   onNavigate,
 }) => {
@@ -91,24 +79,11 @@ const Header: React.FC<HeaderProps> = ({
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // Real OfflineManager State for Header
-  const [networkStatus, setNetworkStatus] = useState(offlineManager.getStatus());
-
   useEffect(() => {
-    // Start health monitoring
+    // Start health monitoring for system widgets
     healthMonitor.startMonitoring(30000);
-    
-    const updateStats = () => setNetworkStatus(offlineManager.getStatus());
-    updateStats();
-    
-    const unsubscribe = offlineManager.subscribe(event => {
-      if (event === 'status_change' || event === 'sync_start' || event === 'sync_complete') {
-        updateStats();
-      }
-    });
-    
+
     return () => {
-      unsubscribe();
       healthMonitor.stopMonitoring();
     };
   }, []);
@@ -167,12 +142,6 @@ const Header: React.FC<HeaderProps> = ({
     : isReception
       ? 'hover:bg-[#C94557]/10'
       : 'hover:bg-white/5';
-  const borderAccent = isManager
-    ? 'border-amber-200'
-    : isReception
-      ? 'border-gray-700/50'
-      : 'border-pink-500/30';
-
   const managerNavItems = [
     { id: 'section-home', label: 'الرئيسية' },
     { id: 'section-my-bookings', label: 'الحجوزات' },

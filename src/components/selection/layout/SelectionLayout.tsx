@@ -12,7 +12,7 @@ interface SelectionLayoutProps {
   currentUser: User;
   onLogout: () => void;
   onOpenSettings?: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
 }
 
 const SelectionLayout: React.FC<SelectionLayoutProps> = ({
@@ -20,7 +20,7 @@ const SelectionLayout: React.FC<SelectionLayoutProps> = ({
   currentUser,
   onLogout,
   onOpenSettings,
-  badges
+  badges: _badges
 }) => {
   return (
     <div className="flex h-screen w-full bg-[#0a0a0f] overflow-hidden font-sans selection:bg-rose-500/30">
@@ -33,7 +33,7 @@ const SelectionLayout: React.FC<SelectionLayoutProps> = ({
 
            {/* Right: Brand */}
            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/20">
+              <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-rose-500 to-pink-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/20">
                   <span className="font-bold text-sm">VH</span>
               </div>
               <div className="flex flex-col justify-center">

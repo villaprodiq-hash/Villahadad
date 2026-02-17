@@ -14,7 +14,7 @@ interface PremiumStatCardProps {
   trend?: string;
   trendDirection?: 'up' | 'down';
   color?: 'cyan' | 'emerald' | 'rose' | 'violet' | 'amber';
-  data?: any[]; // For chart
+  data?: Array<{ value: number } & Record<string, unknown>>; // For chart
   percentage?: number; // For circle
   subtitle?: React.ReactNode;
   disableTilt?: boolean;

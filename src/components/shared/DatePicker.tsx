@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DatePickerProps {
   value: string;
@@ -51,7 +51,8 @@ const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, label }) => {
     const offset = newDate.getTimezoneOffset();
     const localDate = new Date(newDate.getTime() - (offset*60*1000));
     
-    onChange(localDate.toISOString().split('T')[0]);
+    const isoDate = localDate.toISOString().split('T')[0] ?? '';
+    onChange(isoDate);
     setSelectedDate(newDate);
     setIsOpen(false);
   };
@@ -91,7 +92,7 @@ const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, label }) => {
       {/* Modal Overlay */}
       {isOpen && createPortal(
         <div className="fixed inset-0 z-[500000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-[#1E1E1E] w-full max-w-[340px] rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.6)] border border-white/10 overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#1E1E1E] w-full max-w-[340px] rounded-4xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] border border-white/10 overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             
             {/* Header */}
             <div className="p-5 bg-[#262626] border-b border-white/5 flex items-center justify-between">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Clock, Trash2, Edit, Plus, UserCheck, FileText, Settings } from 'lucide-react';
+import { Activity, Trash2, Edit, Plus, Settings } from 'lucide-react';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
 
 import { activityLogService, ActivityLog } from '../../../../services/db/services/ActivityLogService';

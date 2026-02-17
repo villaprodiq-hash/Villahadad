@@ -1,34 +1,54 @@
 import React, { useState } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, ComposedChart, Line
+  Bar, ComposedChart, Line
 } from 'recharts';
-import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
+
+interface BusinessGrowthPoint {
+  date: string;
+  revenue: number;
+  expenses: number;
+  net: number;
+}
+
+interface TooltipEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+}
 
 interface BusinessGrowthChartProps {
-  data: any[]; // Expecting array of { date, revenue, expenses, net }
+  data: BusinessGrowthPoint[];
   currency?: string;
 }
 
 const BusinessGrowthChart: React.FC<BusinessGrowthChartProps> = ({ data, currency = 'USD' }) => {
   const [chartType, setChartType] = useState<'area' | 'bar'>('area');
-  const [timeRange, setTimeRange] = useState<'week' | 'month'>('month');
 
   // Custom Tooltip for Stock Market Vibe
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: TooltipEntry[];
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-gray-900/90 dark:bg-black/90 backdrop-blur-xl border border-white/10 dark:border-amber-500/20 rounded-xl p-4 shadow-2xl min-w-[200px]">
           <p className="text-gray-400 text-xs font-mono mb-2 border-b border-white/10 pb-1">{label}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <div key={index} className="flex items-center justify-between gap-4 py-1">
               <span className="text-xs font-bold flex items-center gap-2" style={{ color: entry.color }}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
                 {entry.name === 'revenue' ? 'الإيرادات' : entry.name === 'expenses' ? 'المصاريف' : 'الصافي'}
               </span>
               <span className="text-sm font-black text-white font-mono">
-                {currency === 'USD' ? '$' : ''}{entry.value.toLocaleString()}
+                {currency === 'USD' ? '$' : ''}
+                {(typeof entry.value === 'number' ? entry.value : Number(entry.value || 0)).toLocaleString()}
               </span>
             </div>
           ))}

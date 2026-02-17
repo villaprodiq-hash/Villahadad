@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Wallet, 
   Plus, 
   Minus, 
   RotateCcw, 
   Clock, 
-  AlertCircle,
-  CheckCircle2,
   XCircle,
   User,
-  FileText,
   History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -29,7 +25,7 @@ interface ClientTransactionHistoryProps {
 
 const ClientTransactionHistory: React.FC<ClientTransactionHistoryProps> = ({
   clientId,
-  clientName,
+  clientName: _clientName,
   currentUser,
   currency = 'IQD',
   compact = false,
@@ -69,8 +65,9 @@ const ClientTransactionHistory: React.FC<ClientTransactionHistoryProps> = ({
       setTimeRemaining(prev => {
         const updated = { ...prev };
         Object.keys(updated).forEach(id => {
-          if (updated[id] > 0) {
-            updated[id] = Math.max(0, updated[id] - 1);
+          const remaining = updated[id];
+          if (typeof remaining === 'number' && remaining > 0) {
+            updated[id] = Math.max(0, remaining - 1);
           }
         });
         return updated;
@@ -241,7 +238,7 @@ const ClientTransactionHistory: React.FC<ClientTransactionHistoryProps> = ({
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       {/* Icon */}
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                         transaction.status === 'reversed'
                           ? 'bg-gray-100'
                           : transaction.amount > 0
@@ -287,7 +284,7 @@ const ClientTransactionHistory: React.FC<ClientTransactionHistoryProps> = ({
                     </div>
 
                     {/* Amount & Actions */}
-                    <div className="text-left flex-shrink-0">
+                    <div className="text-left shrink-0">
                       <p className={`text-base font-black ${
                         transaction.status === 'reversed'
                           ? 'text-gray-400 line-through'

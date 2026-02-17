@@ -1,9 +1,24 @@
-import { User, UserRole, Booking, BookingStatus, BookingCategory, Expense, RecurringExpense, DashboardTask, Reminder, ReminderType } from '../types';
+import {
+  User,
+  UserRole,
+  Booking,
+  BookingStatus,
+  BookingCategory,
+  Expense,
+  RecurringExpense,
+  DashboardTask,
+  Reminder,
+  ReminderType,
+  DiscountCode,
+  DiscountCodeType,
+  AppliedDiscount,
+} from '../types';
 import { supabase } from './supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { verifyPassword, hashPassword, needsMigration } from './security/PasswordService';
 import { toast } from 'sonner';
 import { sanitizeDate } from '../utils/filterUtils';
+import { CurrentUserService } from './CurrentUserService';
 
 // ✅ IMPROVED: Typed Electron API interface
 interface ElectronDBAPI {
@@ -22,8 +37,8 @@ interface ElectronAPI {
   };
   // Auto Updates
   updatedStatus?: (status: string) => void;
-  onUpdateStatus?: (callback: (data: any) => void) => () => void;
-  checkForUpdates?: () => Promise<any>;
+  onUpdateStatus?: (callback: (data: unknown) => void) => () => void;
+  checkForUpdates?: () => Promise<unknown>;
   installUpdate?: () => Promise<void>;
   getAppVersion?: () => Promise<string>;
 
@@ -34,8 +49,10 @@ interface ElectronAPI {
 
 // Helper to check for Electron API with proper typing
 const getElectronAPI = (): ElectronAPI | null => {
-  const win = window as any;
-  return win.electronAPI || null;
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    return null;
+  }
+  return window.electronAPI as unknown as ElectronAPI;
 };
 
 // ✅ IMPROVED: Typed In-Memory Cache
@@ -45,7 +62,9 @@ let expenses: Expense[] = [];
 let recurringExpenses: RecurringExpense[] = [];
 let tasks: DashboardTask[] = [];
 let reminders: Reminder[] = [];
+let discountCodesCache: DiscountCode[] = [];
 const fullSchemaSyncUnsupportedIds = new Set<string>();
+let fullSchemaSyncUnsupportedGlobally = false;
 const localOnlySyncLastAttempt = new Map<string, number>();
 const LOCAL_ONLY_SYNC_COOLDOWN_MS = 15000;
 let localOnlySyncInFlight = false;
@@ -56,15 +75,26 @@ const isOnline = (): boolean => {
 };
 
 // ✅ Supabase call with timeout (prevents hanging when offline)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const withTimeout = (promise: any, ms: number = 5000): Promise<any> => {
+const withTimeout = <T>(promise: PromiseLike<T>, ms: number = 5000): Promise<T> => {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Supabase request timeout')), ms);
     Promise.resolve(promise).then(
-      (val: any) => { clearTimeout(timer); resolve(val); },
-      (err: any) => { clearTimeout(timer); reject(err); }
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err: unknown) => { clearTimeout(timer); reject(err); }
     );
   });
+};
+
+const isSupabaseSchemaMismatch = (error: unknown): boolean => {
+  const err = error as { status?: number; message?: string } | null;
+  const status = Number(err?.status || 0);
+  const message = String(err?.message || '').toLowerCase();
+  return (
+    status === 400 ||
+    message.includes('schema cache') ||
+    message.includes('could not find') ||
+    message.includes('column')
+  );
 };
 
 // ✅ IMPROVED: Typed Event System
@@ -74,10 +104,77 @@ type BackendEvent =
   | 'expenses_updated' 
   | 'recurring_expenses_updated'
   | 'tasks_updated' 
-  | 'reminders_updated';
+  | 'reminders_updated'
+  | 'discount_codes_updated';
 
 type Listener = (event: BackendEvent) => void;
 const listeners: Listener[] = [];
+
+interface InventoryPool {
+  total: number;
+  charged: number;
+}
+
+interface MemoryPool {
+  total: number;
+  free: number;
+}
+
+interface InventoryItem {
+  id: string;
+  name: string;
+  type: string;
+  icon: string;
+  status: string;
+  assignedTo: string | null;
+  batteryPool: InventoryPool | null;
+  memoryPool: MemoryPool | null;
+  notes: string;
+}
+
+interface InventoryLogEntry {
+  id: string;
+  itemId: string;
+  action: string;
+  userId: string;
+  details: string;
+  createdAt: string;
+}
+
+interface InventoryUpdatePayload extends Record<string, unknown> {
+  batteryPool?: InventoryPool;
+  memoryPool?: MemoryPool;
+}
+
+interface ActivityLogEntry {
+  id: string;
+  user: string;
+  userId: string;
+  action: string;
+  target: string;
+  time: string;
+  type: 'danger' | 'info';
+}
+
+interface AddExtraServiceResult {
+  success: boolean;
+}
+
+interface DiscountValidationResult {
+  valid: boolean;
+  message: string;
+  discount?: {
+    codeId: string;
+    code: string;
+    type: DiscountCodeType;
+    value: number;
+    subtotalAmount: number;
+    discountAmount: number;
+    finalAmount: number;
+    startAt: string;
+    endAt?: string;
+  };
+}
 
 const notifyListeners = (event: BackendEvent): void => {
   listeners.forEach(l => l(event));
@@ -97,6 +194,67 @@ const parseUserRow = (row: Record<string, unknown>): User => ({
     : (row.preferences as User['preferences']),
 });
 
+const VALID_USER_ROLES = new Set<string>(Object.values(UserRole));
+
+const normalizeUserRole = (role: unknown): UserRole => {
+  const raw = String(role || '').trim();
+  if (!raw) return UserRole.RECEPTION;
+
+  const canonical = raw
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-/g, '_');
+
+  if (VALID_USER_ROLES.has(canonical)) {
+    return canonical as UserRole;
+  }
+
+  // Legacy/label aliases observed in older local payloads
+  if (canonical === 'manager' || canonical === 'مديرة' || canonical === 'المديرة') {
+    return UserRole.MANAGER;
+  }
+  if (canonical === 'admin' || canonical === 'مشرف' || canonical === 'الاداريه' || canonical === 'الإدارية') {
+    return UserRole.ADMIN;
+  }
+  if (canonical === 'reception' || canonical === 'استقبال') {
+    return UserRole.RECEPTION;
+  }
+  if (canonical === 'photo_editor' || canonical === 'photoeditor' || canonical === 'محرر' || canonical === 'محررة') {
+    return UserRole.PHOTO_EDITOR;
+  }
+  if (canonical === 'video_editor' || canonical === 'videoeditor' || canonical === 'مونتير') {
+    return UserRole.VIDEO_EDITOR;
+  }
+  if (canonical === 'printer' || canonical === 'طباعة') {
+    return UserRole.PRINTER;
+  }
+  if (canonical === 'selector' || canonical === 'اختيار') {
+    return UserRole.SELECTOR;
+  }
+
+  return UserRole.RECEPTION;
+};
+
+const sanitizeUserRecord = (input: User | null | undefined): User | null => {
+  if (!input) return null;
+
+  const id = String(input.id || '').trim();
+  const name = String(input.name || '').trim();
+  const role = normalizeUserRole(input.role);
+
+  if (!id || id.length < 4) return null;
+  if (/^\d+$/.test(id)) return null;
+  if (!name || name.length < 2) return null;
+  if (/^\d+$/.test(name)) return null;
+
+  return {
+    ...input,
+    id,
+    name,
+    role,
+  };
+};
+
 // ✅ Helper to parse Supabase/SQLite row to Booking
 // Handles both snake_case (Supabase) and camelCase (SQLite) column names
 const safeNum = (val: unknown): number => {
@@ -104,7 +262,7 @@ const safeNum = (val: unknown): number => {
   const n = Number(val);
   return isNaN(n) ? 0 : n;
 };
-const safeJsonParseMB = (val: unknown, fallback: any = undefined) => {
+const safeJsonParseMB = (val: unknown, fallback: unknown = undefined): unknown => {
   if (val === null || val === undefined) return fallback;
   if (typeof val === 'string') { try { return JSON.parse(val); } catch { return fallback; } }
   return val;
@@ -128,6 +286,16 @@ const parseBookingRow = (row: Record<string, unknown>): Booking => ({
   statusHistory: safeJsonParseMB(row.status_history ?? row.statusHistory, []),
   notes: String(row.notes || ''),
   createdAt: String(row.created_at ?? row.createdAt ?? ''),
+  actualSelectionDate: row.actual_selection_date
+    ? String(row.actual_selection_date)
+    : row.actualSelectionDate
+      ? String(row.actualSelectionDate)
+      : undefined,
+  deliveryDeadline: row.delivery_deadline
+    ? String(row.delivery_deadline)
+    : row.deliveryDeadline
+      ? String(row.deliveryDeadline)
+      : undefined,
   isPriority: Boolean(row.is_priority ?? row.isPriority),
   isCrewShooting: Boolean(row.is_crew_shooting ?? row.isCrewShooting),
   isFamous: Boolean(row.is_famous ?? row.isFamous),
@@ -150,6 +318,139 @@ const parseBookingRow = (row: Record<string, unknown>): Booking => ({
   created_by: row.created_by ? String(row.created_by) : (row.createdBy ? String(row.createdBy) : undefined),
   updated_by: row.updated_by ? String(row.updated_by) : (row.updatedBy ? String(row.updatedBy) : undefined),
 } as Booking);
+
+const toIsoMinute = (isoLike?: string | null): string | undefined => {
+  if (!isoLike) return undefined;
+  const date = new Date(isoLike);
+  if (Number.isNaN(date.getTime())) return undefined;
+  // keep minute precision as requested by business flow
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+
+const sanitizeDiscountCode = (value: string): string =>
+  value.trim().toUpperCase().replace(/\s+/g, '');
+
+const computeDiscountAmount = (
+  type: DiscountCodeType,
+  value: number,
+  subtotalAmount: number
+): number => {
+  if (subtotalAmount <= 0) return 0;
+  if (type === 'percentage') {
+    const normalizedPercent = Math.max(0, Math.min(100, value));
+    return Math.min(subtotalAmount, (subtotalAmount * normalizedPercent) / 100);
+  }
+  return Math.min(subtotalAmount, Math.max(0, value));
+};
+
+const parseDiscountCodeRow = (row: Record<string, unknown>): DiscountCode => ({
+  id: String(row.id || ''),
+  code: sanitizeDiscountCode(String(row.code || '')),
+  type: (String(row.type || 'percentage') as DiscountCodeType),
+  value: Number(row.value || 0),
+  startAt: String(row.startAt || row.start_at || ''),
+  endAt: row.endAt || row.end_at ? String(row.endAt || row.end_at) : undefined,
+  isActive: Boolean(Number(row.isActive ?? row.is_active ?? 0)),
+  isPublished: Boolean(Number(row.isPublished ?? row.is_published ?? 0)),
+  notes: row.notes ? String(row.notes) : undefined,
+  usageCount: Number(row.usageCount || row.usage_count || 0),
+  createdBy: String(row.createdBy || row.created_by || ''),
+  createdByName: String(row.createdByName || row.created_by_name || ''),
+  createdAt: String(row.createdAt || row.created_at || ''),
+  updatedAt: String(row.updatedAt || row.updated_at || ''),
+});
+
+const getCurrentActor = () => {
+  const current = CurrentUserService.getCurrentUser();
+  if (current?.id && current?.name) {
+    return {
+      id: current.id,
+      name: current.name,
+      role: normalizeUserRole(current.role),
+    };
+  }
+
+  const storageKeys = ['villahadad_current_user', 'user'];
+  for (const key of storageKeys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const fromStorage = JSON.parse(raw) as Partial<User>;
+      const id = String(fromStorage.id || '').trim();
+      const name = String(fromStorage.name || '').trim();
+      if (!id || !name) continue;
+
+      return {
+        id,
+        name,
+        role: normalizeUserRole(fromStorage.role),
+      };
+    } catch {
+      // Ignore malformed storage and continue to next source
+    }
+  }
+
+  return {
+    id: 'unknown',
+    name: 'Unknown',
+    role: UserRole.RECEPTION,
+  };
+};
+
+const ensureManagerRole = () => {
+  const actor = getCurrentActor();
+  if (actor.role !== UserRole.MANAGER) {
+    throw new Error('صلاحية الخصومات متاحة للمديرة فقط');
+  }
+  return actor;
+};
+
+const persistDiscountRedemption = async (
+  bookingId: string,
+  discount: AppliedDiscount
+): Promise<void> => {
+  const api = getElectronAPI();
+  if (!api?.db) return;
+
+  const now = new Date().toISOString();
+  const actor = getCurrentActor();
+
+  try {
+    await api.db.run(
+      `INSERT INTO discount_redemptions
+      (id, discountCodeId, bookingId, code, type, value, discountAmount, subtotalAmount, finalAmount, reason, appliedBy, appliedByName, appliedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uuidv4(),
+        discount.codeId,
+        bookingId,
+        sanitizeDiscountCode(discount.code),
+        discount.type,
+        discount.value,
+        discount.discountAmount,
+        discount.subtotalAmount,
+        discount.finalAmount,
+        discount.reason || '',
+        actor.id,
+        actor.name,
+        now,
+      ]
+    );
+
+    await api.db.run(
+      'UPDATE discount_codes SET usageCount = COALESCE(usageCount, 0) + 1, updatedAt = ? WHERE id = ?',
+      [now, discount.codeId]
+    );
+
+    discountCodesCache = discountCodesCache.map(code =>
+      code.id === discount.codeId
+        ? { ...code, usageCount: (code.usageCount || 0) + 1, updatedAt: now }
+        : code
+    );
+  } catch (error) {
+    console.warn('⚠️ Failed to persist discount redemption:', error);
+  }
+};
 
 // ✅ Real-time Supabase subscription for bookings (initialized after auth)
 let bookingsChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -330,8 +631,8 @@ export const electronBackend = {
       console.log('✅ Auth successful:', user.name);
       
       // Return user without password
-      const { password: _, ...safeUser } = user;
-      return safeUser as User;
+      const safeUser: User = { ...user, password: undefined };
+      return safeUser;
     } catch (error) {
       console.error('🔐 Authentication error:', error);
       return null;
@@ -406,18 +707,21 @@ export const electronBackend = {
         console.log('📊 Raw Supabase data:', data);
 
         // Parse Supabase rows (snake_case → camelCase)
-        supabaseUsers = (data || []).map((row: Record<string, unknown>) => ({
-          id: String(row.id || ''),
-          name: String(row.name || ''),
-          role: (row.role as UserRole) || UserRole.RECEPTION,
-          password: row.password ? String(row.password) : undefined,
-          jobTitle: row.job_title ? String(row.job_title) : undefined,
-          avatar: row.avatar ? String(row.avatar) : undefined,
-          email: row.email ? String(row.email) : undefined,
-          preferences: typeof row.preferences === 'string'
-            ? JSON.parse(row.preferences)
-            : (row.preferences as User['preferences']),
-        }));
+        supabaseUsers = (data || [])
+          .map((row: Record<string, unknown>) => ({
+            id: String(row.id || ''),
+            name: String(row.name || ''),
+            role: (row.role as UserRole) || UserRole.RECEPTION,
+            password: row.password ? String(row.password) : undefined,
+            jobTitle: row.job_title ? String(row.job_title) : undefined,
+            avatar: row.avatar ? String(row.avatar) : undefined,
+            email: row.email ? String(row.email) : undefined,
+            preferences: typeof row.preferences === 'string'
+              ? JSON.parse(row.preferences)
+              : (row.preferences as User['preferences']),
+          }))
+          .map(user => sanitizeUserRecord(user))
+          .filter((user): user is User => user !== null);
 
         console.log(`✅ Loaded ${supabaseUsers.length} users from Supabase:`, supabaseUsers.map(u => u.name));
 
@@ -455,7 +759,10 @@ export const electronBackend = {
     if (api?.db) {
       try {
         const result = await api.db.query('SELECT * FROM users');
-        sqliteUsers = result.map(parseUserRow);
+        sqliteUsers = result
+          .map(parseUserRow)
+          .map(user => sanitizeUserRecord(user))
+          .filter((user): user is User => user !== null);
         console.log(`✅ Loaded ${sqliteUsers.length} users from SQLite`);
       } catch (e) {
         console.error('SQLite fetch failed:', e);
@@ -468,25 +775,34 @@ export const electronBackend = {
     // Add Supabase users first (cloud = source of truth)
     supabaseUsers.forEach(user => userMap.set(user.id, user));
     
-    // Add SQLite users that don't exist in Supabase (offline users)
-    sqliteUsers.forEach(user => {
-      if (!userMap.has(user.id)) {
-        userMap.set(user.id, user);
-        console.log(`📦 Found offline user: ${user.name}`);
-      }
-    });
+    const cloudUsersAvailable = supabaseUsers.length > 0;
 
-    // 📦 Add Pending Users from LocalStorage
-    try {
-        const pendingUsers = JSON.parse(localStorage.getItem('pending_users') || '[]');
-        pendingUsers.forEach((user: User) => {
-            if (!userMap.has(user.id)) {
+    // Add local users only when cloud users are not available (offline fallback)
+    if (!cloudUsersAvailable) {
+      sqliteUsers.forEach(user => {
+        if (!userMap.has(user.id)) {
+          userMap.set(user.id, user);
+          console.log(`📦 Found offline user: ${user.name}`);
+        }
+      });
+
+      // 📦 Add Pending Users from LocalStorage (offline only)
+      try {
+          const pendingRaw = JSON.parse(localStorage.getItem('pending_users') || '[]') as unknown[];
+          pendingRaw
+            .map(item => sanitizeUserRecord(item as User))
+            .filter((user): user is User => user !== null)
+            .forEach((user: User) => {
+              if (!userMap.has(user.id)) {
                 userMap.set(user.id, user);
                 console.log(`📦 Found pending local user: ${user.name}`);
-            }
-        });
-    } catch (e) {
-        console.warn('Failed to load pending users:', e);
+              }
+            });
+      } catch (e) {
+          console.warn('Failed to load pending users:', e);
+      }
+    } else if (sqliteUsers.length > supabaseUsers.length) {
+      console.log('ℹ️ Cloud users loaded; ignoring extra local-only users to keep device lists consistent');
     }
 
     const mergedUsers = Array.from(userMap.values());
@@ -628,8 +944,9 @@ export const electronBackend = {
       console.log('   📸 Saved avatar length:', data?.avatar?.length || 0);
       supabaseSaveSuccess = true;
 
-    } catch (supabaseError: any) {
-      console.warn('⚠️ [updateUser] Supabase update failed:', supabaseError?.message || supabaseError);
+    } catch (supabaseError: unknown) {
+      const supabaseMessage = supabaseError instanceof Error ? supabaseError.message : String(supabaseError);
+      console.warn('⚠️ [updateUser] Supabase update failed:', supabaseMessage);
       
       // 📦 Fallback to SQLite
       const api = getElectronAPI();
@@ -831,6 +1148,7 @@ export const electronBackend = {
 
     // Also keep any in-memory cache entries not in either DB (recently added)
     bookings.forEach(b => {
+      if (b.deletedAt) return;
       if (!bookingMap.has(b.id)) {
         bookingMap.set(b.id, b);
       }
@@ -863,7 +1181,7 @@ export const electronBackend = {
           try {
             let fullSchemaError: { message?: string; status?: number } | null = null;
 
-            if (!fullSchemaSyncUnsupportedIds.has(b.id)) {
+            if (!fullSchemaSyncUnsupportedGlobally && !fullSchemaSyncUnsupportedIds.has(b.id)) {
               // Try full schema first
               const { error } = await supabase.from('bookings').upsert([{
                 id: b.id,
@@ -892,9 +1210,16 @@ export const electronBackend = {
             }
 
             if (fullSchemaError) {
-              if (fullSchemaError.status === 400) {
+              const fullSchemaErrorMessage = String(fullSchemaError.message || '').toLowerCase();
+              if (
+                fullSchemaError.status === 400 ||
+                fullSchemaErrorMessage.includes('schema cache') ||
+                fullSchemaErrorMessage.includes('could not find') ||
+                fullSchemaErrorMessage.includes('column')
+              ) {
                 // Remote schema doesn't accept one or more optional columns.
                 fullSchemaSyncUnsupportedIds.add(b.id);
+                fullSchemaSyncUnsupportedGlobally = true;
               }
 
               // Retry with core columns only
@@ -938,6 +1263,315 @@ export const electronBackend = {
     return [...bookings];
   },
 
+  getDiscountCodes: async (
+    options?: { includeInactive?: boolean; includeUnpublished?: boolean }
+  ): Promise<DiscountCode[]> => {
+    const includeInactive = Boolean(options?.includeInactive);
+    const includeUnpublished = Boolean(options?.includeUnpublished);
+    const api = getElectronAPI();
+
+    if (api?.db) {
+      try {
+        const where: string[] = ['deletedAt IS NULL'];
+        const params: unknown[] = [];
+
+        if (!includeInactive) {
+          where.push('isActive = 1');
+        }
+        if (!includeUnpublished) {
+          where.push('isPublished = 1');
+        }
+
+        const rows = await api.db.query(
+          `SELECT * FROM discount_codes WHERE ${where.join(' AND ')} ORDER BY createdAt DESC`,
+          params
+        );
+
+        discountCodesCache = rows.map(parseDiscountCodeRow);
+        return [...discountCodesCache];
+      } catch (error) {
+        console.warn('⚠️ Failed to load discount codes from SQLite, using cache:', error);
+      }
+    }
+
+    return [...discountCodesCache].filter(code => {
+      if (code.isActive === false && !includeInactive) return false;
+      if (code.isPublished === false && !includeUnpublished) return false;
+      return true;
+    });
+  },
+
+  createDiscountCode: async (payload: {
+    code: string;
+    type: DiscountCodeType;
+    value: number;
+    startAt: string;
+    endAt?: string | null;
+    isPublished?: boolean;
+    notes?: string;
+  }): Promise<DiscountCode> => {
+    const actor = ensureManagerRole();
+    const api = getElectronAPI();
+    const now = new Date().toISOString();
+
+    const code = sanitizeDiscountCode(payload.code);
+    if (!code || code.length < 3) {
+      throw new Error('كود الخصم غير صالح');
+    }
+
+    const value = Number(payload.value || 0);
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error('قيمة الخصم يجب أن تكون أكبر من صفر');
+    }
+    if (payload.type === 'percentage' && value > 100) {
+      throw new Error('نسبة الخصم يجب أن تكون 100 أو أقل');
+    }
+
+    const parsedStartAt = new Date(payload.startAt);
+    if (Number.isNaN(parsedStartAt.getTime())) {
+      throw new Error('وقت بداية الخصم غير صالح');
+    }
+    const startAt = parsedStartAt.toISOString();
+
+    let endAt: string | undefined;
+    if (payload.endAt) {
+      const parsedEndAt = new Date(payload.endAt);
+      if (Number.isNaN(parsedEndAt.getTime())) {
+        throw new Error('وقت انتهاء الخصم غير صالح');
+      }
+      endAt = parsedEndAt.toISOString();
+    }
+    if (endAt && new Date(endAt).getTime() <= new Date(startAt).getTime()) {
+      throw new Error('وقت انتهاء الخصم يجب أن يكون بعد وقت البدء');
+    }
+
+    const existsInCache = discountCodesCache.some(
+      entry => entry.code === code && entry.isActive
+    );
+    if (existsInCache) {
+      throw new Error('هذا الكود مستخدم مسبقًا');
+    }
+
+    const newCode: DiscountCode = {
+      id: uuidv4(),
+      code,
+      type: payload.type,
+      value,
+      startAt,
+      endAt,
+      isActive: true,
+      isPublished: Boolean(payload.isPublished),
+      notes: payload.notes?.trim() || undefined,
+      usageCount: 0,
+      createdBy: actor.id,
+      createdByName: actor.name,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (api?.db) {
+      const duplicate = await api.db.query(
+        'SELECT id FROM discount_codes WHERE code = ? AND deletedAt IS NULL',
+        [code]
+      );
+      if (duplicate.length > 0) {
+        throw new Error('هذا الكود مستخدم مسبقًا');
+      }
+
+      await api.db.run(
+        `INSERT INTO discount_codes
+        (id, code, type, value, startAt, endAt, isActive, isPublished, createdBy, createdByName, notes, usageCount, createdAt, updatedAt, deletedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+        [
+          newCode.id,
+          newCode.code,
+          newCode.type,
+          newCode.value,
+          newCode.startAt,
+          newCode.endAt || null,
+          newCode.isActive ? 1 : 0,
+          newCode.isPublished ? 1 : 0,
+          newCode.createdBy,
+          newCode.createdByName,
+          newCode.notes || null,
+          0,
+          newCode.createdAt,
+          newCode.updatedAt,
+        ]
+      );
+    }
+
+    discountCodesCache = [newCode, ...discountCodesCache];
+    notifyListeners('discount_codes_updated');
+    return newCode;
+  },
+
+  updateDiscountCode: async (
+    id: string,
+    updates: Partial<Pick<DiscountCode, 'code' | 'type' | 'value' | 'startAt' | 'endAt' | 'isPublished' | 'isActive' | 'notes'>>
+  ): Promise<DiscountCode | null> => {
+    ensureManagerRole();
+    const api = getElectronAPI();
+
+    const existingList = await electronBackend.getDiscountCodes({
+      includeInactive: true,
+      includeUnpublished: true,
+    });
+    const existing = existingList.find(item => item.id === id);
+    if (!existing) return null;
+
+    const nextCode = updates.code ? sanitizeDiscountCode(updates.code) : existing.code;
+    const nextType = updates.type || existing.type;
+    const nextValue = updates.value !== undefined ? Number(updates.value) : existing.value;
+    let nextStart = existing.startAt;
+    if (updates.startAt) {
+      const parsedStart = new Date(updates.startAt);
+      if (Number.isNaN(parsedStart.getTime())) {
+        throw new Error('وقت بداية الخصم غير صالح');
+      }
+      nextStart = parsedStart.toISOString();
+    }
+
+    let nextEnd = existing.endAt;
+    if (updates.endAt !== undefined) {
+      if (!updates.endAt) {
+        nextEnd = undefined;
+      } else {
+        const parsedEnd = new Date(updates.endAt);
+        if (Number.isNaN(parsedEnd.getTime())) {
+          throw new Error('وقت انتهاء الخصم غير صالح');
+        }
+        nextEnd = parsedEnd.toISOString();
+      }
+    }
+
+    if (!nextCode || nextCode.length < 3) {
+      throw new Error('كود الخصم غير صالح');
+    }
+    if (!Number.isFinite(nextValue) || nextValue <= 0) {
+      throw new Error('قيمة الخصم يجب أن تكون أكبر من صفر');
+    }
+    if (nextType === 'percentage' && nextValue > 100) {
+      throw new Error('نسبة الخصم يجب أن تكون 100 أو أقل');
+    }
+    if (nextEnd && new Date(nextEnd).getTime() <= new Date(nextStart).getTime()) {
+      throw new Error('وقت انتهاء الخصم يجب أن يكون بعد وقت البدء');
+    }
+
+    if (api?.db) {
+      const duplicate = await api.db.query(
+        'SELECT id FROM discount_codes WHERE code = ? AND id != ? AND deletedAt IS NULL',
+        [nextCode, id]
+      );
+      if (duplicate.length > 0) {
+        throw new Error('هذا الكود مستخدم مسبقًا');
+      }
+
+      await api.db.run(
+        `UPDATE discount_codes
+        SET code = ?, type = ?, value = ?, startAt = ?, endAt = ?, isActive = ?, isPublished = ?, notes = ?, updatedAt = ?
+        WHERE id = ?`,
+        [
+          nextCode,
+          nextType,
+          nextValue,
+          nextStart,
+          nextEnd || null,
+          updates.isActive === undefined ? (existing.isActive ? 1 : 0) : updates.isActive ? 1 : 0,
+          updates.isPublished === undefined ? (existing.isPublished ? 1 : 0) : updates.isPublished ? 1 : 0,
+          updates.notes === undefined ? existing.notes || null : updates.notes || null,
+          new Date().toISOString(),
+          id,
+        ]
+      );
+    }
+
+    const updated: DiscountCode = {
+      ...existing,
+      code: nextCode,
+      type: nextType,
+      value: nextValue,
+      startAt: nextStart,
+      endAt: nextEnd,
+      isActive: updates.isActive === undefined ? existing.isActive : updates.isActive,
+      isPublished: updates.isPublished === undefined ? existing.isPublished : updates.isPublished,
+      notes: updates.notes === undefined ? existing.notes : updates.notes || undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
+    discountCodesCache = discountCodesCache.map(code => (code.id === id ? updated : code));
+    notifyListeners('discount_codes_updated');
+    return updated;
+  },
+
+  deactivateDiscountCode: async (id: string): Promise<void> => {
+    await electronBackend.updateDiscountCode(id, { isActive: false, isPublished: false });
+  },
+
+  validateDiscountCode: async (
+    code: string,
+    subtotalAmount: number
+  ): Promise<DiscountValidationResult> => {
+    const normalizedCode = sanitizeDiscountCode(code);
+    if (!normalizedCode) {
+      return { valid: false, message: 'أدخل كود الخصم' };
+    }
+
+    const subtotal = Math.max(0, Number(subtotalAmount || 0));
+    if (subtotal <= 0) {
+      return { valid: false, message: 'المبلغ غير صالح لتطبيق الخصم' };
+    }
+
+    const activeCodes = await electronBackend.getDiscountCodes({
+      includeInactive: false,
+      includeUnpublished: false,
+    });
+    const target = activeCodes.find(item => item.code === normalizedCode);
+
+    if (!target) {
+      return { valid: false, message: 'كود الخصم غير موجود أو غير منشور' };
+    }
+
+    const now = new Date().getTime();
+    const startAt = new Date(target.startAt).getTime();
+    if (Number.isFinite(startAt) && now < startAt) {
+      return {
+        valid: false,
+        message: `الخصم يبدأ ${toIsoMinute(target.startAt) || target.startAt}`,
+      };
+    }
+
+    if (target.endAt) {
+      const endAt = new Date(target.endAt).getTime();
+      if (Number.isFinite(endAt) && now > endAt) {
+        return { valid: false, message: 'انتهت صلاحية كود الخصم' };
+      }
+    }
+
+    const discountAmount = computeDiscountAmount(target.type, target.value, subtotal);
+    const finalAmount = Math.max(0, subtotal - discountAmount);
+
+    if (discountAmount <= 0) {
+      return { valid: false, message: 'تعذر تطبيق الخصم على هذا المبلغ' };
+    }
+
+    return {
+      valid: true,
+      message: 'تم تطبيق الكود بنجاح',
+      discount: {
+        codeId: target.id,
+        code: target.code,
+        type: target.type,
+        value: target.value,
+        subtotalAmount: subtotal,
+        discountAmount,
+        finalAmount,
+        startAt: target.startAt,
+        endAt: target.endAt,
+      },
+    };
+  },
+
   addBooking: async (booking: Omit<Booking, 'id'> & { id?: string }): Promise<Booking> => {
     const clientToken = booking.client_token || `vh-${uuidv4().replace(/-/g, '').slice(0, 12)}`;
     const newBooking: Booking = { 
@@ -945,61 +1579,117 @@ export const electronBackend = {
       id: booking.id || uuidv4(),
       client_token: clientToken,
     } as Booking;
+
+    const bookingDetails = (newBooking.details || {}) as Booking['details'];
+    const incomingDiscount = bookingDetails?.discount as AppliedDiscount | undefined;
+
+    if (incomingDiscount?.code) {
+      const validation = await electronBackend.validateDiscountCode(
+        incomingDiscount.code,
+        Number(incomingDiscount.subtotalAmount || newBooking.totalAmount)
+      );
+
+      if (!validation.valid || !validation.discount) {
+        const restoredTotal = Number(incomingDiscount.subtotalAmount || newBooking.totalAmount || 0);
+        newBooking.totalAmount = Math.max(0, restoredTotal);
+        newBooking.details = { ...bookingDetails, discount: undefined };
+      } else {
+        const actor = getCurrentActor();
+        const appliedDiscount: AppliedDiscount = {
+          codeId: validation.discount.codeId,
+          code: validation.discount.code,
+          type: validation.discount.type,
+          value: validation.discount.value,
+          reason: incomingDiscount.reason || '',
+          subtotalAmount: validation.discount.subtotalAmount,
+          discountAmount: validation.discount.discountAmount,
+          finalAmount: validation.discount.finalAmount,
+          appliedAt: new Date().toISOString(),
+          appliedBy: actor.id,
+          appliedByName: actor.name,
+        };
+
+        newBooking.totalAmount = appliedDiscount.finalAmount;
+        newBooking.details = { ...bookingDetails, discount: appliedDiscount };
+      }
+    }
+
+    if (newBooking.paidAmount > newBooking.totalAmount) {
+      newBooking.paidAmount = newBooking.totalAmount;
+    }
     
     // Save to Supabase (with timeout, skip if offline)
     if (isOnline()) {
       try {
-        const { error } = await withTimeout(supabase.from('bookings').insert([{
-          id: newBooking.id,
-          client_name: newBooking.clientName,
-          shoot_date: newBooking.shootDate,
-          title: newBooking.title,
-          status: newBooking.status,
-          total_amount: newBooking.totalAmount,
-          paid_amount: newBooking.paidAmount,
-          currency: newBooking.currency,
-          exchange_rate: newBooking.exchangeRate || null,
-          service_package: newBooking.servicePackage,
-          location: newBooking.location,
-          client_id: newBooking.clientId,
-          phone: newBooking.clientPhone,
-          category: newBooking.category,
-          details: JSON.stringify(newBooking.details),
-          status_history: JSON.stringify(newBooking.statusHistory),
-          notes: newBooking.notes,
-          is_priority: newBooking.isPriority ? 1 : 0,
-          is_crew_shooting: newBooking.isCrewShooting ? 1 : 0,
-          client_token: newBooking.client_token,
-        }]), 5000);
+        let fullSchemaError: unknown = null;
 
-        if (error) throw error;
-        console.log('✅ Booking saved to Supabase');
-      } catch (e: any) {
-        console.warn('⚠️ Failed to save booking to Supabase (full schema), trying core columns...', e?.message || e);
-        try {
-          const { error: retryError } = await withTimeout(supabase.from('bookings').insert([{
-            id: newBooking.id,
-            client_name: newBooking.clientName,
-            shoot_date: newBooking.shootDate,
-            title: newBooking.title,
-            status: newBooking.status,
-            total_amount: newBooking.totalAmount,
-            paid_amount: newBooking.paidAmount,
-            currency: newBooking.currency,
-            service_package: newBooking.servicePackage,
-            location: newBooking.location,
-            client_id: newBooking.clientId,
-            category: newBooking.category,
-            details: JSON.stringify(newBooking.details),
-            status_history: JSON.stringify(newBooking.statusHistory),
-            notes: newBooking.notes,
-            client_token: newBooking.client_token,
-          }]), 5000);
+        if (!fullSchemaSyncUnsupportedGlobally) {
+          const { error } = await withTimeout(
+            supabase.from('bookings').insert([{
+              id: newBooking.id,
+              client_name: newBooking.clientName,
+              shoot_date: newBooking.shootDate,
+              title: newBooking.title,
+              status: newBooking.status,
+              total_amount: newBooking.totalAmount,
+              paid_amount: newBooking.paidAmount,
+              currency: newBooking.currency,
+              exchange_rate: newBooking.exchangeRate || null,
+              service_package: newBooking.servicePackage,
+              location: newBooking.location,
+              client_id: newBooking.clientId,
+              phone: newBooking.clientPhone,
+              category: newBooking.category,
+              details: JSON.stringify(newBooking.details),
+              status_history: JSON.stringify(newBooking.statusHistory),
+              notes: newBooking.notes,
+              is_priority: newBooking.isPriority ? 1 : 0,
+              is_crew_shooting: newBooking.isCrewShooting ? 1 : 0,
+              client_token: newBooking.client_token,
+            }]),
+            5000
+          );
+          if (error) fullSchemaError = error;
+        } else {
+          fullSchemaError = new Error('full schema disabled globally');
+        }
+
+        if (fullSchemaError) {
+          if (isSupabaseSchemaMismatch(fullSchemaError)) {
+            fullSchemaSyncUnsupportedGlobally = true;
+          }
+
+          const errorMessage = fullSchemaError instanceof Error ? fullSchemaError.message : String(fullSchemaError);
+          console.warn('⚠️ Failed to save booking to Supabase (full schema), trying core columns...', errorMessage);
+
+          const { error: retryError } = await withTimeout(
+            supabase.from('bookings').insert([{
+              id: newBooking.id,
+              client_name: newBooking.clientName,
+              shoot_date: newBooking.shootDate,
+              title: newBooking.title,
+              status: newBooking.status,
+              total_amount: newBooking.totalAmount,
+              paid_amount: newBooking.paidAmount,
+              currency: newBooking.currency,
+              service_package: newBooking.servicePackage,
+              location: newBooking.location,
+              client_id: newBooking.clientId,
+              category: newBooking.category,
+              details: JSON.stringify(newBooking.details),
+              status_history: JSON.stringify(newBooking.statusHistory),
+              notes: newBooking.notes,
+              client_token: newBooking.client_token,
+            }]),
+            5000
+          );
           if (retryError) throw retryError;
           console.log('✅ Booking saved to Supabase (core columns)');
-        } catch (e2) {
-          console.warn('⚠️ Failed to save booking to Supabase entirely (will sync later):', e2);
+        } else {
+          console.log('✅ Booking saved to Supabase');
         }
+      } catch (e2) {
+        console.warn('⚠️ Failed to save booking to Supabase entirely (will sync later):', e2);
       }
     } else {
       console.log('📴 Offline — booking will be saved locally and synced later');
@@ -1038,9 +1728,10 @@ export const electronBackend = {
           ]
         );
         console.log('✅ Booking saved to SQLite');
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const sqliteError = e instanceof Error ? e.message : String(e);
         // If exchangeRate column doesn't exist, try without it (legacy schema)
-        if (e?.message?.includes('no column named exchangeRate')) {
+        if (sqliteError.includes('no column named exchangeRate')) {
           try {
             await api.db.run(
               `INSERT OR REPLACE INTO bookings (id, clientName, clientPhone, clientId, category, title, shootDate, status, totalAmount, paidAmount, currency, servicePackage, location, details, statusHistory, notes, createdBy, isPriority, isCrewShooting, client_token)
@@ -1079,6 +1770,12 @@ export const electronBackend = {
     }
 
     bookings.push(newBooking);
+
+    if (newBooking.details?.discount) {
+      await persistDiscountRedemption(newBooking.id, newBooking.details.discount);
+      notifyListeners('discount_codes_updated');
+    }
+
     notifyListeners('bookings_updated');
     return newBooking;
   },
@@ -1189,6 +1886,8 @@ export const electronBackend = {
   },
 
   softDeleteBooking: async (id: string): Promise<void> => {
+    const deletedAt = Date.now();
+
     if (isOnline()) {
       try {
         const { error } = await withTimeout(
@@ -1202,8 +1901,18 @@ export const electronBackend = {
       }
     }
 
-    // 2. Update local cache (mark as deleted)
-    bookings = bookings.map(b => b.id === id ? { ...b, deletedAt: Date.now() } : b);
+    // 2. Persist soft-delete locally to prevent re-sync resurrection
+    const api = getElectronAPI();
+    if (api?.db) {
+      try {
+        await api.db.run('UPDATE bookings SET deletedAt = ? WHERE id = ?', [deletedAt, id]);
+      } catch (e) {
+        console.warn('⚠️ Failed to soft-delete booking in SQLite:', e);
+      }
+    }
+
+    // 3. Update in-memory cache (mark as deleted)
+    bookings = bookings.map(b => b.id === id ? { ...b, deletedAt } : b);
     notifyListeners('bookings_updated');
   },
 
@@ -1221,7 +1930,17 @@ export const electronBackend = {
       }
     }
 
-    // 2. Restore in local cache
+    // 2. Restore in local SQLite
+    const api = getElectronAPI();
+    if (api?.db) {
+      try {
+        await api.db.run('UPDATE bookings SET deletedAt = NULL WHERE id = ?', [id]);
+      } catch (e) {
+        console.warn('⚠️ Failed to restore booking in SQLite:', e);
+      }
+    }
+
+    // 3. Restore in local cache
     bookings = bookings.map(b => b.id === id ? { ...b, deletedAt: undefined } : b);
     notifyListeners('bookings_updated');
   },
@@ -1256,7 +1975,17 @@ export const electronBackend = {
       }
     }
 
-    // 2. Remove from local cache
+    // 2. Remove from local SQLite
+    const api = getElectronAPI();
+    if (api?.db) {
+      try {
+        await api.db.run('DELETE FROM bookings WHERE id = ?', [id]);
+      } catch (e) {
+        console.warn('⚠️ Failed to permanently delete booking from SQLite:', e);
+      }
+    }
+
+    // 3. Remove from local cache
     bookings = bookings.filter(b => b.id !== id);
     notifyListeners('bookings_updated');
   },
@@ -1292,7 +2021,7 @@ export const electronBackend = {
         
         const today = new Date().toDateString(); // "Mon Jan 19 2026"
         
-        tasks = allTasks.map((row: any) => ({
+        tasks = allTasks.map((row: Record<string, unknown>) => ({
             id: String(row.id),
             title: String(row.title),
             time: String(row.time || ''),
@@ -1301,7 +2030,7 @@ export const electronBackend = {
             source: (row.source || 'manual') as 'system' | 'manual' | 'supervisor',
             relatedBookingId: row.relatedBookingId ? String(row.relatedBookingId) : undefined,
             priority: (row.priority || 'normal') as 'normal' | 'high' | 'urgent',
-            createdAt: row.createdAt
+            createdAt: row.createdAt ? String(row.createdAt) : undefined,
         })).filter(t => {
             // Rule: Show if NOT completed OR (Completed AND Created/Completed Today)
             // Ideally we track 'completedAt', but we only have 'createdAt' based on schema.
@@ -1338,17 +2067,19 @@ export const electronBackend = {
                 if (existing && existing.length > 0) {
                     // Return actual existing task from database
                     const existingTask = existing[0];
-                    return {
-                        id: String(existingTask.id),
-                        title: String(existingTask.title),
-                        time: String(existingTask.time || ''),
-                        completed: Boolean(existingTask.completed),
-                        type: (existingTask.type || 'general') as ReminderType,
-                        source: (existingTask.source || 'manual') as 'system' | 'manual' | 'supervisor',
-                        relatedBookingId: existingTask.relatedBookingId ? String(existingTask.relatedBookingId) : undefined,
-                        priority: (existingTask.priority || 'normal') as 'normal' | 'high' | 'urgent',
-                        createdAt: existingTask.createdAt ? String(existingTask.createdAt) : new Date().toISOString()
-                    };
+                    if (existingTask) {
+                      return {
+                          id: String(existingTask.id),
+                          title: String(existingTask.title),
+                          time: String(existingTask.time || ''),
+                          completed: Boolean(existingTask.completed),
+                          type: (existingTask.type || 'general') as ReminderType,
+                          source: (existingTask.source || 'manual') as 'system' | 'manual' | 'supervisor',
+                          relatedBookingId: existingTask.relatedBookingId ? String(existingTask.relatedBookingId) : undefined,
+                          priority: (existingTask.priority || 'normal') as 'normal' | 'high' | 'urgent',
+                          createdAt: existingTask.createdAt ? String(existingTask.createdAt) : new Date().toISOString()
+                      };
+                    }
                 }
              }
 
@@ -1403,7 +2134,10 @@ export const electronBackend = {
          // Check if exists in memory
          const existingIndex = tasks.findIndex(t => t.id === newTask.id);
          if (existingIndex !== -1) {
-             return tasks[existingIndex];
+             const existingTask = tasks[existingIndex];
+             if (existingTask) {
+               return existingTask;
+             }
          }
          
          tasks.push(newTask);
@@ -1419,8 +2153,11 @@ export const electronBackend = {
 
     // Optimistic update for UI if we have it in memory
     if (taskIndex > -1) {
-        tasks[taskIndex].completed = !tasks[taskIndex].completed;
-        notifyListeners('tasks_updated');
+        const task = tasks[taskIndex];
+        if (task) {
+          task.completed = !task.completed;
+          notifyListeners('tasks_updated');
+        }
     }
 
     if (api?.db) {
@@ -1568,8 +2305,8 @@ export const electronBackend = {
       }));
 
       // 3. Process Local Queue (Retry Failed Uploads)
-      const pendingExpenses = JSON.parse(localStorage.getItem('pending_expenses') || '[]');
-      const remainingPending: any[] = [];
+      const pendingExpenses = JSON.parse(localStorage.getItem('pending_expenses') || '[]') as Expense[];
+      const remainingPending: Expense[] = [];
 
       for (const pending of pendingExpenses) {
         try {
@@ -1793,18 +2530,18 @@ export const electronBackend = {
           finals: Number(finalsToday[0]?.total || 0),
           outstanding: Number(totalBookingsValue[0]?.total || 0) - Number(totalPaidValue[0]?.total || 0)
         },
-        performance: staffPerformance.map((p: any) => ({
+        performance: staffPerformance.map((p: Record<string, unknown>) => ({
            name: p.name,
            role: p.role,
-           score: (p.photoCompletions || 0) + (p.shootCompletions || 0)
+           score: Number(p.photoCompletions || 0) + Number(p.shootCompletions || 0)
         })),
-        venues: venueBookings.map((b: any) => {
-           const details = JSON.parse(b.details || '{}');
+        venues: venueBookings.map((b: Record<string, unknown>) => {
+           const details = safeJsonParseMB(b.details, {}) as Record<string, unknown>;
            return {
-              location: b.location,
-              start: details.startTime,
-              end: details.endTime,
-              client: b.clientName
+              location: String(b.location || ''),
+              start: String(details.startTime || ''),
+              end: String(details.endTime || ''),
+              client: String(b.clientName || '')
            };
         })
       };
@@ -1814,7 +2551,7 @@ export const electronBackend = {
     }
   },
 
-  getInventory: async (): Promise<any[]> => {
+  getInventory: async (): Promise<InventoryItem[]> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -1837,14 +2574,14 @@ export const electronBackend = {
     return [];
   },
 
-  updateInventoryItem: async (id: string, updates: any): Promise<void> => {
+  updateInventoryItem: async (id: string, updates: InventoryUpdatePayload): Promise<void> => {
     const api = getElectronAPI();
     if (api?.db) {
       const keys = Object.keys(updates);
       if (keys.length === 0) return;
       
       // Map frontend fields to DB columns
-      const dbUpdates: any = { ...updates };
+      const dbUpdates: Record<string, unknown> = { ...updates };
       if (updates.batteryPool) {
         dbUpdates.batteryCharged = updates.batteryPool.charged;
         dbUpdates.batteryTotal = updates.batteryPool.total;
@@ -1869,7 +2606,7 @@ export const electronBackend = {
     }
   },
 
-  getInventoryLogs: async (): Promise<any[]> => {
+  getInventoryLogs: async (): Promise<InventoryLogEntry[]> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -1889,7 +2626,7 @@ export const electronBackend = {
     return [];
   },
 
-  addInventoryLog: async (log: any): Promise<void> => {
+  addInventoryLog: async (log: Pick<InventoryLogEntry, 'itemId' | 'action' | 'userId' | 'details'>): Promise<void> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -1933,7 +2670,7 @@ export const electronBackend = {
   },
 
   // ========== ACTIVITY & AUDIT (🌑 BLACK'S SENTINEL LOGS) ==========
-  getActivityLogs: async (limit = 50): Promise<any[]> => {
+  getActivityLogs: async (limit = 50): Promise<ActivityLogEntry[]> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -1956,7 +2693,7 @@ export const electronBackend = {
     return [];
   },
 
-  getProductivityStats: async (): Promise<any[]> => {
+  getProductivityStats: async (): Promise<Record<string, unknown>[]> => {
      const api = getElectronAPI();
      if (api?.db) {
          try {
@@ -1979,7 +2716,7 @@ export const electronBackend = {
   },
 
   // Get attendance records for today
-  getTodayAttendance: async (): Promise<any[]> => {
+  getTodayAttendance: async (): Promise<Record<string, unknown>[]> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -2001,7 +2738,7 @@ export const electronBackend = {
   },
 
   // Get per-employee action counts for today
-  getEmployeeActionsToday: async (): Promise<any[]> => {
+  getEmployeeActionsToday: async (): Promise<Record<string, unknown>[]> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -2023,7 +2760,7 @@ export const electronBackend = {
   },
 
   // Get bookings completed per employee today
-  getEmployeeBookingsToday: async (): Promise<any[]> => {
+  getEmployeeBookingsToday: async (): Promise<Record<string, unknown>[]> => {
     const api = getElectronAPI();
     if (api?.db) {
       try {
@@ -2044,7 +2781,7 @@ export const electronBackend = {
   },
 
   // ========== ADD-ONS & EXTRA SERVICES (🌑 BLACK'S PERSISTENCE FIX) ==========
-  addExtraService: async (bookingId: string, amount: number, description: string, userId: string, userName: string, addOnCurrency?: string): Promise<any> => {
+  addExtraService: async (bookingId: string, amount: number, description: string, userId: string, userName: string, addOnCurrency?: string): Promise<AddExtraServiceResult> => {
     const api = getElectronAPI();
     if (api?.db) {
         try {
@@ -2082,7 +2819,6 @@ export const electronBackend = {
                 // Different currency: store in addOnTotal, preserve originalPackagePrice
                 const currentAddOnTotal = Number(bookingRow?.addOnTotal || 0);
                 const currentTotal = Number(bookingRow?.totalAmount || 0);
-                const currentOriginal = Number(bookingRow?.originalPackagePrice || 0);
                 await api.db.run(
                     'UPDATE bookings SET addOnTotal = ?, originalPackagePrice = CASE WHEN originalPackagePrice IS NULL OR originalPackagePrice = 0 THEN ? ELSE originalPackagePrice END WHERE id = ?',
                     [currentAddOnTotal + amount, currentTotal, bookingId]

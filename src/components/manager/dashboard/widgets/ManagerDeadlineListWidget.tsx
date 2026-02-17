@@ -2,21 +2,24 @@ import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ManagerDashboardCard from './ManagerDashboardCard';
+import { Booking, BookingStatus } from '../../../../types';
 
-const ManagerDeadlineListWidget = ({ bookings = [] }: { bookings?: any[] }) => {
+const ManagerDeadlineListWidget = ({ bookings = [] }: { bookings?: Booking[] }) => {
   // Calculate Real Deadlines — Only show bookings WHERE client has completed photo selection
   // Delivery deadline = actualSelectionDate + 60 days
   const upcomingDeadlines = bookings
     .filter(b => {
       // Must have actualSelectionDate (client completed photo selection)
       if (!b.actualSelectionDate) return false;
-      // Exclude already delivered/cancelled/archived
-      if (b.status === 'Delivered' || b.status === 'Cancelled' || b.status === 'Archived') return false;
+      // Exclude already delivered/archived
+      if (b.status === BookingStatus.DELIVERED || b.status === BookingStatus.ARCHIVED) return false;
       return true;
     })
     .map(b => {
+        const actualSelectionDate = b.actualSelectionDate;
+        if (!actualSelectionDate) return null;
         // Deadline = actualSelectionDate + 60 days
-        const selectionDate = new Date(b.actualSelectionDate);
+        const selectionDate = new Date(actualSelectionDate);
         const deadline = new Date(selectionDate);
         deadline.setDate(deadline.getDate() + 60);
         const diffTime = deadline.getTime() - new Date().getTime();
@@ -29,6 +32,7 @@ const ManagerDeadlineListWidget = ({ bookings = [] }: { bookings?: any[] }) => {
             priority: diffDays < 3 ? 'High' : diffDays < 7 ? 'Medium' : 'Normal'
         };
     })
+    .filter((item): item is { id: string; name: string; days: number; status: BookingStatus; priority: string } => Boolean(item))
     .filter(item => item.days >= -7 && item.days <= 30) // Include 7 days overdue + next 30 days
     .sort((a, b) => a.days - b.days)
     .slice(0, 7);

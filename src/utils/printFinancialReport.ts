@@ -1,6 +1,6 @@
 import { Booking } from '../types';
 import { formatMoney } from './formatMoney';
-import { getPaymentStatus, getPaymentStatusLabel } from './paymentStatus';
+import { getPaymentStatus, getPaymentStatusLabel, type PaymentStatus } from './paymentStatus';
 
 export const printFinancialReport = (bookings: Booking[], filterStatus: string) => {
   // Calculate Totals (Respecting Currencies)
@@ -20,7 +20,8 @@ export const printFinancialReport = (bookings: Booking[], filterStatus: string) 
       .reduce((sum, b) => sum + (b.totalAmount - b.paidAmount), 0),
   };
 
-  const statusLabel = filterStatus === 'all' ? 'الكل' : getPaymentStatusLabel(filterStatus as any);
+  const statusLabel =
+    filterStatus === 'all' ? 'الكل' : getPaymentStatusLabel(filterStatus as PaymentStatus);
 
   const printWindow = window.open('', '_blank');
   if (!printWindow) {

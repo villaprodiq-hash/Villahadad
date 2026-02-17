@@ -202,7 +202,7 @@ export const MacOSLockScreen: React.FC<MacOSLockScreenProps> = ({
                 مرحباً
               </motion.div>
               <motion.div
-                className={`w-32 h-32 rounded-full bg-gradient-to-br ${getRoleColor(rememberedUser.role)} p-1 shadow-2xl`}
+                className={`w-32 h-32 rounded-full bg-linear-to-br ${getRoleColor(rememberedUser.role)} p-1 shadow-2xl`}
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 200, delay: 0.5 }}
@@ -234,7 +234,7 @@ export const MacOSLockScreen: React.FC<MacOSLockScreenProps> = ({
             >
               {/* Avatar */}
               <motion.div
-                className={`w-24 h-24 rounded-full bg-gradient-to-br ${getRoleColor(rememberedUser.role)} p-[3px] shadow-2xl mb-4`}
+                className={`w-24 h-24 rounded-full bg-linear-to-br ${getRoleColor(rememberedUser.role)} p-[3px] shadow-2xl mb-4`}
                 whileHover={{ scale: 1.05 }}
                 transition={{ type: "spring", stiffness: 300 }}
               >

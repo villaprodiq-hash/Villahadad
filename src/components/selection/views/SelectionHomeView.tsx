@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { 
   Eye, HardDrive, CheckCircle2, AlertOctagon, 
-  CalendarDays, Image as ImageIcon, Printer, 
+  CalendarDays, Printer, 
   Clock, ArrowRight, Search, Sparkles, X, Phone 
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- مكونات تصميم محسّنة ---
@@ -35,7 +36,17 @@ const GlassCard = ({ children, className = "", danger = false, gradient = false,
   </motion.div>
 );
 
-const SectionTitle = ({ icon: Icon, title, color, badge }: { icon: any, title: string, color: string, badge?: string }) => (
+const SectionTitle = ({
+  icon: Icon,
+  title,
+  color,
+  badge,
+}: {
+  icon: LucideIcon;
+  title: string;
+  color: string;
+  badge?: string;
+}) => (
   <div className="flex items-center gap-3 mb-5">
     <div className={`p-2.5 rounded-xl bg-linear-to-br from-purple-500/10 to-purple-500/10 border border-purple-500/20 shadow-sm`}>
       <Icon size={18} className={color} />
@@ -80,10 +91,6 @@ const SelectionHomeView: React.FC<SelectionHomeViewProps> = ({ bookings = [], on
 
   // --- Filter Logic ---
   const filteredBookings = bookings.filter(b => {
-      // Basic date filter (mocking date logic for now as dates are strings)
-      // In real app, compare b.shootDate or b.actualSelectionDate with today
-      return true; 
-  }).filter(b => {
       if (!searchQuery) return true;
       const clientName = b.clientName || '';
       const title = b.title || '';
@@ -120,7 +127,7 @@ const SelectionHomeView: React.FC<SelectionHomeViewProps> = ({ bookings = [], on
       id: b.id,
       client: b.clientName,
       phone: b.clientPhone,
-      date: b.shootDate.split('T')[0]
+      date: b.shootDate.slice(0, 10)
   }));
 
   const handleCall = (phone: string) => {
@@ -147,10 +154,10 @@ const SelectionHomeView: React.FC<SelectionHomeViewProps> = ({ bookings = [], on
           
           {/* Filters */}
           <div className="bg-zinc-900/60 p-0.5 rounded-lg border border-white/10 flex shadow-lg shadow-black/50">
-            {['today', 'tomorrow', 'week'].map(f => (
+            {(['today', 'tomorrow', 'week'] as const).map(f => (
               <button
                 key={f}
-                onClick={() => setFilter(f as any)}
+                onClick={() => setFilter(f)}
                 className={`relative px-2.5 py-0.5 rounded-md text-[9px] font-bold transition-all ${
                   filter === f
                   ? 'text-white'
@@ -347,7 +354,7 @@ const SelectionHomeView: React.FC<SelectionHomeViewProps> = ({ bookings = [], on
                   <motion.div 
                     key={b.id}
                     whileHover={{ x: -2 }}
-                    onClick={() => setSelectedPickup(b as any)}
+                    onClick={() => setSelectedPickup(b)}
                     className="group p-2 rounded-lg bg-linear-to-r from-emerald-500/10 to-transparent border border-emerald-500/20 hover:border-emerald-300 hover:shadow-md transition-all flex justify-between items-center cursor-pointer"
                   >
                      <div className="flex items-center gap-2">

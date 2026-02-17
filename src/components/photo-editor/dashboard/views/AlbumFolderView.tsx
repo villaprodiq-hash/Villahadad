@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Clock, Tag, Grid3x3, List, Download } from 'lucide-react';
-import { Album, AlbumImage } from '../PhotoEditorDashboard';
+import { ArrowRight, CheckCircle2, Tag, Grid3x3, List, Download } from 'lucide-react';
+import type { Album, AlbumImage } from '../types';
 import BatchExportModal, { ExportSettings } from '../widgets/BatchExportModal';
 
 interface AlbumFolderViewProps {
@@ -10,44 +9,108 @@ interface AlbumFolderViewProps {
   onOpenImage: (image: AlbumImage) => void;
 }
 
+type ImageFilter = 'all' | 'pending' | 'completed';
+
 const AlbumFolderView: React.FC<AlbumFolderViewProps> = ({ album, onBack, onOpenImage }) => {
   // Use real album images if available, otherwise show empty state
   const [loadedImages, setLoadedImages] = React.useState<AlbumImage[]>(album.images || []);
-  const [isLoadingNAS, setIsLoadingNAS] = React.useState(false);
+  const [, setIsLoadingNAS] = React.useState(false);
 
   // Try to load images from NAS folder when album opens
   React.useEffect(() => {
     const loadFromNAS = async () => {
-      if (album.folderPath && loadedImages.length === 0) {
-        setIsLoadingNAS(true);
-        try {
-          // Try Electron IPC to read NAS folder
-          if (window.electronAPI?.fileSystem?.listFiles) {
-            const files = await window.electronAPI.fileSystem.listFiles(album.folderPath);
-            const imageFiles = (files || []).filter((f: any) =>
-              /\.(jpg|jpeg|png|tiff|raw|cr2|nef|arw)$/i.test(f.name)
-            );
-            const mapped: AlbumImage[] = imageFiles.map((f: any, i: number) => ({
-              id: `img-${i + 1}`,
-              filename: f.name,
-              path: `${album.folderPath}/${f.name}`,
-              status: 'pending' as const,
-              retouchNotes: [],
-              thumbnail: `${album.folderPath}/${f.name}` // Use actual file path
-            }));
-            setLoadedImages(mapped);
+      if (loadedImages.length > 0) return;
+      setIsLoadingNAS(true);
+      try {
+        const electronAPI = window.electronAPI;
+        const listDirectory = electronAPI?.fileSystem?.listDirectory;
+        if (!listDirectory) return;
+
+        // Resolve missing folderPath from sessions table when booking row doesn't have it.
+        let resolvedSessionPath = album.folderPath || '';
+        if (!resolvedSessionPath && electronAPI?.db?.query) {
+          const attempts = [
+            {
+              sql: `SELECT nasPath AS path FROM sessions WHERE bookingId = ? AND nasPath IS NOT NULL ORDER BY updatedAt DESC LIMIT 1`,
+              params: [album.bookingId],
+            },
+            {
+              sql: `SELECT nasPath AS path FROM sessions WHERE id = ? AND nasPath IS NOT NULL ORDER BY updatedAt DESC LIMIT 1`,
+              params: [album.bookingId],
+            },
+            {
+              sql: `SELECT nas_path AS path FROM sessions WHERE booking_id = ? AND nas_path IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
+              params: [album.bookingId],
+            },
+          ];
+          for (const attempt of attempts) {
+            try {
+              const rows = await electronAPI.db.query(attempt.sql, attempt.params);
+              const firstRow = Array.isArray(rows) && rows.length > 0
+                ? (rows[0] as Record<string, unknown>)
+                : null;
+              if (firstRow?.path) {
+                resolvedSessionPath = String(firstRow.path);
+                break;
+              }
+            } catch {
+              // Try next schema variation
+            }
           }
-        } catch (err) {
-          console.warn('[AlbumFolderView] Could not load NAS folder:', err);
-        } finally {
-          setIsLoadingNAS(false);
         }
+
+        if (!resolvedSessionPath) return;
+
+        // Editor should work on client-selected photos first.
+        const selectedDir = `${resolvedSessionPath}/02_SELECTED`;
+        const rawDir = `${resolvedSessionPath}/01_RAW`;
+        let activeDir = selectedDir;
+
+        let files: Array<string | { name: string; path: string; isDirectory?: boolean }> = [];
+        try {
+          files = await listDirectory(selectedDir);
+        } catch {
+          files = [];
+        }
+        // Fallback to RAW only when no selected files exist yet.
+        if (!Array.isArray(files) || files.length === 0) {
+          activeDir = rawDir;
+          try {
+            files = await listDirectory(rawDir);
+          } catch {
+            files = [];
+          }
+        }
+
+        const imageFiles = (files || [])
+          .map((entry) =>
+            typeof entry === 'string'
+              ? { name: entry, path: `${activeDir}/${entry}` }
+              : entry
+          )
+          .filter((entry) =>
+            /\.(jpg|jpeg|png|webp|heic|tiff?|raw|cr2|cr3|nef|arw|dng|orf|rw2)$/i.test(entry.name)
+          );
+
+        const mapped: AlbumImage[] = imageFiles.map((entry, i: number) => ({
+          id: `img-${i + 1}`,
+          filename: entry.name,
+          path: entry.path || `${activeDir}/${entry.name}`,
+          status: 'pending' as const,
+          retouchNotes: [],
+          thumbnail: `file://${entry.path || `${activeDir}/${entry.name}`}`,
+        }));
+        setLoadedImages(mapped);
+      } catch (err) {
+        console.warn('[AlbumFolderView] Could not load NAS folder:', err);
+      } finally {
+        setIsLoadingNAS(false);
       }
     };
     loadFromNAS();
-  }, [album.folderPath]);
+  }, [album.bookingId, album.folderPath, loadedImages.length]);
 
-  const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [filter, setFilter] = useState<ImageFilter>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [showExportModal, setShowExportModal] = useState(false);
@@ -206,10 +269,10 @@ const AlbumFolderView: React.FC<AlbumFolderViewProps> = ({ album, onBack, onOpen
             )}
 
             {/* Filters */}
-            {['all', 'pending', 'completed'].map((f) => (
+            {(['all', 'pending', 'completed'] as const).map((f) => (
               <button
                 key={f}
-                onClick={() => setFilter(f as any)}
+                onClick={() => setFilter(f)}
                 className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
                   filter === f
                     ? 'bg-blue-600 text-white'

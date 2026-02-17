@@ -57,7 +57,7 @@ export async function seedDatabase() {
           name: 'Black',
           role: UserRole.MANAGER,
           password: defaultPassword,  // ✅ Hashed!
-          avatar: 'bg-gradient-to-br from-purple-500 to-pink-500',
+          avatar: 'bg-linear-to-br from-purple-500 to-pink-500',
           jobTitle: 'المديرة العامة',
           email: 'black@villahadad.studio',
           preferences: JSON.stringify({}),
@@ -68,7 +68,7 @@ export async function seedDatabase() {
           name: 'Sarah',
           role: UserRole.RECEPTION,
           password: defaultPassword,  // ✅ Hashed!
-          avatar: 'bg-gradient-to-br from-blue-500 to-cyan-500',
+          avatar: 'bg-linear-to-br from-blue-500 to-cyan-500',
           jobTitle: 'موظفة الاستقبال',
           email: 'sarah@villahadad.studio',
           preferences: JSON.stringify({}),
@@ -79,7 +79,7 @@ export async function seedDatabase() {
           name: 'Ahmed',
           role: UserRole.PHOTO_EDITOR,
           password: defaultPassword,  // ✅ Hashed!
-          avatar: 'bg-gradient-to-br from-green-500 to-emerald-500',
+          avatar: 'bg-linear-to-br from-green-500 to-emerald-500',
           jobTitle: 'مصمم الصور',
           email: 'ahmed@villahadad.studio',
           preferences: JSON.stringify({}),

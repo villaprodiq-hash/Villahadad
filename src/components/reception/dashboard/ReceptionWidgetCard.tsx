@@ -33,16 +33,19 @@ const ReceptionWidgetCard: React.FC<ReceptionWidgetCardProps> = ({
       {/* Optional Header Section */}
       {(title || icon || action) && (
         <div className={`p-5 border-b border-white/5 shrink-0 flex items-center justify-between relative z-40 
-          ${isPremium ? 'bg-gradient-to-r from-[#22242b] to-[#1e1e24] shadow-sm' : 'bg-[#27272a]'}`}>
+          ${isPremium ? 'bg-linear-to-r from-[#22242b] to-[#1e1e24] shadow-sm' : 'bg-[#27272a]'}`}>
           <div className="flex items-center gap-3">
              {icon && (
                <div className={`p-2 rounded-xl flex items-center justify-center border transition-all duration-300
                  ${isPremium 
-                   ? 'bg-gradient-to-br from-white/5 to-white/10 border-white/5 shadow-inner backdrop-blur-sm group-hover:from-white/10 group-hover:to-white/20' 
+                   ? 'bg-linear-to-br from-white/5 to-white/10 border-white/5 shadow-inner backdrop-blur-sm group-hover:from-white/10 group-hover:to-white/20' 
                    : 'text-[#C94557] bg-[#C94557]/10 border-[#C94557]/20'}
                `}>
                  {isPremium && React.isValidElement(icon) 
-                   ? React.cloneElement(icon as React.ReactElement<any>, { size: 18, className: 'text-gray-200' }) 
+                   ? React.cloneElement(
+                       icon as React.ReactElement<{ size?: number; className?: string }>,
+                       { size: 18, className: 'text-gray-200' }
+                     )
                    : icon
                  }
                </div>

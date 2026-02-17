@@ -16,8 +16,6 @@ import {
   WifiOff,
   Server,
   Cloud,
-  CloudOff,
-  Upload,
   X,
   ChevronDown,
   RefreshCw,
@@ -41,6 +39,7 @@ interface NetworkStatusWidgetProps {
   uploadProgress?: UploadProgress | null;
   isUploading?: boolean;
   className?: string;
+  theme?: string;
 }
 
 interface NetworkStatus {
@@ -55,6 +54,7 @@ export const NetworkStatusWidget: React.FC<NetworkStatusWidgetProps> = ({
   uploadProgress,
   isUploading,
   className = '',
+  theme: _theme = 'default',
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [status, setStatus] = useState<NetworkStatus>({
@@ -79,14 +79,11 @@ export const NetworkStatusWidget: React.FC<NetworkStatusWidgetProps> = ({
       let nasRootPath = '';
       let appFolderPath = '';
 
-      // @ts-ignore - electronAPI
       if (window.electronAPI?.nasConfig) {
         try {
-          // @ts-ignore
           const nasStatus = await window.electronAPI.nasConfig.testConnection?.();
           synology = nasStatus?.success ?? false;
 
-          // @ts-ignore
           const config = await window.electronAPI.nasConfig.getConfig?.();
           if (config) {
             nasRootPath = config.nasRootPath || '/Volumes/VillaHadad';
@@ -97,10 +94,8 @@ export const NetworkStatusWidget: React.FC<NetworkStatusWidgetProps> = ({
         }
       }
 
-      // @ts-ignore - electronAPI
       if (window.electronAPI?.sessionLifecycle?.getR2Status) {
         try {
-          // @ts-ignore
           const r2Status = await window.electronAPI.sessionLifecycle.getR2Status();
           r2 = r2Status?.enabled ?? false;
         } catch {
@@ -119,7 +114,6 @@ export const NetworkStatusWidget: React.FC<NetworkStatusWidgetProps> = ({
   // Open folder in Finder
   const handleOpenFolder = async () => {
     try {
-      // @ts-ignore - electronAPI
       await window.electronAPI?.nasConfig?.openAppFolder?.();
     } catch (error) {
       console.error('Failed to open folder:', error);
@@ -194,13 +188,6 @@ export const NetworkStatusWidget: React.FC<NetworkStatusWidgetProps> = ({
   };
 
   // Status color
-  const getStatusColor = () => {
-    if (uploading) return 'text-blue-400';
-    if (!isOnline) return 'text-red-400';
-    if (!status.synology) return 'text-amber-400';
-    return 'text-emerald-400';
-  };
-
   return (
     <div className={`relative ${className}`}>
       {/* Main Button */}
@@ -334,7 +321,7 @@ export const NetworkStatusWidget: React.FC<NetworkStatusWidgetProps> = ({
                     {/* Progress Bar */}
                     <div className="w-full h-1.5 bg-zinc-700 rounded-full overflow-hidden">
                       <motion.div
-                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full"
+                        className="h-full bg-linear-to-r from-blue-500 to-cyan-400 rounded-full"
                         initial={{ width: 0 }}
                         animate={{ width: `${uploadProgress.percent}%` }}
                         transition={{ duration: 0.3 }}

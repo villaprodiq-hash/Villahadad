@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
-  Archive, FileCheck, DollarSign, Calendar, Search, Filter, 
-  ChevronDown, ExternalLink, Building2, User 
+  Archive, DollarSign, Calendar, Search, Filter, 
+  ExternalLink, Building2, User 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Booking, BookingStatus } from '../../../../types';
 
 interface ArchivedJob {
   id: string;
   albumName: string;
   clientName: string;
-  type: 'internal' | 'external'; // 'internal' for Studio/Sura, 'external' for walk-ins/other photogs
+  type: 'internal' | 'external';
   completionDate: string;
   cost: number;
   pages: number;
@@ -17,16 +18,85 @@ interface ArchivedJob {
   thumbnail: string;
 }
 
-const PrinterArchiveView: React.FC = () => {
+interface PrinterArchiveViewProps {
+  bookings?: Booking[];
+}
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const resolveCompletionDate = (booking: Booking): string => {
+  const details = (booking.details || {}) as Record<string, unknown>;
+  const candidate =
+    (typeof details.printerDeliveredAt === 'string' && details.printerDeliveredAt) ||
+    booking.printCompletedAt ||
+    booking.updated_at ||
+    booking.createdAt ||
+    booking.shootDate;
+
+  const date = new Date(candidate || '');
+  if (Number.isNaN(date.getTime())) {
+    return 'غير محدد';
+  }
+  return date.toLocaleDateString('ar-IQ');
+};
+
+const getThumbnailForBooking = (booking: Booking): string => {
+  const category = String(booking.category || '').toLowerCase();
+  if (category.includes('wedding')) return '💍';
+  if (category.includes('birthday')) return '🎂';
+  if (category.includes('graduation')) return '🎓';
+  if (category.includes('family')) return '👨‍👩‍👧';
+  return '📘';
+};
+
+const PrinterArchiveView: React.FC<PrinterArchiveViewProps> = ({ bookings = [] }) => {
   const [filterType, setFilterType] = useState<'all' | 'internal' | 'external'>('all');
   const [searchQuery, setSearchQuery] = useState("");
 
-  // ✅ PRODUCTION: Empty archive - will be populated from completed print jobs
-  const archivedJobs: ArchivedJob[] = [];
+  const archivedJobs: ArchivedJob[] = useMemo(
+    () =>
+      bookings
+        .filter(
+          booking =>
+            booking.status === BookingStatus.ARCHIVED ||
+            booking.status === BookingStatus.DELIVERED
+        )
+        .map(booking => {
+          const details = (booking.details || {}) as Record<string, unknown>;
+          const completedImages = toNumber(
+            details.photoEditorCompletedImages ?? details.photoCount ?? 0
+          );
+          const isExternal = booking.source === 'manual';
+
+          return {
+            id: booking.id,
+            albumName: booking.title || 'ألبوم بدون عنوان',
+            clientName: booking.clientName || 'غير معروف',
+            type: isExternal ? 'external' : 'internal',
+            completionDate: resolveCompletionDate(booking),
+            cost: toNumber(booking.totalAmount),
+            pages: completedImages,
+            coverType: booking.servicePackage || 'غير محدد',
+            thumbnail: getThumbnailForBooking(booking),
+          };
+        }),
+    [bookings]
+  );
 
   const filteredJobs = archivedJobs.filter(job => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
     const matchesType = filterType === 'all' || job.type === filterType;
-    const matchesSearch = job.albumName.includes(searchQuery) || job.clientName.includes(searchQuery);
+    const matchesSearch =
+      normalizedSearch.length === 0 ||
+      job.albumName.toLowerCase().includes(normalizedSearch) ||
+      job.clientName.toLowerCase().includes(normalizedSearch);
     return matchesType && matchesSearch;
   });
 
@@ -61,7 +131,7 @@ const PrinterArchiveView: React.FC = () => {
         </div>
 
         <div className="bg-[#151a18] border border-white/5 p-4 rounded-2xl flex items-center gap-4 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-transparent" />
+          <div className="absolute top-0 right-0 w-full h-1 bg-linear-to-r from-emerald-500 to-transparent" />
           <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">
             <DollarSign size={24} />
           </div>
@@ -113,7 +183,7 @@ const PrinterArchiveView: React.FC = () => {
       </div>
 
       {/* Archive List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#151a18] border border-white/5 rounded-[1.5rem]">
+      <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#151a18] border border-white/5 rounded-3xl">
         <table className="w-full text-right">
           <thead className="bg-white/5 text-gray-400 text-[10px] uppercase tracking-wider font-medium sticky top-0 z-10 backdrop-blur-md">
             <tr>
@@ -142,7 +212,7 @@ const PrinterArchiveView: React.FC = () => {
                       </div>
                       <div>
                         <div className="text-sm font-bold text-white">{job.albumName}</div>
-                        <div className="text-[10px] text-gray-500">#{job.id.padStart(4, '0')}</div>
+                        <div className="text-[10px] text-gray-500">#{job.id.slice(0, 8)}</div>
                       </div>
                     </div>
                   </td>

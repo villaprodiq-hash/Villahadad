@@ -2,11 +2,6 @@ import React from 'react';
 import { Booking, User } from '../../../types';
 
 // --- Widgets ---
-import ManagerDashboardCard from './widgets/ManagerDashboardCard';
-// Unused imports for now, but keeping them if needed for future or removing if unused.
-// Actually, I don't need to import generated components if I am not using them in the main file explicitly except as children.
-// But I AM using them.
-
 import ManagerProfileWidget from './widgets/ManagerProfileWidget';
 import ManagerRevenueSourcesWidget from './widgets/ManagerRevenueSourcesWidget';
 import ManagerTeamStatusWidget from './widgets/ManagerTeamStatusWidget';
@@ -24,7 +19,7 @@ import PendingApprovalsWidget from '../../PendingApprovalsWidget';
 interface ManagerDashboardProps {
   bookings: Booking[];
   users: User[];
-  tasks: any[];
+  tasks: unknown[];
   onToggleTask: (id: string) => Promise<void>;
   onLogout: () => void;
 }
@@ -32,9 +27,9 @@ interface ManagerDashboardProps {
 const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
   bookings,
   users,
-  tasks,
-  onToggleTask,
-  onLogout,
+  tasks: _tasks,
+  onToggleTask: _onToggleTask,
+  onLogout: _onLogout,
 }) => {
   // Navigation is handled by App.tsx and ManagerLayout.
   // This component now strictly renders the Dashboard Overview content.

@@ -36,7 +36,7 @@ const PhotoEditorProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ proj
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-white/10"
+        className="relative bg-linear-to-br from-gray-900 to-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-white/10"
       >
         <button
           onClick={onClose}
@@ -46,7 +46,7 @@ const PhotoEditorProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ proj
         </button>
 
         <div className="text-center mb-6">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border-2 border-blue-400/30 flex items-center justify-center text-5xl shadow-lg mb-4">
+          <div className="w-20 h-20 mx-auto rounded-2xl bg-linear-to-br from-blue-500/20 to-purple-500/20 border-2 border-blue-400/30 flex items-center justify-center text-5xl shadow-lg mb-4">
             {project.thumbnail}
           </div>
           <h2 className="text-2xl font-bold text-white mb-1">{project.projectName}</h2>

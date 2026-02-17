@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Booking } from '../../../../types';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
-import { Download, FileSpreadsheet, Calendar, CheckSquare, Square, FileText, UserCheck } from 'lucide-react';
+import { CheckSquare, Square, FileText, UserCheck } from 'lucide-react';
 
 interface ClientExportWidgetProps {
     bookings: Booking[];
@@ -44,37 +44,6 @@ const ClientExportWidget: React.FC<ClientExportWidgetProps> = ({ bookings }) => 
         });
         return Array.from(clientMap.values());
     }, [bookings]);
-
-    const handleExport = () => {
-        const headers = [];
-        if (columns.name) headers.push('Client Name');
-        if (columns.phone) headers.push('Phone Number');
-        if (columns.category) headers.push('Category');
-        if (columns.visits) headers.push('Visits Count');
-        if (columns.totalSpent) headers.push('Total Spent');
-        if (columns.lastDate) headers.push('Last Visit');
-
-        const rows = clientsData.map(c => {
-            const row = [];
-            if (columns.name) row.push(c.name);
-            if (columns.phone) row.push(c.phone);
-            if (columns.category) row.push(c.category);
-            if (columns.visits) row.push(c.visits);
-            if (columns.totalSpent) row.push(c.totalSpent);
-            if (columns.lastDate) row.push(c.lastDate);
-            return row.join(',');
-        });
-
-        const csvContent = [headers.join(','), ...rows].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', `clients_database_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
 
     return (
         <ManagerDashboardCard title="تصدير قاعدة البيانات (Database Export)" className="h-full bg-white" noPadding>

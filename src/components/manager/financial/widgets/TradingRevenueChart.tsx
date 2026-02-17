@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, Calendar, Maximize2, Activity } from 'lucide-react';
+import { ArrowUpRight, Activity } from 'lucide-react';
 import { Booking } from '../../../../types';
 
 interface TradingRevenueChartProps {
@@ -9,8 +9,15 @@ interface TradingRevenueChartProps {
     exchangeRate?: number; // kept for interface compat, ignored
 }
 
-const TradingRevenueChart: React.FC<TradingRevenueChartProps> = ({ bookings, period }) => {
-    const [hoveredPoint, setHoveredPoint] = useState<any>(null);
+interface HoveredPoint {
+    x: number;
+    y: number;
+    value: number;
+    date: string;
+}
+
+const TradingRevenueChart: React.FC<TradingRevenueChartProps> = ({ bookings, period: _period }) => {
+    const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null);
 
     // Determine primary currency (whichever has more bookings)
     const primaryCurrency = useMemo(() => {
@@ -19,17 +26,20 @@ const TradingRevenueChart: React.FC<TradingRevenueChartProps> = ({ bookings, per
         return usdCount >= iqdCount ? 'USD' : 'IQD';
     }, [bookings]);
 
-    const currencySymbol = primaryCurrency === 'USD' ? '$' : 'د.ع';
-
     // 1. Process Data - NO conversion, show primary currency only
     const data = useMemo(() => {
         const sortedBookings = [...bookings]
-            .filter(b => b.currency === primaryCurrency) // Only show primary currency
+            .filter(
+              (b): b is Booking & { shootDate: string } =>
+                b.currency === primaryCurrency &&
+                typeof b.shootDate === 'string' &&
+                b.shootDate.length > 0
+            ) // Only show primary currency
             .sort((a, b) => new Date(a.shootDate).getTime() - new Date(b.shootDate).getTime());
         const grouped = new Map<string, number>();
 
         sortedBookings.forEach(b => {
-            const key = new Date(b.shootDate).toISOString().split('T')[0];
+            const key = b.shootDate.slice(0, 10);
             const amount = b.paidAmount || 0;
             grouped.set(key, (grouped.get(key) || 0) + amount);
         });

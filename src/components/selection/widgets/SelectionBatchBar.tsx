@@ -42,7 +42,7 @@ const SelectionBatchBar: React.FC<SelectionBatchBarProps> = ({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 80, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999]"
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-9999"
         >
           <div className="flex items-center gap-3 bg-gray-900/95 backdrop-blur-2xl rounded-2xl px-5 py-3 shadow-2xl shadow-black/30 border border-white/10">
             {/* Counter */}

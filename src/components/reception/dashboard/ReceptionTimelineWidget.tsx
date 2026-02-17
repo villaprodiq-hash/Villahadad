@@ -4,19 +4,39 @@ import { Booking, BookingStatus, BookingCategory, User } from '../../../types';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Camera, Briefcase, Gift, Globe } from 'lucide-react';
 import ClientBadge from '../../shared/ClientBadge';
 
+type ViewMode = 'daily' | 'weekly' | 'monthly';
+
+interface WeekDayItem {
+    dayName?: string;
+    number?: string | number;
+    date?: Date;
+    isSelected?: boolean;
+    isToday?: boolean;
+}
+
+interface WeekViewDay {
+    date?: Date;
+    bookings?: Booking[];
+}
+
+interface MonthViewDay {
+    date?: Date;
+    count?: number;
+}
+
 interface ReceptionTimelineWidgetProps {
     bookings: Booking[];
     users?: User[];
-    viewMode: 'daily' | 'weekly' | 'monthly';
-    setViewMode: (mode: 'daily' | 'weekly' | 'monthly') => void;
+    viewMode: ViewMode;
+    setViewMode: (mode: ViewMode) => void;
     selectedDate: Date;
     setSelectedDate: (date: Date) => void;
     weekOffset: number;
     setWeekOffset: (offset: number) => void;
-    weekDays: any[];
+    weekDays: WeekDayItem[];
     selectedDateBookings: Booking[];
-    weekBookings: any[];
-    monthBookings: any[][];
+    weekBookings: WeekViewDay[];
+    monthBookings: MonthViewDay[][];
     currentMonth: string;
     currentDay: string;
     onSelectBooking: (booking: Booking) => void;
@@ -84,12 +104,12 @@ const ReceptionTimelineWidget: React.FC<ReceptionTimelineWidgetProps> = ({
           </div>
         </div>
 
-        <div className="space-y-2">
+            <div className="space-y-2">
           <div className="flex gap-1 bg-black/30 p-1 rounded-lg border border-white/5">
-            {['daily', 'weekly', 'monthly'].map((mode) => (
+            {(['daily', 'weekly', 'monthly'] as ViewMode[]).map((mode) => (
                 <button 
                 key={mode}
-                onClick={() => setViewMode(mode as any)}
+                onClick={() => setViewMode(mode)}
                 className={`flex-1 px-1 py-1 rounded-md text-[9px] font-bold transition-all ${
                     viewMode === mode 
                     ? 'bg-[#C94557] text-white shadow-md' 
@@ -237,16 +257,23 @@ const ReceptionTimelineWidget: React.FC<ReceptionTimelineWidgetProps> = ({
                     </div>
                   {weekBookings && weekBookings.map((day, index) => (
                       <div key={index} className="bg-white/5 hover:bg-white/[0.07] rounded-lg p-2 border border-white/5">
+                           {(() => {
+                             const dayBookings = day?.bookings ?? [];
+                             return (
+                               <>
                            <div className="flex items-center justify-between mb-1">
                                <div>
                                    <span className="text-[9px] font-bold text-[#C94557] ml-1">{day?.date?.toLocaleDateString('ar-IQ', { weekday: 'short' })}</span>
                                    <span className="text-[9px] text-gray-400">{day?.date?.getDate()}</span>
                                </div>
-                               {day?.bookings?.length > 0 && <span className="text-[8px] bg-[#C94557] text-white px-1 rounded">{day.bookings.length}</span>}
+                               {dayBookings.length > 0 && <span className="text-[8px] bg-[#C94557] text-white px-1 rounded">{dayBookings.length}</span>}
                            </div>
-                           {day?.bookings?.slice(0, 3).map((b: any) => (
+                           {dayBookings.slice(0, 3).map((b: Booking) => (
                                <div key={b.id} onClick={() => onSelectBooking(b)} className="text-[8px] text-gray-300 py-0.5 truncate cursor-pointer hover:text-[#C94557]">• {b.clientName}</div>
                            ))}
+                               </>
+                             );
+                           })()}
                        </div>
                   ))}
                 </div>
@@ -259,20 +286,20 @@ const ReceptionTimelineWidget: React.FC<ReceptionTimelineWidgetProps> = ({
                      </div>
                      {monthBookings && monthBookings.map((week, wIndex) => (
                           <div key={wIndex} className="grid grid-cols-7 gap-0.5">
-                              {week && week.map((day: any, dIndex: number) => (
+                              {week && week.map((day: MonthViewDay, dIndex: number) => (
                                    <div 
                                        key={dIndex}
                                        onClick={() => { if(day?.date) { setSelectedDate(day.date); setViewMode('daily'); } }}
                                        className={`
                                            h-8 rounded-md flex flex-col items-center justify-center cursor-pointer border border-transparent
                                            ${!day?.date ? 'invisible' : ''}
-                                           ${day?.count > 0 ? 'bg-[#C94557]/10 border-[#C94557]/20 hover:bg-[#C94557]/20' : 'bg-white/5 hover:bg-white/10 hover:border-white/10'}
+                                           ${(day?.count ?? 0) > 0 ? 'bg-[#C94557]/10 border-[#C94557]/20 hover:bg-[#C94557]/20' : 'bg-white/5 hover:bg-white/10 hover:border-white/10'}
                                        `}
                                    >
                                        {day?.date && (
                                            <>
-                                               <span className={`text-[8px] font-bold ${day?.count > 0 ? 'text-[#C94557]' : 'text-gray-400'}`}>{day.date.getDate()}</span>
-                                               {day?.count > 0 && <span className="w-1 h-1 rounded-full bg-[#C94557] mt-0.5"/>}
+                                               <span className={`text-[8px] font-bold ${(day?.count ?? 0) > 0 ? 'text-[#C94557]' : 'text-gray-400'}`}>{day.date.getDate()}</span>
+                                               {(day?.count ?? 0) > 0 && <span className="w-1 h-1 rounded-full bg-[#C94557] mt-0.5"/>}
                                            </>
                                        )}
                                    </div>

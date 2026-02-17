@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Booking, BookingStatus, BookingCategory, User, StatusHistoryItem } from '../../../types';
-import { Clock, CheckCircle2, Camera, Calendar, AlertTriangle, Plus, Sparkles, Wallet, X, DollarSign } from 'lucide-react';
+import { Clock, CheckCircle2, Camera, Calendar, AlertTriangle, Sparkles, X, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../../lib/utils';
 import { differenceInDays, parseISO } from 'date-fns';
@@ -143,7 +143,11 @@ const ReceptionWorkflow: React.FC<ReceptionWorkflowProps> = ({
   };
 
   // ✅ Handler لإضافة خدمة إضافية — currency-aware
-  const handleAddExtraItem = (amount: number, description: string) => {
+  const handleAddExtraItem = (
+    amount: number,
+    description: string,
+    addOnCurrency: 'IQD' | 'USD' = 'IQD'
+  ) => {
     if (!selectedBookingForAction || !onUpdateBooking) return;
 
     const currentExtraItems = selectedBookingForAction.details?.extraItems || [];
@@ -154,9 +158,6 @@ const ReceptionWorkflow: React.FC<ReceptionWorkflowProps> = ({
     };
     const updatedExtraItems = [...currentExtraItems, newItem];
 
-    // The add-on currency comes from the modal; for now treat as IQD
-    // since ReceptionWorkflow doesn't pass currency through handleAddExtraItem
-    const addOnCurrency = 'IQD'; // Default — the modal defaults to IQD
     const bookingCurrency = selectedBookingForAction.currency || 'IQD';
     const isSameCurrency = addOnCurrency === bookingCurrency;
 
@@ -196,7 +197,6 @@ const ReceptionWorkflow: React.FC<ReceptionWorkflowProps> = ({
           users={users}
           onViewBooking={onViewBooking}
           onDrop={handleDrop}
-          onStatusUpdate={onStatusUpdate}
           onQuickAction={(booking) => {
             setSelectedBookingForAction(booking);
             setShowAddExtraModal(true);
@@ -211,8 +211,10 @@ const ReceptionWorkflow: React.FC<ReceptionWorkflowProps> = ({
           setShowAddExtraModal(false);
           setSelectedBookingForAction(null);
         }}
-        onAdd={(amount, description, currency) => handleAddExtraItem(amount, description)}
-        bookingCurrency={selectedBookingForAction?.currency || 'IQD'}
+        onAdd={(amount, description, currency) =>
+          handleAddExtraItem(amount, description, currency === 'USD' ? 'USD' : 'IQD')
+        }
+        bookingCurrency={selectedBookingForAction?.currency === 'USD' ? 'USD' : 'IQD'}
       />
     </div>
   );
@@ -234,16 +236,22 @@ interface WorkflowColumnProps {
   onViewBooking?: (id: string, tab?: string) => void;
   onDrop: (bookingId: string, columnId: string) => void;
   onQuickAction: (booking: Booking) => void;
-  onStatusUpdate?: (id: string, status: BookingStatus) => void;
 }
 
-const WorkflowColumn: React.FC<WorkflowColumnProps> = ({ column, bookings, users, onViewBooking, onDrop, onQuickAction, onStatusUpdate }) => {
+const WorkflowColumn: React.FC<WorkflowColumnProps> = ({
+  column,
+  bookings,
+  users,
+  onViewBooking,
+  onDrop,
+  onQuickAction,
+}) => {
   const [isOver, setIsOver] = useState(false);
 
   return (
     <div 
       className={cn(
-        "flex-1 flex flex-col bg-[#1a1a1a] rounded-[2rem] border border-white/5 shadow-2xl transition-all",
+        "flex-1 flex flex-col bg-[#1a1a1a] rounded-4xl border border-white/5 shadow-2xl transition-all",
         isOver && "ring-2 ring-white/10 bg-[#222]"
       )}
       onDragOver={(e) => { e.preventDefault(); setIsOver(true); }}
@@ -278,7 +286,6 @@ const WorkflowColumn: React.FC<WorkflowColumnProps> = ({ column, bookings, users
               users={users}
               onViewBooking={onViewBooking}
               onQuickAction={onQuickAction}
-              onStatusUpdate={onStatusUpdate}
             />
           ))}
           {bookings.length === 0 && (
@@ -298,10 +305,9 @@ interface BookingCardProps {
   users: User[];
   onViewBooking?: (id: string, tab?: string) => void;
   onQuickAction: (booking: Booking) => void;
-  onStatusUpdate?: (id: string, status: BookingStatus) => void;
 }
 
-const BookingCard: React.FC<BookingCardProps> = ({ booking, users, onViewBooking, onQuickAction, onStatusUpdate }) => {
+const BookingCard: React.FC<BookingCardProps> = ({ booking, users, onViewBooking, onQuickAction }) => {
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const timeInStage = getTimeInStage(booking.statusHistory || [], booking.status);
   const assignee = getAssigneeForStage(booking, users);
@@ -385,7 +391,7 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, users, onViewBooking
 
           {assignee && (
             <div className="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg border border-white/5">
-              <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-gradient-to-br from-purple-500 to-pink-500")}>
+              <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-linear-to-br from-purple-500 to-pink-500")}>
                 {assignee.name.charAt(0)}
               </div>
               <span className="text-[10px] font-bold text-gray-400 truncate max-w-[60px]">{assignee.name.split(' ')[0]}</span>
@@ -415,7 +421,7 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, users, onViewBooking
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-lg font-black">
+                  <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-lg font-black">
                     {booking.clientName.charAt(0)}
                   </div>
                   <div>
@@ -458,7 +464,7 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, users, onViewBooking
                     setShowQuickMenu(false);
                     onQuickAction(booking);
                   }}
-                  className="w-full py-3.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2"
                 >
                   <Sparkles size={18} />
                   إضافة خدمة إضافية

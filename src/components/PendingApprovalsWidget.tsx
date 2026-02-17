@@ -82,7 +82,7 @@ const PendingApprovalsWidget: React.FC<PendingApprovalsWidgetProps> = ({
   }
 
   return (
-    <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-2xl overflow-hidden">
+    <div className="bg-linear-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-2xl overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"

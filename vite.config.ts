@@ -73,6 +73,14 @@ export default defineConfig(({ mode }) => {
       environment: 'node',
       globals: true,
       setupFiles: ['./src/tests/vitest.setup.ts'],
+      include: ['src/**/*.{test,spec}.{ts,tsx}', 'src/**/__tests__/**/*.{ts,tsx}'],
+      exclude: [
+        'tests/**',
+        'node_modules/**',
+        '.opencode/**',
+        'dist/**',
+        'release/**',
+      ],
     },
   };
 });

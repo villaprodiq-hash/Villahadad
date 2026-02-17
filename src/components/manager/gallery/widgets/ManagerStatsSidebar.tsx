@@ -1,7 +1,34 @@
 import React from 'react';
-import { HardDrive, Activity, MoreHorizontal, CloudLightning, ChevronRight, Trash2, FileText } from 'lucide-react';
+import { MoreHorizontal, ChevronRight, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+
+type ActivityType = 'upload' | 'approve' | 'system' | 'comment' | 'create';
+
+interface ActivityItem {
+  id: string;
+  user: string;
+  action: string;
+  target: string;
+  time: string;
+  type: ActivityType;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const parseActivityLog = (log: unknown): ActivityItem | null => {
+  if (!isRecord(log)) return null;
+
+  return {
+    id: String(log.id ?? ''),
+    user: String(log.user ?? 'غير معروف'),
+    action: String(log.action ?? ''),
+    target: String(log.target ?? ''),
+    time: String(log.time ?? ''),
+    type: (log.type as ActivityType) || 'create',
+  };
+};
 
 const ManagerStatsSidebar: React.FC = () => {
   // Real Data State
@@ -17,26 +44,25 @@ const ManagerStatsSidebar: React.FC = () => {
 
   const percentage = storageData.total > 0 ? Math.round((storageData.used / storageData.total) * 100) : 0;
 
-  const [activities, setActivities] = React.useState<any[]>([]);
+  const [activities, setActivities] = React.useState<ActivityItem[]>([]);
 
   // Fetch Data on Mount
   React.useEffect(() => {
      const fetchData = async () => {
          try {
              // 1. Get Disk Stats
-             // @ts-ignore
              if (window.electronAPI?.fileSystem?.getDiskStats) {
-                 // @ts-ignore
                  const stats = await window.electronAPI.fileSystem.getDiskStats();
-                 if (stats && !stats.error) {
+                 if (stats && typeof stats.total === 'number') {
+                     const used = Math.max(0, stats.total - stats.free);
                      // Simulate breakdown ratios based on real used space (since we can't easily scan all files deeply quickly)
                      // Assumption: 50% Photo, 30% Video, 20% Other
-                     const photoSize = Math.round(stats.used * 0.5);
-                     const videoSize = Math.round(stats.used * 0.32); // Matches original ratio roughly
-                     const otherSize = Math.round(stats.used * 0.18);
+                     const photoSize = Math.round(used * 0.5);
+                     const videoSize = Math.round(used * 0.32); // Matches original ratio roughly
+                     const otherSize = Math.round(used * 0.18);
                      
                      setStorageData({
-                         used: stats.used,
+                         used,
                          total: stats.total,
                          breakdown: [
                              { type: 'صور أعراس', size: `${photoSize} GB`, color: 'bg-amber-500', width: '50%' },
@@ -48,9 +74,7 @@ const ManagerStatsSidebar: React.FC = () => {
              }
 
              // 2. Get Audit Logs (Real Activity)
-             // @ts-ignore
              if (window.electronAPI?.db?.query) {
-                 // @ts-ignore
                  const logs = await window.electronAPI.db.query(`
                     SELECT 
                         al.id, 
@@ -72,11 +96,14 @@ const ManagerStatsSidebar: React.FC = () => {
                  
                  // Fallback if no logs yet (to avoid empty state if DB is fresh)
                  if (logs && logs.length > 0) {
-                     const formattedLogs = logs.map((log: any) => ({
+                     const formattedLogs = logs
+                       .map(parseActivityLog)
+                       .filter((log): log is ActivityItem => Boolean(log))
+                       .map(log => ({
                          ...log,
                          // Format time roughly (e.g. "Just now" or "2h ago")
-                         time: new Date(log.time).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'})
-                     }));
+                         time: new Date(log.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                       }));
                      setActivities(formattedLogs);
                  } else {
                      // Keep default empty or show "No detailed logs"
@@ -84,7 +111,7 @@ const ManagerStatsSidebar: React.FC = () => {
                      // But strictly, we should show empty if we want "Real".
                      // However, to avoid breaking the UI for the user immediately if they have 0 logs:
                      setActivities([
-                        { id: 1, user: 'النظام', action: 'جاهز للعمل', target: 'تم الاتصال بقاعدة البيانات', time: 'الآن', type: 'system' }
+                        { id: 'system-ready', user: 'النظام', action: 'جاهز للعمل', target: 'تم الاتصال بقاعدة البيانات', time: 'الآن', type: 'system' }
                      ]);
                  }
              }
@@ -97,10 +124,9 @@ const ManagerStatsSidebar: React.FC = () => {
 
   const handleClearCache = async () => {
      try {
-        // @ts-ignore
-        if (window.electronAPI?.fileSystem) {
-            // @ts-ignore
-            const success = await window.electronAPI.fileSystem.clearCache();
+        const clearCache = window.electronAPI?.fileSystem?.clearCache;
+        if (clearCache) {
+            const success = await clearCache();
             if (success) {
                 toast.success("تم تنظيف الكاش بنجاح", { description: "تم حذف الملفات المؤقتة لتوفير المساحة" });
             } else {

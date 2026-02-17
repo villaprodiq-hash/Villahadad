@@ -2,9 +2,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, UserRole } from '../../../types';
 import { 
-  MessageSquare, CheckSquare, Activity, Send, User as UserIcon, 
-  MoreVertical, Clock, CheckCircle2, Circle, Plus, Hash, Sparkles, Smile,
-  Image as ImageIcon, Mic, FileText, Download, Play, Music, Paperclip, Users
+  MessageSquare, CheckSquare, Send, User as UserIcon, 
+  MoreVertical, CheckCircle2, Plus, Hash, Sparkles, Smile,
+  Mic, FileText, Download, Play, Music, Paperclip, Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReceptionPageWrapper from '../../reception/layout/ReceptionPageWrapper';
@@ -27,9 +27,17 @@ interface Message {
   url?: string;
 }
 
+interface Task {
+  id: string;
+  text: string;
+  assignee: string;
+  targetRole: string;
+  completed: boolean;
+}
+
 // ✅ PRODUCTION: Empty initial state - real data comes from database
 const INITIAL_MESSAGES: Message[] = [];
-const INITIAL_TASKS: any[] = [];
+const INITIAL_TASKS: Task[] = [];
 
 const AVAILABLE_ROLES = [
   { label: 'عام (للجميع)', value: 'all' },
@@ -40,9 +48,6 @@ const AVAILABLE_ROLES = [
   { label: 'مونتير', value: UserRole.VIDEO_EDITOR },
   { label: 'طابعة', value: UserRole.PRINTER },
 ];
-
-// ✅ PRODUCTION: Activity log comes from audit service
-const ACTIVITY_LOG: any[] = [];
 
 const SMART_SUGGESTIONS = [
   "تم الاستلام ✅",
@@ -64,7 +69,7 @@ const AdminTeamChat: React.FC<AdminTeamChatProps> = ({ currentUser, users, isMan
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [newMessage, setNewMessage] = useState('');
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   
   // New Task State
@@ -82,7 +87,7 @@ const AdminTeamChat: React.FC<AdminTeamChatProps> = ({ currentUser, users, isMan
 
     const selectedRoleLabel = AVAILABLE_ROLES.find(r => r.value === newTaskRole)?.label || 'الكل';
 
-    const newTask = {
+    const newTask: Task = {
       id: Date.now().toString(),
       text: newTaskText,
       assignee: selectedRoleLabel, // Display text
@@ -146,20 +151,21 @@ const AdminTeamChat: React.FC<AdminTeamChatProps> = ({ currentUser, users, isMan
             type="file" 
             ref={fileInputRef} 
             className="hidden" 
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const msg: Message = {
-                  id: Date.now(),
-                  user: currentUser?.name || 'أنا',
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const messageType: Message['type'] = file.type.startsWith('image/') ? 'image' : 'file';
+                  const msg: Message = {
+                    id: Date.now(),
+                    user: currentUser?.name || 'أنا',
                   text: file.name,
-                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  isMe: true,
-                  to: selectedUserId,
-                  type: (file.type.startsWith('image/') ? 'image' : 'file') as any
-                };
-                setMessages([...messages, msg]);
-              }
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    isMe: true,
+                    to: selectedUserId,
+                    type: messageType
+                  };
+                  setMessages([...messages, msg]);
+                }
             }}
           />
       <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-visible pt-4 px-2">
@@ -217,7 +223,7 @@ const AdminTeamChat: React.FC<AdminTeamChatProps> = ({ currentUser, users, isMan
             </div>
 
             <div className={`flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar ${isManager ? 'bg-white/30' : 'bg-[#1a1c22]/50'} no-scrollbar`}>
-                {filteredMessages.map((msg: any) => (
+                  {filteredMessages.map((msg) => (
                     <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'} group/msg animate-in slide-in-from-bottom-2 duration-300`}>
                         <div className={`flex items-end gap-3 max-w-[85%] ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                             {!msg.isMe && (

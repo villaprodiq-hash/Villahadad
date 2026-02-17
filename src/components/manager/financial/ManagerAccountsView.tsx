@@ -2,26 +2,47 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Booking, Expense, RecurringExpense } from '../../../types';
-import { Wallet, TrendingUp, DollarSign, Search, X, Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { Wallet, TrendingUp, Search, Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import PremiumStatCard from './widgets/PremiumStatCard';
 import TransactionHistoryWidget from './widgets/TransactionHistoryWidget';
-import FinancialExportWidget from './widgets/FinancialExportWidget';
 import ExpenseTrackerWidget from './widgets/ExpenseTrackerWidget';
 // Currency conversion removed - USD stays USD, IQD stays IQD
 import { electronBackend } from '../../../services/mockBackend';
-
-
-import { GlowCard } from '../../shared/GlowCard';
 
 interface FinancialViewProps {
   bookings: Booking[];
   onUpdateBooking?: (id: string, updates: Partial<Booking>) => void;
 }
 
+type DateRangeFilter = 'day' | 'week' | 'month' | 'year' | 'all';
+type SourceFilter = 'all' | 'sura' | 'villa';
+
+type SearchableFinancialItem = {
+  clientName?: string;
+  title?: string;
+  clientPhone?: string | number;
+  amount?: number;
+  totalAmount?: number;
+};
+
+const sourceFilters: Array<{ id: SourceFilter; label: string }> = [
+  { id: 'all', label: 'الكل' },
+  { id: 'sura', label: 'سرى' },
+  { id: 'villa', label: 'فيلا' },
+];
+
+const dateRangeFilters: Array<{ id: DateRangeFilter; label: string }> = [
+  { id: 'day', label: 'يومي' },
+  { id: 'week', label: 'أسبوعي' },
+  { id: 'month', label: 'شهري' },
+  { id: 'year', label: 'سنوي' },
+  { id: 'all', label: 'الكل' },
+];
+
 const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateBooking }) => {
   // Filter & Search State
-  const [dateRangeFilter, setDateRangeFilter] = useState<'day' | 'week' | 'month' | 'year' | 'all'>('month');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'sura' | 'villa'>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('month');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -30,7 +51,6 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
   // Mock Expenses State (Initial fallback, will be updated by loadData)
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
-  const [isDataLoading, setIsDataLoading] = useState(true);
 
   const loadExpenses = async () => {
     try {
@@ -42,8 +62,6 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
         setRecurringExpenses(recData);
     } catch (e) {
         console.error(e);
-    } finally {
-        setIsDataLoading(false);
     }
   };
 
@@ -90,10 +108,6 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
     let expensesUSD = 0;
     let expensesIQD = 0;
 
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
     // Helper for filter range
     const matchesDateRange = (dateStr: string) => {
         if (dateRangeFilter === 'all') return true;
@@ -117,7 +131,7 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
     };
 
     // Filter Logic
-    const matchesSource = (item: any) => {
+    const matchesSource = (item: Booking) => {
         if (sourceFilter === 'all') return true;
         
         // ✅ LOCATION = تأجير موقع/فيلا (case insensitive)
@@ -130,7 +144,7 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
         return true;
     };
 
-    const matchesSearch = (item: any) => {
+    const matchesSearch = (item: SearchableFinancialItem) => {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return (
@@ -209,7 +223,7 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
   }, [bookings, expenses, recurringExpenses, dateRangeFilter, sourceFilter, searchQuery]);
 
   // ✅ Professional Export Handler
-  const fileNameMap: Record<string, string> = {
+  const fileNameMap: Record<DateRangeFilter, string> = {
       day: 'يومي',
       week: 'أسبوعي',
       month: 'شهري',
@@ -260,7 +274,8 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
   const handleExport = (format: 'csv' | 'excel' | 'pdf') => {
       const data = getReportData();
       const rangeLabel = fileNameMap[dateRangeFilter];
-      const dateStr = new Date().toISOString().split('T')[0];
+      const isoNow = new Date().toISOString();
+      const dateStr = isoNow.split('T')[0] ?? isoNow.slice(0, 10);
       const fileName = `تقرير_فيلا_حداد_${rangeLabel}_${dateStr}`;
 
       if (format === 'csv' || format === 'excel') {
@@ -620,37 +635,27 @@ const ManagerAccountsView: React.FC<FinancialViewProps> = ({ bookings, onUpdateB
                         )}
                     </h3>
                     <div className="flex flex-wrap items-center gap-2">
-                        {/* Source Filter */}
-                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 p-1 rounded-xl border border-gray-100 dark:border-gray-600">
-                            {[
-                                { id: 'all', label: 'الكل' },
-                                { id: 'sura', label: 'سرى' },
-                                { id: 'villa', label: 'فيلا' }
-                            ].map((filter) => (
-                                <button
-                                    key={filter.id}
-                                    onClick={() => setSourceFilter(filter.id as any)}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${sourceFilter === filter.id ? (filter.id === 'sura' ? 'bg-violet-600 text-white' : filter.id === 'villa' ? 'bg-amber-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600') : 'text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100'}`}
-                                >
+                          {/* Source Filter */}
+                          <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 p-1 rounded-xl border border-gray-100 dark:border-gray-600">
+                              {sourceFilters.map((filter) => (
+                                  <button
+                                      key={filter.id}
+                                      onClick={() => setSourceFilter(filter.id)}
+                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${sourceFilter === filter.id ? (filter.id === 'sura' ? 'bg-violet-600 text-white' : filter.id === 'villa' ? 'bg-amber-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600') : 'text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100'}`}
+                                  >
                                     {filter.label}
                                 </button>
                             ))}
                         </div>
 
-                        {/* Date Range Filter */}
-                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 p-1 rounded-xl border border-gray-100 dark:border-gray-600">
-                            {[
-                                { id: 'day', label: 'يومي' },
-                                { id: 'week', label: 'أسبوعي' },
-                                { id: 'month', label: 'شهري' },
-                                { id: 'year', label: 'سنوي' },
-                                { id: 'all', label: 'الكل' }
-                            ].map((filter) => (
-                                <button
-                                    key={filter.id}
-                                    onClick={() => setDateRangeFilter(filter.id as any)}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${dateRangeFilter === filter.id ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600' : 'text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100'}`}
-                                >
+                          {/* Date Range Filter */}
+                          <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 p-1 rounded-xl border border-gray-100 dark:border-gray-600">
+                              {dateRangeFilters.map((filter) => (
+                                  <button
+                                      key={filter.id}
+                                      onClick={() => setDateRangeFilter(filter.id)}
+                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${dateRangeFilter === filter.id ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600' : 'text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100'}`}
+                                  >
                                     {filter.label}
                                 </button>
                             ))}

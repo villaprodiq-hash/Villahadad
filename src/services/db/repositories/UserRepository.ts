@@ -68,7 +68,7 @@ export const UserRepository = {
 
   async update(id: string, updates: Partial<User>): Promise<void> {
     try {
-      const updateData: any = { ...updates };
+      const updateData: Record<string, unknown> = { ...updates };
       if (updates.preferences) {
         updateData.preferences = JSON.stringify(updates.preferences);
       }

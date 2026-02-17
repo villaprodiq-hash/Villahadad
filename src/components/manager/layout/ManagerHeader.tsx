@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, Bell, Server, UploadCloud, Moon, Sun, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Settings, Server, Moon, Sun, Trash2 } from 'lucide-react';
 
 import { User } from '../../../types'; 
 import NetworkStatusWidget from '../../shared/NetworkStatusWidget';
-import { offlineManager } from '../../../services/offline/OfflineManager';
 import NotificationCenter from '../../shared/NotificationCenter';
 import { ConflictNotificationBell } from '../../sync/ConflictNotificationBell';
  
@@ -15,7 +14,7 @@ interface ManagerHeaderProps {
   onLogout?: () => void;
   onOpenSettings?: () => void;
   onOpenDeletedBookings?: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
   isDarkMode?: boolean;
   themeMode?: 'light' | 'dark' | 'auto';
   toggleTheme?: () => void;
@@ -23,7 +22,6 @@ interface ManagerHeaderProps {
 
 const ManagerHeader: React.FC<ManagerHeaderProps> = ({ activeSection, onNavigate, currentUser, onLogout, onOpenSettings, onOpenDeletedBookings, badges, isDarkMode, themeMode, toggleTheme }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showNasDetails, setShowNasDetails] = useState(false);
   
 
 

@@ -122,14 +122,14 @@ const AddExtraItemModal: React.FC<AddExtraItemModalProps> = ({
         dir="rtl"
       >
         {/* Header with Gradient */}
-        <div className="relative p-6 border-b border-white/10 bg-gradient-to-br from-purple-500/10 via-transparent to-pink-500/5">
+        <div className="relative p-6 border-b border-white/10 bg-linear-to-br from-purple-500/10 via-transparent to-pink-500/5">
           {/* Decorative */}
           <div className="absolute top-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 right-0 w-24 h-24 bg-pink-500/10 rounded-full blur-2xl pointer-events-none" />
           
           <div className="relative flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
+              <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
                 <Sparkles size={22} />
               </div>
               <div>
@@ -209,7 +209,7 @@ const AddExtraItemModal: React.FC<AddExtraItemModalProps> = ({
             
             {/* Live Preview */}
             {numericAmount > 0 && (
-              <div className="mt-3 p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-xl border border-purple-500/20 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-3 p-3 bg-linear-to-r from-purple-500/10 to-pink-500/10 rounded-xl border border-purple-500/20 animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-400">المبلغ:</span>
                   <span className={`text-lg font-black ${selectedCurrency === 'USD' ? 'text-green-400' : 'text-purple-400'}`}>
@@ -264,7 +264,7 @@ const AddExtraItemModal: React.FC<AddExtraItemModalProps> = ({
             <button
               onClick={handleSubmit}
               disabled={!numericAmount || !description.trim()}
-              className="flex-1 py-3.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+              className="flex-1 py-3.5 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
             >
               <Plus size={18} />
               إضافة

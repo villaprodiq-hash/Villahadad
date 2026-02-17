@@ -4,26 +4,13 @@ import {
   Package,
   CheckCircle2,
   AlertCircle,
-  Palette,
-  Box,
-  TruckIcon,
-  Eye,
-  Star,
   Clock,
-  ArrowRight,
   X,
-  Droplet,
   FileText,
-  Layers,
   Plus,
-  CheckSquare,
-  Sparkles,
   MonitorPlay,
-  ExternalLink,
-  ArrowLeft,
   Search,
   Filter,
-  Phone,
   MessageCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,9 +25,10 @@ import {
   BookingStatus,
   BookingCategory,
   User,
-  UserRole,
   ROLE_PERMISSIONS,
 } from '../../../types';
+import { getWhatsAppUrl, openWhatsAppUrl } from '../../../utils/whatsapp';
+import { ALBUMS_PACKAGES_DATA } from '../../../services/constants';
 
 // Types
 interface PrintJob {
@@ -62,18 +50,110 @@ interface PrintJob {
   source: 'workflow' | 'manual'; // Track origin of job
 }
 
-interface Task {
-  id: number;
-  text: string;
-  done: boolean;
+interface PrinterInventoryProduct {
+  id: string;
+  name: string;
+  category: 'album' | 'set' | 'package';
+  price: number;
+  stock: number;
+  description?: string;
 }
+
+type PrinterJobFormState = Partial<PrintJob> & {
+  productCatalogId?: string;
+  unitPrice?: number;
+};
+
+const PRINTER_INVENTORY_STORAGE_KEY = 'printer_inventory_items_v1';
+
+const FALLBACK_PRODUCTS: PrinterInventoryProduct[] = ALBUMS_PACKAGES_DATA.map(item => {
+  const category: PrinterInventoryProduct['category'] =
+    item.categoryId === 'album_sets'
+      ? 'set'
+      : item.categoryId === 'album_single'
+        ? 'album'
+        : 'package';
+
+  return {
+    id: item.id,
+    name: item.title,
+    category,
+    price: item.price,
+    stock: 1,
+    description: item.features?.join(' • ')
+  };
+});
+
+const extractBestWhatsAppPhone = (rawPhone?: string): string => {
+  if (!rawPhone) return '';
+
+  const source = String(rawPhone).trim();
+  if (!source) return '';
+
+  const candidates = source
+    .split(/[,\n/|]+/g)
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  const all = candidates.length > 0 ? candidates : [source];
+  for (const candidate of all) {
+    const digits = candidate.replace(/\D/g, '');
+    if (!digits) continue;
+    if (digits.length >= 10) return digits;
+  }
+
+  return '';
+};
+
+const readPrinterProductsFromStorage = (): PrinterInventoryProduct[] => {
+  if (typeof window === 'undefined') return FALLBACK_PRODUCTS;
+
+  try {
+    const raw = window.localStorage.getItem(PRINTER_INVENTORY_STORAGE_KEY);
+    if (!raw) return FALLBACK_PRODUCTS;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return FALLBACK_PRODUCTS;
+
+    const normalized = parsed
+      .filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof item.id === 'string' &&
+          typeof item.name === 'string' &&
+          typeof item.category === 'string' &&
+          typeof item.price !== 'undefined' &&
+          typeof item.stock !== 'undefined'
+      )
+      .map(item => {
+        const category: PrinterInventoryProduct['category'] =
+          item.category === 'album' || item.category === 'set' || item.category === 'package'
+            ? item.category
+            : 'package';
+        return {
+          id: String(item.id),
+          name: String(item.name),
+          category,
+          price: Number(item.price) || 0,
+          stock: Number(item.stock) || 0,
+          description: typeof item.description === 'string' ? item.description : undefined,
+        };
+      })
+      .filter(item => item.category === 'album' || item.category === 'set' || item.category === 'package');
+
+    return normalized.length > 0 ? normalized : FALLBACK_PRODUCTS;
+  } catch (error) {
+    console.error('[PrinterDashboard] Failed to read inventory products:', error);
+    return FALLBACK_PRODUCTS;
+  }
+};
 
 interface PrinterDashboardProps {
   activeSection?: string;
   bookings?: Booking[];
   users?: User[];
   currentUser?: User;
-  onStatusUpdate?: (id: string, status: BookingStatus) => Promise<void>;
+  onStatusUpdate?: (id: string, status: BookingStatus, updates?: Partial<Booking>) => Promise<void>;
   onUpdateBooking?: (id: string, updates: Partial<Booking>) => Promise<void>;
   onAddBooking?: (booking: Omit<Booking, 'id'>) => Promise<void>;
 }
@@ -89,28 +169,6 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'queue' | 'printing' | 'ready' | 'delivered'>('queue');
   const [selectedJob, setSelectedJob] = useState<PrintJob | null>(null);
-
-  // --- Task State (Real System Tasks Only) ---
-  // Tasks source from 'tasks' prop or backend in future.
-  // For now, removing hardcoded fake tasks.
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [newTaskText, setNewTaskText] = useState('');
-
-  const handleAddTask = () => {
-    if (!newTaskText.trim()) return;
-    const newTask: Task = {
-      id: Date.now(),
-      text: newTaskText,
-      done: false,
-    };
-    setTasks(prev => [...prev, newTask]);
-    toast.success('تم إضافة المهمة بنجاح');
-    setNewTaskText('');
-  };
-
-  const toggleTask = (id: number) => {
-    setTasks(prev => prev.map(t => (t.id === id ? { ...t, done: !t.done } : t)));
-  };
 
   // Job State - Derived from Bookings
   // Map booking status to job status
@@ -154,7 +212,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
   const [showEditJobModal, setShowEditJobModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<PrintJob | null>(null);
-  const [newJob, setNewJob] = useState<Partial<PrintJob>>({
+  const [newJob, setNewJob] = useState<PrinterJobFormState>({
     priority: 'normal',
     status: 'queue',
     quantity: 1,
@@ -162,38 +220,89 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
     source: 'manual',
   });
   const [editingJob, setEditingJob] = useState<PrintJob | null>(null);
+  const [printerProducts, setPrinterProducts] = useState<PrinterInventoryProduct[]>(() =>
+    readPrinterProductsFromStorage()
+  );
+
+  useEffect(() => {
+    if (!showAddJobModal && !showEditJobModal) return;
+    setPrinterProducts(readPrinterProductsFromStorage());
+  }, [showAddJobModal, showEditJobModal]);
+
+  const getInitialFormState = (): PrinterJobFormState => ({
+    priority: 'normal',
+    status: 'queue',
+    quantity: 1,
+    thumbnail: '📄',
+    source: 'manual',
+  });
+
+  const handleSelectProduct = (productId: string) => {
+    const product = printerProducts.find(item => item.id === productId);
+    if (!product) {
+      setNewJob(prev => ({
+        ...prev,
+        productCatalogId: undefined,
+        productType: '',
+        unitPrice: 0,
+      }));
+      return;
+    }
+
+    setNewJob(prev => ({
+      ...prev,
+      productCatalogId: product.id,
+      productType: product.name,
+      unitPrice: product.price,
+      paperType: product.description || product.name,
+    }));
+  };
+
+  const computedTotal = (newJob.unitPrice || 0) * (newJob.quantity || 1);
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newJob.clientName || !newJob.productType) {
-      toast.error('يرجى ملء جميع الحقول المطلوبة');
+    if (!newJob.clientName || !newJob.productType || !newJob.productCatalogId) {
+      toast.error('يرجى اختيار المنتج من المخزن وإكمال الحقول المطلوبة');
+      return;
+    }
+
+    if ((newJob.quantity || 1) <= 0) {
+      toast.error('الكمية يجب أن تكون أكبر من صفر');
       return;
     }
 
     if (onAddBooking) {
       try {
+        const quantity = newJob.quantity || 1;
+        const unitPrice = newJob.unitPrice || 0;
+        const totalAmount = unitPrice * quantity;
         const newBooking: Omit<Booking, 'id'> = {
           clientId: `client-${Date.now()}`, // Generate a temporary client ID
           clientName: newJob.clientName,
           clientPhone: newJob.clientPhone || '',
           title: newJob.productType,
-          shootDate: new Date().toISOString().split('T')[0],
+          shootDate: new Date().toISOString().slice(0, 10),
           category: BookingCategory.WEDDING,
           status: BookingStatus.READY_TO_PRINT,
           servicePackage: newJob.paperType || 'طباعة عادية',
           deliveryDeadline: newJob.deadline || '',
           location: 'فيلا حداد',
           folderPath: '',
-          totalAmount: 0, // Default to 0, can be updated later
+          totalAmount,
           paidAmount: 0,
           currency: 'IQD',
-          details: {},
+          details: {
+            printerProductId: newJob.productCatalogId,
+            printerUnitPrice: unitPrice,
+            printerQuantity: quantity,
+          },
         };
 
         await onAddBooking(newBooking);
         toast.success('تم إضافة الطلب بنجاح');
         setShowAddJobModal(false);
-        setNewJob({ priority: 'normal', status: 'queue', quantity: 1, thumbnail: '📄' });
+        setNewJob(getInitialFormState());
       } catch (error) {
         toast.error('حدث خطأ أثناء إضافة الطلب');
       }
@@ -233,28 +342,26 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
         bookingStatus = BookingStatus.READY_FOR_PICKUP;
         break;
       case 'delivered':
-        bookingStatus = BookingStatus.DELIVERED;
+        bookingStatus = BookingStatus.ARCHIVED;
         break;
       default:
         bookingStatus = BookingStatus.READY_TO_PRINT;
     }
 
     if (onStatusUpdate) {
-      await onStatusUpdate(id, bookingStatus);
-
-      // Record delivery time if applicable
-      if (newStatus === 'delivered' && onUpdateBooking) {
-        const timestamp = new Date().toISOString();
-        const currentBooking = bookings.find(b => b.id === id);
-        if (currentBooking) {
-          await onUpdateBooking(id, {
+      const currentBooking = bookings.find(b => b.id === id);
+      const deliveredAt = newStatus === 'delivered' ? new Date().toISOString() : undefined;
+      const statusUpdates: Partial<Booking> | undefined = deliveredAt
+        ? {
+            printCompletedAt: deliveredAt,
             details: {
-              ...currentBooking.details,
-              printerDeliveredAt: timestamp,
+              ...(currentBooking?.details || {}),
+              printerDeliveredAt: deliveredAt,
             },
-          });
-        }
-      }
+          }
+        : undefined;
+
+      await onStatusUpdate(id, bookingStatus, statusUpdates);
 
       // Optimistic UI update for selected job modal
       if (selectedJob && selectedJob.id === id) {
@@ -263,7 +370,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
 
       if (newStatus === 'printing') toast.success('تم بدء عملية الطباعة');
       if (newStatus === 'ready') toast.success('الطلب جاهز للتسليم الآن');
-      if (newStatus === 'delivered') toast.success('تم تسليم الطلب للعميل، الله يبارك!');
+      if (newStatus === 'delivered') toast.success('تم تسليم الطلب وأرشفته تلقائياً');
     }
   };
 
@@ -283,20 +390,35 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
   };
 
   const handleSendWhatsapp = async (job: PrintJob) => {
-    // فحص صلاحية الوصول للهاتف
     const canViewPhone = currentUser && ROLE_PERMISSIONS[currentUser.role]?.canViewClientPhone;
-    if (!canViewPhone) {
-      toast.error('ليس لديك صلاحية الوصول لرقم هاتف العميل');
+    const phone = canViewPhone ? extractBestWhatsAppPhone(job.clientPhone) : '';
+
+    const message = [
+      `مرحباً ${job.clientName} ✨`,
+      '',
+      'نبشّركم أن طلبكم صار جاهز للاستلام ✅',
+      `المنتج: ${job.productType}`,
+      `الكمية: ${job.quantity || 1}`,
+      '',
+      'الدوام: يومياً من 10:00 صباحاً إلى 10:00 مساءً',
+      'العنوان: فيلا حداد - قسم الطباعة',
+      '',
+      'ننتظركم بكل محبة، وأي استفسار إحنا بالخدمة 💛',
+    ].join('\n');
+    const url = getWhatsAppUrl(phone, message);
+
+    if (!url) {
+      toast.error('تعذر إنشاء رابط واتساب');
       return;
     }
 
-    const phone = job.clientPhone || '';
-    const message = encodeURIComponent(
-      `مرحباً ${job.clientName}،\nطلبك (${job.productType}) جاهز الآن للاستلام من فيلا حداد.\nننتظر زيارتكم! 🌹`
-    );
-    const url = `https://wa.me/${phone}?text=${message}`;
-
-    window.open(url, '_blank');
+    try {
+      await openWhatsAppUrl(url);
+    } catch (error) {
+      console.error('[PrinterDashboard] Failed to open WhatsApp:', error);
+      toast.error('تعذر فتح واتساب');
+      return;
+    }
 
     const timestamp = new Date().toISOString();
     // Persist notification time
@@ -307,7 +429,11 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
           printerNotificationSentAt: timestamp,
         },
       });
-      toast.success('تم فتح واتساب وتسجيل وقت الإشعار');
+      if (phone) {
+        toast.success('تم فتح واتساب برقم العميل وتسجيل وقت الإشعار');
+      } else {
+        toast.success('تم فتح واتساب بدون رقم (يمكن اختيار جهة الاتصال يدوياً)');
+      }
     } else {
       toast.success('تم فتح واتساب (لم يتم الحفظ - خطأ في الاتصال)');
     }
@@ -319,15 +445,29 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
       toast.error('لا يمكن تعديل المشاريع القادمة من سير العمل');
       return;
     }
+    const bookingDetails = job.rawBooking?.details as
+      | {
+          printerProductId?: string;
+          printerUnitPrice?: number;
+          printerQuantity?: number;
+        }
+      | undefined;
+
+    const matchedProduct =
+      printerProducts.find(item => item.id === bookingDetails?.printerProductId) ||
+      printerProducts.find(item => item.name === job.productType);
+
     setEditingJob(job);
     setNewJob({
       clientName: job.clientName,
       clientPhone: job.clientPhone,
-      productType: job.productType,
-      quantity: job.quantity,
+      productType: matchedProduct?.name || job.productType,
+      productCatalogId: matchedProduct?.id,
+      quantity: bookingDetails?.printerQuantity || job.quantity,
+      unitPrice: bookingDetails?.printerUnitPrice || matchedProduct?.price || 0,
       priority: job.priority,
       deadline: job.deadline,
-      paperType: job.paperType,
+      paperType: job.paperType || matchedProduct?.description || job.productType,
       thumbnail: job.thumbnail,
       source: 'manual',
     });
@@ -338,30 +478,33 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
   // Handle Update Job
   const handleUpdateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingJob || !newJob.clientName || !newJob.productType) {
-      toast.error('يرجى ملء جميع الحقول المطلوبة');
+    if (!editingJob || !newJob.clientName || !newJob.productType || !newJob.productCatalogId) {
+      toast.error('يرجى اختيار المنتج من المخزن وإكمال الحقول المطلوبة');
       return;
     }
 
     if (onUpdateBooking && editingJob.rawBooking) {
       try {
+        const quantity = newJob.quantity || 1;
+        const unitPrice = newJob.unitPrice || 0;
         await onUpdateBooking(editingJob.id, {
           clientName: newJob.clientName,
           clientPhone: newJob.clientPhone || '',
           title: newJob.productType,
           servicePackage: newJob.paperType || 'طباعة عادية',
           deliveryDeadline: newJob.deadline || '',
+          totalAmount: unitPrice * quantity,
+          details: {
+            ...(editingJob.rawBooking.details || {}),
+            printerProductId: newJob.productCatalogId,
+            printerUnitPrice: unitPrice,
+            printerQuantity: quantity,
+          },
         });
         toast.success('تم تحديث الطلب بنجاح');
         setShowEditJobModal(false);
         setEditingJob(null);
-        setNewJob({
-          priority: 'normal',
-          status: 'queue',
-          quantity: 1,
-          thumbnail: '📄',
-          source: 'manual',
-        });
+        setNewJob(getInitialFormState());
       } catch (error) {
         toast.error('حدث خطأ أثناء تحديث الطلب');
       }
@@ -420,18 +563,6 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
     return `${Math.floor(diffHours)} ساعة`;
   };
 
-  // Material Inventory - Simplified to just check connectivity
-  // TODO: Connect to backend service later
-  const materials = [
-    {
-      name: 'حالة الطابعة',
-      level: 100,
-      max: 100,
-      unit: '%',
-      color: 'from-emerald-500 to-emerald-600',
-    },
-  ];
-
   // View Switching Logic
   type View = 'dashboard' | 'archive' | 'inventory' | 'team-chat'; // Add team-chat
   const [view, setView] = useState<View>('dashboard');
@@ -445,7 +576,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
   }, [activeSection]);
 
   if (view === 'archive') {
-    return <PrinterArchiveView />;
+    return <PrinterArchiveView bookings={bookings} />;
   }
 
   if (view === 'inventory') {
@@ -456,45 +587,14 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
     return <UnifiedTeamChat currentUser={currentUser} users={users} />;
   }
 
-  // Simplified Timeline
-  const TimelineStep = ({
-    active,
-    completed,
-    label,
-    last,
-  }: {
-    active: boolean;
-    completed: boolean;
-    label: string;
-    last?: boolean;
-  }) => (
-    <div className="flex flex-col relative">
-      <div className="flex items-center gap-3 relative z-10">
-        <div
-          className={`w-3 h-3 rounded-full border-2 transition-colors duration-300 ${active ? 'bg-emerald-500 border-emerald-500' : completed ? 'bg-emerald-500 border-emerald-500' : 'bg-transparent border-gray-600'}`}
-        />
-        <span
-          className={`text-[10px] font-medium ${active ? 'text-emerald-400 font-bold' : completed ? 'text-gray-400' : 'text-gray-600'}`}
-        >
-          {label}
-        </span>
-      </div>
-      {!last && (
-        <div
-          className={`w-0.5 h-4 mr-[5px] my-0.5 ${completed ? 'bg-emerald-500/50' : 'bg-white/5'}`}
-        />
-      )}
-    </div>
-  );
-
   return (
-    <div className="h-full w-full bg-[#0a0f0d] flex flex-col overflow-hidden relative font-sans text-gray-100 selection:bg-emerald-500/30">
+    <div className="h-full min-h-0 w-full bg-[#0a0f0d] flex flex-col overflow-x-hidden overflow-y-auto xl:overflow-hidden relative font-sans text-gray-100 selection:bg-emerald-500/30">
       {/* Background Ambience */}
       <div className="absolute top-[-20%] right-[20%] w-[60%] h-[40%] bg-emerald-900/10 blur-[150px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] left-[-10%] w-[40%] h-[40%] bg-teal-900/10 blur-[120px] rounded-full pointer-events-none" />
 
       {/* --- HEADER --- */}
-      <div className="h-16 shrink-0 border-b border-white/5 flex items-center justify-between px-6 bg-[#0a0f0d]/50 backdrop-blur-sm z-20">
+      <div className="shrink-0 border-b border-white/5 flex flex-wrap items-center justify-between gap-3 px-3 py-3 sm:px-4 lg:h-16 lg:flex-nowrap lg:px-6 lg:py-0 bg-[#0a0f0d]/50 backdrop-blur-sm z-20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-linear-to-br from-emerald-600 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <PrinterIcon size={20} className="text-white" />
@@ -518,13 +618,13 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex p-6 gap-6 relative z-10">
+      <div className="flex-1 min-h-0 overflow-y-auto xl:overflow-hidden flex flex-col xl:flex-row p-3 sm:p-4 lg:p-6 gap-4 lg:gap-6 relative z-10">
         {/* --- LEFT COLUMN: QUEUE & JOBS --- */}
         <div className="flex-1 flex flex-col min-w-0 gap-6">
           {/* Workflow Tracker & Toolbar */}
           <div className="flex flex-col gap-6">
             {/* Workflow Status Cards */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 lg:gap-4">
               {[
                 {
                   id: 'queue',
@@ -565,7 +665,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
               ].map(status => (
                 <button
                   key={status.id}
-                  onClick={() => setActiveTab(status.id as any)}
+                  onClick={() => setActiveTab(status.id as PrintJob['status'])}
                   className={`relative p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3 group
                            ${activeTab === status.id ? `${status.bg} ${status.border} ring-1 ring-inset ring-white/10` : 'bg-[#151a18] border-white/5 hover:border-white/10'}
                         `}
@@ -597,8 +697,8 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
             </div>
 
             {/* Filters & Actions Toolbar */}
-            <div className="flex items-center justify-between bg-[#151a18] p-2 rounded-2xl border border-white/5">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 bg-[#151a18] p-2 rounded-2xl border border-white/5">
+              <div className="flex items-center gap-2 w-full xl:w-auto">
                 <div className="relative">
                   <Search
                     size={14}
@@ -607,7 +707,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                   <input
                     type="text"
                     placeholder="بحث في الطلبات..."
-                    className="pl-4 pr-9 py-2.5 rounded-xl bg-black/20 border border-white/5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 w-64 transition-all"
+                    className="pl-4 pr-9 py-2.5 rounded-xl bg-black/20 border border-white/5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 w-full sm:w-64 transition-all"
                   />
                 </div>
                 <button className="p-2.5 rounded-xl bg-black/20 border border-white/5 text-gray-400 hover:text-white transition-colors hover:bg-white/5">
@@ -615,7 +715,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 px-2">
+              <div className="flex items-center gap-3 px-2 justify-center xl:justify-start">
                 <div className="h-4 w-px bg-white/10" />
                 <span className="text-[10px] text-gray-500 font-medium">
                   عرض:{' '}
@@ -631,7 +731,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
 
               <button
                 onClick={() => setShowAddJobModal(true)}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 hover:-translate-y-0.5"
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 hover:-translate-y-0.5 w-full xl:w-auto"
               >
                 <Plus size={16} />
                 <span>عمل جديد</span>
@@ -641,7 +741,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
 
           {/* Jobs Grid */}
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               <AnimatePresence mode="popLayout">
                 {filteredJobs.map((job, idx) => (
                   <motion.div
@@ -727,7 +827,7 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
         </div>
 
         {/* --- RIGHT COLUMN: TASKS PANEL --- */}
-        <div className="w-80 flex flex-col gap-6 shrink-0">
+        <div className="w-full xl:w-80 flex flex-col gap-6 shrink-0">
           {/* Tasks Panel */}
           <TasksPanel isManager={false} />
         </div>
@@ -958,14 +1058,22 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">نوع المنتج</label>
-                  <input
+                  <label className="text-xs text-gray-400">نوع الألبوم / المنتج (من المخزن)</label>
+                  <select
                     required
-                    value={newJob.productType || ''}
-                    onChange={e => setNewJob({ ...newJob, productType: e.target.value })}
+                    value={newJob.productCatalogId || ''}
+                    onChange={e => handleSelectProduct(e.target.value)}
                     className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-emerald-500/50 outline-none"
-                    placeholder="مثال: ألبوم زفاف 30x40"
-                  />
+                  >
+                    <option value="">اختر منتجاً من المخزن</option>
+                    {printerProducts
+                      .filter(item => item.stock > 0)
+                      .map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} - {item.price.toLocaleString()} د.ع ({item.stock} متاح)
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -983,7 +1091,12 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                     <label className="text-xs text-gray-400">الأولوية</label>
                     <select
                       value={newJob.priority || 'normal'}
-                      onChange={e => setNewJob({ ...newJob, priority: e.target.value as any })}
+                      onChange={e =>
+                        setNewJob({
+                          ...newJob,
+                          priority: e.target.value as PrintJob['priority'],
+                        })
+                      }
                       className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-emerald-500/50 outline-none"
                     >
                       <option value="normal">عادية</option>
@@ -1001,6 +1114,21 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                     onChange={e => setNewJob({ ...newJob, deadline: e.target.value })}
                     className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-emerald-500/50 outline-none"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">سعر القطعة</label>
+                    <div className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-emerald-300 font-mono">
+                      {(newJob.unitPrice || 0).toLocaleString()} د.ع
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">الإجمالي</label>
+                    <div className="w-full bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-sm text-emerald-300 font-bold font-mono">
+                      {computedTotal.toLocaleString()} د.ع
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-4 flex gap-3">
@@ -1072,14 +1200,22 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">نوع المنتج</label>
-                  <input
+                  <label className="text-xs text-gray-400">نوع الألبوم / المنتج (من المخزن)</label>
+                  <select
                     required
-                    value={newJob.productType || ''}
-                    onChange={e => setNewJob({ ...newJob, productType: e.target.value })}
+                    value={newJob.productCatalogId || ''}
+                    onChange={e => handleSelectProduct(e.target.value)}
                     className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-blue-500/50 outline-none"
-                    placeholder="مثال: ألبوم زفاف 30x40"
-                  />
+                  >
+                    <option value="">اختر منتجاً من المخزن</option>
+                    {printerProducts
+                      .filter(item => item.stock > 0 || item.id === newJob.productCatalogId)
+                      .map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} - {item.price.toLocaleString()} د.ع ({item.stock} متاح)
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -1097,7 +1233,12 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                     <label className="text-xs text-gray-400">الأولوية</label>
                     <select
                       value={newJob.priority || 'normal'}
-                      onChange={e => setNewJob({ ...newJob, priority: e.target.value as any })}
+                      onChange={e =>
+                        setNewJob({
+                          ...newJob,
+                          priority: e.target.value as PrintJob['priority'],
+                        })
+                      }
                       className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-blue-500/50 outline-none"
                     >
                       <option value="normal">عادية</option>
@@ -1115,6 +1256,21 @@ const PrinterDashboard: React.FC<PrinterDashboardProps> = ({
                     onChange={e => setNewJob({ ...newJob, deadline: e.target.value })}
                     className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-blue-500/50 outline-none"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">سعر القطعة</label>
+                    <div className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-blue-300 font-mono">
+                      {(newJob.unitPrice || 0).toLocaleString()} د.ع
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">الإجمالي</label>
+                    <div className="w-full bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-sm text-blue-300 font-bold font-mono">
+                      {computedTotal.toLocaleString()} د.ع
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-4 flex gap-3">

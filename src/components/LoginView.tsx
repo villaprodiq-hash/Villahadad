@@ -38,7 +38,7 @@ export default function LoginView({ users, onLogin }: LoginViewProps) {
         <div className="bg-[#1a1a1a]/60 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/5 p-12">
           {/* Logo/Title */}
           <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-pink-500 to-purple-600 rounded-3xl mb-6 shadow-lg shadow-pink-500/20">
+            <div className="inline-flex items-center justify-center w-24 h-24 bg-linear-to-br from-pink-500 to-purple-600 rounded-3xl mb-6 shadow-lg shadow-pink-500/20">
               <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -66,7 +66,7 @@ export default function LoginView({ users, onLogin }: LoginViewProps) {
                 >
                   <motion.button
                     onClick={() => setSelectedUserId(user.id)}
-                    className={`relative w-20 h-20 rounded-full bg-gradient-to-br ${avatarColors[index % avatarColors.length]} flex items-center justify-center text-white font-bold text-2xl border-4 transition-all duration-300 shadow-lg ${
+                    className={`relative w-20 h-20 rounded-full bg-linear-to-br ${avatarColors[index % avatarColors.length]} flex items-center justify-center text-white font-bold text-2xl border-4 transition-all duration-300 shadow-lg ${
                       selectedUserId === user.id
                         ? 'border-white scale-110'
                         : 'border-[#1a1a1a] hover:border-white/30'
@@ -127,7 +127,7 @@ export default function LoginView({ users, onLogin }: LoginViewProps) {
               whileTap={selectedUserId ? { scale: 0.98 } : {}}
               className={`w-full py-5 rounded-2xl font-bold text-white transition-all duration-300 text-lg ${
                 selectedUserId
-                  ? 'bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 shadow-lg shadow-pink-500/30 hover:shadow-pink-500/50'
+                  ? 'bg-linear-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 shadow-lg shadow-pink-500/30 hover:shadow-pink-500/50'
                   : 'bg-gray-700/30 cursor-not-allowed'
               }`}
             >

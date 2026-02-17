@@ -5,12 +5,21 @@ import { toast } from 'sonner';
 
 // Define Props
 interface SmartLeavesWidgetProps {
-  users?: any[];
+  users?: unknown[];
 }
 
-const SmartLeavesWidget: React.FC<SmartLeavesWidgetProps> = ({ users = [] }) => {
+interface LeaveRequest {
+  id: string;
+  user: string;
+  type: string;
+  dates: string;
+  status: string;
+  conflict: boolean;
+}
+
+const SmartLeavesWidget: React.FC<SmartLeavesWidgetProps> = ({ users: _users = [] }) => {
     // ✅ FIX: Use real leave data from database, not fake data from users
-    const [requests, setRequests] = useState<any[]>([]);
+    const [requests, setRequests] = useState<LeaveRequest[]>([]);
 
     useEffect(() => {
         // Load real leave requests from database
@@ -38,12 +47,12 @@ const SmartLeavesWidget: React.FC<SmartLeavesWidgetProps> = ({ users = [] }) => 
         loadLeaves();
     }, []);
 
-    const handleApprove = (id: number) => {
+    const handleApprove = (id: string) => {
         setRequests(prev => prev.filter(req => req.id !== id));
         toast.success('تم قبول طلب الإجازة');
     };
 
-    const handleReject = (id: number) => {
+    const handleReject = (id: string) => {
         setRequests(prev => prev.filter(req => req.id !== id));
         toast.error('تم رفض طلب الإجازة');
     };

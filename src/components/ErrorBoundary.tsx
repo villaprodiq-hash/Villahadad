@@ -173,16 +173,4 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-/**
- * 🎣 Hook for error boundary in functional components
- * Note: This doesn't actually create an error boundary,
- * but provides a pattern for error handling.
- */
-export function useErrorHandler(): (error: Error) => void {
-  return (error: Error) => {
-    logger.error('Error caught by useErrorHandler', error);
-    // You can also trigger a state update to show error UI
-  };
-}
-
 export default ErrorBoundary;

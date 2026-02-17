@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle2, ListTodo, Plus, DollarSign, Camera, Monitor, Truck, Bell } from 'lucide-react';
-import { DashboardTask, ReminderType, ReminderTypeLabels } from '../../types';
+import { DashboardTask, ReminderType } from '../../types';
 
 interface StackedTasksProps {
   tasks: DashboardTask[];
@@ -113,7 +113,7 @@ const StackedTasks: React.FC<StackedTasksProps> = ({ tasks, onToggle, isManager 
                 </div>
                 <div>
                   <h3 className={`text-sm font-bold ${isManager ? 'text-gray-800' : 'text-white'}`}>المهام اليومية</h3>
-                  <p className={`text-[9px] ${isManager ? 'text-gray-400' : 'text-gray-400'} font-bold`}>Today's To-Do</p>
+                  <p className={`text-[9px] ${isManager ? 'text-gray-400' : 'text-gray-400'} font-bold`}>Today&apos;s To-Do</p>
                 </div>
              </div>
              
@@ -136,9 +136,9 @@ const StackedTasks: React.FC<StackedTasksProps> = ({ tasks, onToggle, isManager 
                   {/* النصف الأول: مهام العمل */}
                   <div className="space-y-1.5 flex flex-col">
                     <div className="flex items-center gap-1.5 mb-1 shrink-0">
-                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-gradient-to-r from-transparent via-pink-500/30 to-transparent'}`}></div>
+                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-linear-to-r from-transparent via-pink-500/30 to-transparent'}`}></div>
                       <span className={`text-[8px] font-bold ${isManager ? 'text-amber-600' : 'text-pink-500/60'} uppercase tracking-widest`}>مهام العمل</span>
-                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-gradient-to-r from-transparent via-pink-500/30 to-transparent'}`}></div>
+                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-linear-to-r from-transparent via-pink-500/30 to-transparent'}`}></div>
                     </div>
                     <div className="space-y-1.5 flex-1 overflow-y-auto custom-scrollbar pr-1">
                       {workTasks.length > 0 ? (
@@ -154,9 +154,9 @@ const StackedTasks: React.FC<StackedTasksProps> = ({ tasks, onToggle, isManager 
                   {/* النصف الثاني: تذكيرات */}
                   <div className="space-y-1.5 flex flex-col">
                     <div className="flex items-center gap-1.5 mb-1 shrink-0">
-                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-gradient-to-r from-transparent via-gray-500/30 to-transparent'}`}></div>
+                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-linear-to-r from-transparent via-gray-500/30 to-transparent'}`}></div>
                       <span className={`text-[8px] font-bold ${isManager ? 'text-gray-500' : 'text-gray-500/60'} uppercase tracking-widest`}>تذكيرات</span>
-                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-gradient-to-r from-transparent via-gray-500/30 to-transparent'}`}></div>
+                      <div className={`h-[1px] flex-1 ${isManager ? 'bg-gray-100' : 'bg-linear-to-r from-transparent via-gray-500/30 to-transparent'}`}></div>
                     </div>
                     <div className="space-y-1.5 flex-1 overflow-y-auto custom-scrollbar pr-1">
                       {generalTasks.length > 0 ? (

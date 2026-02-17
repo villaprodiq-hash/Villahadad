@@ -36,7 +36,9 @@ const ClientHeatmapWidget: React.FC<ClientHeatmapWidgetProps> = ({ bookings }) =
                 targetIndex = 1; // Yarmouk
             }
             
-            stats[targetIndex].count += 1;
+            const targetArea = stats[targetIndex];
+            if (!targetArea) return;
+            targetArea.count += 1;
         });
         
         // Sort by count descending
@@ -83,9 +85,9 @@ const ClientHeatmapWidget: React.FC<ClientHeatmapWidgetProps> = ({ bookings }) =
                                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                                     <div 
                                         className={`h-full rounded-full transition-all duration-1000 ${
-                                            index === 0 ? 'bg-gradient-to-r from-rose-500 to-red-600' :
-                                            index === 1 ? 'bg-gradient-to-r from-orange-400 to-orange-500' :
-                                            index === 2 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                                            index === 0 ? 'bg-linear-to-r from-rose-500 to-red-600' :
+                                            index === 1 ? 'bg-linear-to-r from-orange-400 to-orange-500' :
+                                            index === 2 ? 'bg-linear-to-r from-amber-400 to-amber-500' :
                                             'bg-gray-300'
                                         }`}
                                         style={{ width: `${percentage}%` }}

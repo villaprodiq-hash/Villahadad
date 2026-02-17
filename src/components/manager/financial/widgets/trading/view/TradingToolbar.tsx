@@ -1,5 +1,5 @@
 import React from 'react';
-import { MousePointer2, PenTool, Type, Move, Ruler, Eraser, TrendingUp, Circle, Square, Minus } from 'lucide-react';
+import { MousePointer2, PenTool, Type, Ruler, Eraser, TrendingUp, Square } from 'lucide-react';
 
 const Tools = [
     { icon: MousePointer2, label: 'Cursor' },

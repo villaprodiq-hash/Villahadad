@@ -1,22 +1,10 @@
 
 import React, { useState } from 'react';
-import { Search, Plus, Settings2, Save, Move, X, Building2, Camera } from 'lucide-react';
-import { Booking } from '../../../types';
+import { Search, Plus } from 'lucide-react';
+import { Booking, User } from '../../../types';
 import ReceptionBookingCalendar from '../dashboard/ReceptionBookingCalendar';
 import ReceptionPageWrapper from '../layout/ReceptionPageWrapper';
 import { ErrorBoundary } from '../../shared/ErrorBoundary';
-import { Responsive, WidthProvider } from 'react-grid-layout';
-
-const ResponsiveGridLayout = WidthProvider(Responsive);
-
-const defaultLayouts = {
-  lg: [
-    { i: 'calendar', x: 0, y: 0, w: 24, h: 75 }
-  ],
-  md: [
-    { i: 'calendar', x: 0, y: 0, w: 20, h: 75 }
-  ]
-};
 
 interface MyBookingsViewProps {
   bookings: Booking[];
@@ -24,7 +12,7 @@ interface MyBookingsViewProps {
   onSelectBooking: (booking: Booking) => void;
   onDeleteBooking: (bookingId: string) => Promise<void> | void;
   onEditBooking: (bookingId: string) => void; // Add this
-  onUpdateStatus: (id: string, newStatus: any) => void;
+  onUpdateStatus: (id: string, newStatus: Booking['status']) => void;
   onUpdateBooking: (id: string, updates: Partial<Booking>) => void;
   defaultViewMode?: 'board' | 'list' | 'schedule';
   isDraggable?: boolean;
@@ -32,18 +20,15 @@ interface MyBookingsViewProps {
   onViewBooking?: (id: string) => void;
   isReception?: boolean;
   isManager?: boolean;
-  users?: any[]; // Add users list for photographer switcher
+  users?: User[]; // Add users list for photographer switcher
 }
 
 const ReceptionBookingsView: React.FC<MyBookingsViewProps> = ({ 
     bookings, 
     onAddBooking, 
-    onSelectBooking, 
     onDeleteBooking,
     onEditBooking, // Add this
-    onUpdateStatus, 
     onUpdateBooking, 
-    defaultViewMode = 'board',
     isDraggable = false,
     onDateClick,
     onViewBooking,
@@ -52,23 +37,6 @@ const ReceptionBookingsView: React.FC<MyBookingsViewProps> = ({
     users = [] // Add users with default
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLayoutEditable, setIsLayoutEditable] = useState(false);
-  
-  const [layouts, setLayouts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('bookings_calendar_layout');
-      return saved ? JSON.parse(saved) : defaultLayouts;
-    } catch (e) {
-      return defaultLayouts;
-    }
-  });
-
-  const onLayoutChange = (current: any, all: any) => {
-    setLayouts(all);
-    if (isLayoutEditable) {
-      localStorage.setItem('bookings_calendar_layout', JSON.stringify(all));
-    }
-  };
 
   const handleDateClick = (date: Date) => {
     // استدعاء callback الذي يمرر التاريخ ويفتح modal الاختيار
@@ -100,14 +68,6 @@ const ReceptionBookingsView: React.FC<MyBookingsViewProps> = ({
           </div>
 
       </div>
-
-      {/* Edit Mode Indicator */}
-      {isLayoutEditable && (
-        <div className="mb-4 p-3 bg-linear-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-2xl flex items-center gap-3 animate-in fade-in">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-green-400 text-xs font-bold">وضع تعديل المخطط مفعّل - يمكنك الآن تحريك وتغيير حجم التقويم</span>
-        </div>
-      )}
 
       <div className="flex-1 min-h-0 overflow-hidden">
           <ErrorBoundary name="Reception Calendar">

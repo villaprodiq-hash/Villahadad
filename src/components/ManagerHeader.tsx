@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Server, UploadCloud, Search, Sparkles, CheckCheck, Calendar, CreditCard, Info } from 'lucide-react';
+import { Bell, Search, Sparkles, CheckCheck } from 'lucide-react';
 import NetworkStatusWidget from './shared/NetworkStatusWidget';
 import { AppNotification, User } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,11 +21,11 @@ interface ManagerHeaderProps {
 }
 
 const ManagerHeader: React.FC<ManagerHeaderProps> = ({ 
-  currentUser,
+  currentUser: _currentUser,
   notifications = [],
   onMarkAllRead,
-  isUploading = false,
-  uploadProgress = 0,
+  isUploading: _isUploading = false,
+  uploadProgress: _uploadProgress = 0,
   activeSection,
   onNavigate,
   isSnowing,

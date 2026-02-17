@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserPlus, TrendingUp, ArrowUpRight } from 'lucide-react';
+import { UserPlus, ArrowUpRight } from 'lucide-react';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
 
 const HiringForecastWidget: React.FC = () => {

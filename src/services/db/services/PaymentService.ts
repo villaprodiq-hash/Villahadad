@@ -3,7 +3,7 @@ import { BookingRepository as bookingRepo } from '../repositories/BookingReposit
 import { AddOnRepository as addOnRepo } from '../repositories/AddOnRepository';
 import { PaymentSchema } from '../validation';
 import { SyncQueueService } from '../../sync/SyncQueue';
-import { PaymentHistoryEntry, AddOnItem } from '../../../types/addon.types';
+import { PaymentHistoryEntry } from '../../../types/addon.types';
 import { Currency } from '../../../../types';
 
 /**
@@ -11,7 +11,21 @@ import { Currency } from '../../../../types';
  * Handles installment logic, add-on payments, and updates booking state.
  */
 export class PaymentService {
-  async addPayment(bookingId: string, paymentData: any) {
+  async addPayment(
+    bookingId: string,
+    paymentData: {
+      id?: string;
+      amount: number;
+      method: 'Cash' | 'ZinCash';
+      collectedBy: string;
+      notes?: string;
+      date?: string;
+      currency?: Currency;
+      exchangeRate?: number;
+      type?: PaymentHistoryEntry['type'];
+      paymentMethod?: PaymentHistoryEntry['paymentMethod'];
+    }
+  ) {
     const validated = PaymentSchema.parse({
       ...paymentData,
       id: paymentData.id || `pay_${Date.now()}`,
@@ -57,14 +71,22 @@ export class PaymentService {
 
     const remaining = (booking.totalAmount || 0) - (booking.paidAmount || 0);
     if (remaining > 0) {
-      const paymentData = {
+      const paymentData: {
+        amount: number;
+        method: 'Cash' | 'ZinCash';
+        collectedBy: string;
+        notes?: string;
+        currency?: Currency;
+        exchangeRate?: number;
+        type?: PaymentHistoryEntry['type'];
+        paymentMethod?: PaymentHistoryEntry['paymentMethod'];
+      } = {
         amount: remaining,
         method: 'Cash',
         collectedBy,
         notes: 'تسوية المبلغ المتبقي',
         currency: booking.currency,
         exchangeRate: booking.exchangeRate || 1400,
-        convertedAmount: remaining, // ✅ No conversion - stays in original currency
         type: 'final_settlement',
         paymentMethod: 'Cash',
       };
@@ -185,11 +207,11 @@ export class PaymentService {
       exchangeRate: p.exchangeRate || booking.exchangeRate || 1400,
       convertedAmount: p.convertedAmount || p.amount,
       type: (p.type as PaymentHistoryEntry['type']) || 'installment',
-      relatedAddOnId: p.relatedAddOnId,
+      relatedAddOnId: p.relatedAddOnId ?? undefined,
       paidAt: p.date,
       receivedBy: p.collectedBy,
       paymentMethod: (p.method as PaymentHistoryEntry['paymentMethod']) || 'Cash',
-      notes: p.notes,
+      notes: p.notes ?? undefined,
     }));
   }
 

@@ -14,6 +14,13 @@ import { toast } from 'sonner';
 
 type PhotoStatus = 'approved' | 'rejected' | 'pending' | 'maybe';
 
+type GalleryFolderWithBooking = GalleryFolder & { booking?: Booking; bookingId?: string };
+
+interface LocalFsEntry {
+  name: string;
+  path: string;
+}
+
 interface SelectionGalleryViewProps {
   bookings: Booking[];
 }
@@ -21,15 +28,13 @@ interface SelectionGalleryViewProps {
 const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings }) => {
   // Gallery Logic
   const [viewMode, setViewMode] = useState<'folders' | 'grid'>('folders');
-  const [activeFolder, setActiveFolder] = useState<GalleryFolder & { booking?: any } | null>(null);
+  const [activeFolder, setActiveFolder] = useState<GalleryFolderWithBooking | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<PortfolioItem | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false); // Dev Preview State
   
   // Advanced Filtering & Search
-  const [filterMode, setFilterMode] = useState<'TODAY' | 'ACTIVE' | 'ALL'>('ALL');
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   
   // Add Folder Logic
@@ -64,19 +69,19 @@ const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings })
     setNasError(null);
 
     try {
-      const electronAPI = (window as any).electronAPI;
+      const electronAPI = window.electronAPI;
       if (electronAPI?.sessionLifecycle?.getSessionStats) {
         // Get folder stats from NAS
         const rawFolderPath = `${activeFolder.booking.folderPath}/01_RAW`;
         
         // Try to list files using fileSystem API if available
         if (electronAPI?.fileSystem?.listDirectory) {
-          const files = await electronAPI.fileSystem.listDirectory(rawFolderPath);
+          const files = await electronAPI.fileSystem.listDirectory(rawFolderPath) as LocalFsEntry[] | null | undefined;
           
           if (files && Array.isArray(files)) {
             const imageFiles = files
-              .filter((f: any) => /\.(jpg|jpeg|png|raw|cr2|arw|heic|webp)$/i.test(f.name))
-              .map((f: any, index: number) => ({
+              .filter((f) => /\.(jpg|jpeg|png|raw|cr2|arw|heic|webp)$/i.test(f.name))
+              .map((f, index: number) => ({
                 id: index + 1,
                 image: `file://${f.path}`, // Local file path
                 title: f.name,
@@ -175,7 +180,7 @@ const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings })
   };
 
   // Data Transformation (Real Data Only)
-  const folders: GalleryFolder[] = useMemo(() => [
+  const folders: GalleryFolderWithBooking[] = useMemo(() => [
     ...customFolders,
     // Only show bookings that are ready for selection (SHOOTING = Just arrived, SELECTION = In Progress)
     // We hide EDITING/DELIVERED because they are "Handed Over" to the design team.
@@ -197,14 +202,13 @@ const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings })
 
   const filteredFolders = useMemo(() => {
     let result = folders;
-    if (filterMode === 'TODAY') {
-         const today = new Date().toISOString().split('T')[0];
-         result = result.filter(f => {
-           const booking = (f as any).booking;
-           return booking?.shootDate === today || f.status === 'urgent';
-         });
-    } else if (filterMode === 'ACTIVE') {
-         result = result.filter(f => f.status === 'active' || f.status === 'urgent');
+
+    if (activeTab === 'Review') {
+      result = result.filter(f => f.status === 'urgent');
+    } else if (activeTab === 'In Progress') {
+      result = result.filter(f => f.status === 'active');
+    } else if (activeTab === 'Completed') {
+      result = result.filter(f => f.status === 'completed');
     }
 
     if (searchQuery) {
@@ -214,7 +218,7 @@ const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings })
     }
 
     return result;
-  }, [folders, filterMode, searchQuery]);
+  }, [folders, activeTab, searchQuery]);
 
   const portfolioItems = useMemo(() => {
     // Apply status overrides and ratings to items
@@ -348,7 +352,7 @@ const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings })
 
            <GalleryAlbumsGrid 
               folders={filteredFolders} 
-              onFolderClick={(folder) => { setActiveFolder(folder); setViewMode('grid'); }}
+              onFolderClick={(folder) => { setActiveFolder(folder as GalleryFolderWithBooking); setViewMode('grid'); }}
               onFolderDrop={() => {}}
               onDelete={handleDeleteFolder}
               theme="pink"
@@ -360,7 +364,7 @@ const SelectionGalleryView: React.FC<SelectionGalleryViewProps> = ({ bookings })
          <>
             {/* ✅ NAS Status Bar */}
             {activeFolder.booking?.folderPath && (
-              <div className="mb-4 px-4 py-3 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-xl border border-blue-500/20 flex items-center justify-between">
+              <div className="mb-4 px-4 py-3 bg-linear-to-r from-blue-500/10 to-indigo-500/10 rounded-xl border border-blue-500/20 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <FolderOpen size={20} className="text-blue-400" />
                   <div>

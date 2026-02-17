@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback } from 'react';
-import { UploadCloud, Folder, CheckCircle, AlertCircle, Loader2, Layers } from 'lucide-react';
+import { UploadCloud, CheckCircle, AlertCircle, Loader2, Layers } from 'lucide-react';
 
 interface SmartDropZoneProps {
   bookingId: string;
@@ -11,7 +11,7 @@ interface SmartDropZoneProps {
 }
 
 const SmartDropZone: React.FC<SmartDropZoneProps> = ({ 
-  bookingId, 
+  bookingId: _bookingId, 
   currentPath, 
   nasStatus = 'none', 
   onDropFolder,
@@ -42,6 +42,7 @@ const SmartDropZone: React.FC<SmartDropZoneProps> = ({
       const paths: string[] = [];
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
         const file = e.dataTransfer.files[i];
+        if (!file) continue;
         // In a real Electron app, file.path gives the full path. 
         // For web mock, we simulate it based on file name.
         const mockPath = `C:/Users/Photographer/Imports/${file.name}`;
@@ -113,7 +114,7 @@ const SmartDropZone: React.FC<SmartDropZoneProps> = ({
           {nasStatus === 'pending' && (
             <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mt-2 relative">
               <div 
-                className="h-full bg-gradient-to-l from-[#F7931E] to-[#F9BE70] transition-all duration-300 ease-out relative"
+                className="h-full bg-linear-to-l from-[#F7931E] to-[#F9BE70] transition-all duration-300 ease-out relative"
                 style={{ width: `${progress}%` }}
               >
                 <div className="absolute left-0 top-0 h-full w-2 bg-white/50 blur-[2px]" />

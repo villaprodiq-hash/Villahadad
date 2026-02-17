@@ -22,7 +22,7 @@ export const packageService = {
         isCustom: Boolean(p.isCustom),
         isBestseller: Boolean(p.isBestseller),
         features: p.features ? JSON.parse(p.features) : [],
-        deletedAt: p.deletedAt as any // Type mismatch fix (number vs string)
+        deletedAt: p.deletedAt === null ? null : String(p.deletedAt)
       })) as Package[];
     } catch (error) {
       console.error('Error fetching packages:', error);
@@ -49,7 +49,7 @@ export const packageService = {
             isCustom: Boolean(p.isCustom),
             isBestseller: Boolean(p.isBestseller),
             features: p.features ? JSON.parse(p.features) : [],
-            deletedAt: p.deletedAt as any
+            deletedAt: p.deletedAt === null ? null : String(p.deletedAt)
           } as Package;
       }
       return null;
@@ -106,7 +106,7 @@ export const packageService = {
 
   async updatePackage(id: string, updates: Partial<Package>): Promise<void> {
     const now = new Date().toISOString();
-    const updateData: any = { ...updates, updatedAt: now };
+    const updateData: Record<string, unknown> = { ...updates, updatedAt: now };
     
     if (updates.details) {
         updateData.details = JSON.stringify(updates.details);
@@ -118,7 +118,7 @@ export const packageService = {
     if (typeof updates.isBestseller !== 'undefined') updateData.isBestseller = updates.isBestseller ? 1 : 0;
 
     // Filter out undefined values to simulate dynamic set
-    const validUpdates: any = {};
+    const validUpdates: Record<string, unknown> = {};
     for (const key in updateData) {
         if (updateData[key] !== undefined) {
              validUpdates[key] = updateData[key];

@@ -14,7 +14,7 @@ interface Particle {
 const HeartCursor = () => {
   const [particles, setParticles] = useState<Particle[]>([]);
   const countRef = useRef(0);
-  const requestRef = useRef<number>(null);
+  const requestRef = useRef<number | null>(null);
   const mousePos = useRef({ x: 0, y: 0 });
   const lastPos = useRef({ x: 0, y: 0 });
 

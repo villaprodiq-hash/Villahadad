@@ -17,11 +17,27 @@ export interface UpdateStatus {
 class DesktopUpdateService {
   private listeners: ((status: UpdateStatus) => void)[] = [];
 
+  private normalizeStatus(status: string | UpdateStatus): UpdateStatus {
+    if (typeof status !== 'string') return status;
+
+    switch (status) {
+      case 'checking':
+      case 'available':
+      case 'not-available':
+      case 'downloading':
+      case 'ready':
+      case 'error':
+        return { status };
+      default:
+        return { status: 'error', error: status };
+    }
+  }
+
   constructor() {
     // Listen for update events from main process
     if (window.electronAPI?.onUpdateStatus) {
-      window.electronAPI.onUpdateStatus((status: UpdateStatus) => {
-        this.notifyListeners(status);
+      window.electronAPI.onUpdateStatus((status: string) => {
+        this.notifyListeners(this.normalizeStatus(status));
       });
     }
   }
@@ -80,16 +96,3 @@ class DesktopUpdateService {
 }
 
 export const desktopUpdateService = new DesktopUpdateService();
-
-// Extend window type for TypeScript
-declare global {
-  interface Window {
-    electronAPI?: {
-      onUpdateStatus?: (callback: (status: UpdateStatus) => void) => void;
-      checkForUpdates?: () => Promise<void>;
-      installUpdate?: () => Promise<void>;
-      downloadUpdate?: () => Promise<void>;
-      saveBackupFile?: (filename: string, content: string) => Promise<boolean>;
-    };
-  }
-}

@@ -1,11 +1,10 @@
 
 import React, { useState } from 'react';
 import { 
-  ArrowRight, X, Droplet, FileText, Layers, Video, Palette, Folder, 
-  Settings, LogOut, ChevronRight, ChevronLeft, User as UserIcon, MessageCircle, LayoutGrid, Package
+  X, Droplet, ChevronRight, ChevronLeft, MessageCircle, LayoutGrid, Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, UserRole } from '../../../types';
+import { User } from '../../../types';
 import ProfileDropdown from '../../shared/ProfileDropdown';
 
 interface PrinterSidebarProps {
@@ -18,7 +17,7 @@ interface PrinterSidebarProps {
   currentUser?: User;
   onLogout?: () => void;
   onOpenSettings?: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 
@@ -34,14 +33,12 @@ const PrinterSidebar: React.FC<PrinterSidebarProps> = ({
   onOpenSettings,
   badges
 }) => {
-  const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<{ id: string, label: string, top: number } | null>(null);
   
   // Theme constants for Printer Role (Emerald/Teal)
   const sidebarBg = 'bg-[#0a0f0d]';
   const borderColor = 'border-white/5';
   const accentGradient = 'bg-linear-to-br from-emerald-500 to-teal-600';
-  const activeItemBg = 'bg-white/5';
   
   const menuItems = [
     { 
@@ -150,7 +147,7 @@ const PrinterSidebar: React.FC<PrinterSidebarProps> = ({
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-8 space-y-2 custom-scrollbar relative px-4 no-scrollbar">
           {menuItems.filter(item => !currentUser?.preferences?.hiddenSections?.includes(item.id)).map((item) => {
             const isActive = activeSection === item.id;
-            const badgeCount = badges ? badges[item.id] : 0;
+            const badgeCount = badges?.[item.id] ?? 0;
 
             return (
               <div key={item.id} className="relative flex justify-center w-full">

@@ -1,6 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { CheckCircle2, Clock, Send, AlertCircle, Sparkles, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Clock, Sparkles, ArrowRight } from 'lucide-react';
 
 interface ClientDashboardOverviewProps {
   selectedCount: number;
@@ -28,7 +27,7 @@ const ClientDashboardOverview: React.FC<ClientDashboardOverviewProps> = ({
   ];
 
   return (
-    <div className="w-full bg-gradient-to-br from-indigo-900 via-slate-900 to-black rounded-[40px] p-8 text-white relative overflow-hidden shadow-2xl mb-8">
+    <div className="w-full bg-linear-to-br from-indigo-900 via-slate-900 to-black rounded-[40px] p-8 text-white relative overflow-hidden shadow-2xl mb-8">
       
       {/* Background Ambience */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />

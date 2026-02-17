@@ -1,10 +1,7 @@
 import React, {
-  createContext,
-  useContext,
   useState,
   useEffect,
   ReactNode,
-  useCallback,
   useRef,
 } from 'react';
 import { toast } from 'sonner';
@@ -12,34 +9,19 @@ import {
   Booking,
   BookingStatus,
   DashboardTask,
-  Reminder,
   AppNotification,
   NotificationCounts,
+  UserRole,
 } from '../types';
 import { electronBackend } from '../services/mockBackend';
 import { SyncManager } from '../services/sync/SyncManager';
 import { ConflictService } from '../services/sync/ConflictService';
 import { calculateNotifications } from '../utils/notifications';
-import { useAuth } from './AuthProvider';
+import { useAuth } from '../hooks/useAuth';
 import { logger } from '../utils/logger';
 import { shallowEqualArrays } from '../utils/performance';
 import { useBookingReminders } from '../hooks/useBookingReminders';
-
-interface DataContextValue {
-  bookings: Booking[];
-  dashboardTasks: DashboardTask[];
-  notifications: AppNotification[];
-  isOffline: boolean;
-  isPostgresOffline: boolean;
-  conflictMode: boolean;
-  setConflictMode: (value: boolean) => void;
-  updateBooking: (id: string, updates: Partial<Booking>) => Promise<void>;
-  addBooking: (booking: Booking) => void;
-  deleteBooking: (id: string) => void;
-  notificationBadges: NotificationCounts;
-}
-
-const DataContext = createContext<DataContextValue | undefined>(undefined);
+import { DataContext, type DataContextValue } from './data-context';
 
 interface DataProviderProps {
   children: ReactNode;
@@ -53,14 +35,130 @@ export function DataProvider({ children }: DataProviderProps) {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [isPostgresOffline, setIsPostgresOffline] = useState(false);
   const [conflictMode, setConflictMode] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [taskUnreadCount, setTaskUnreadCount] = useState(0);
 
   const isFirstCheck = useRef(true);
   const bookingsRef = useRef<Booking[]>([]);
 
+  const refreshLiveBadgeCounts = React.useCallback(() => {
+    if (typeof window === 'undefined' || !currentUser) {
+      setChatUnreadCount(0);
+      setTaskUnreadCount(0);
+      return;
+    }
+
+    try {
+      const rawMessages = window.localStorage.getItem('vh_local_chat_messages_v1');
+      const parsedMessages = rawMessages ? (JSON.parse(rawMessages) as unknown) : [];
+      const messages = Array.isArray(parsedMessages) ? parsedMessages : [];
+
+      const unreadChat = messages.filter(item => {
+        if (typeof item !== 'object' || item === null) return false;
+        const message = item as Record<string, unknown>;
+        const isRead = Boolean(message.isRead);
+        const senderId = typeof message.senderId === 'string' ? message.senderId : '';
+        const recipientId =
+          typeof message.recipientId === 'string' ? message.recipientId : null;
+
+        return (
+          !isRead &&
+          senderId &&
+          senderId !== currentUser.id &&
+          (!recipientId || recipientId === currentUser.id)
+        );
+      }).length;
+
+      const rawTasks = window.localStorage.getItem('vh_local_chat_tasks_v1');
+      const parsedTasks = rawTasks ? (JSON.parse(rawTasks) as unknown) : [];
+      const tasks = Array.isArray(parsedTasks) ? parsedTasks : [];
+
+      const canCurrentUserSeeTask = (task: Record<string, unknown>) => {
+        const targetRole = typeof task.targetRole === 'string' ? task.targetRole : 'all';
+        const createdBy = typeof task.createdBy === 'string' ? task.createdBy : '';
+
+        if (currentUser.role === UserRole.MANAGER) return true;
+
+        if (currentUser.role === UserRole.ADMIN) {
+          if (!targetRole || targetRole === 'all') return true;
+          if (targetRole === UserRole.ADMIN) return true;
+          if (createdBy === currentUser.id) return true;
+          return false;
+        }
+
+        if (!targetRole || targetRole === 'all') return true;
+        return targetRole === currentUser.role;
+      };
+
+      const unreadTasks = tasks.filter(item => {
+        if (typeof item !== 'object' || item === null) return false;
+        const task = item as Record<string, unknown>;
+        const completed = Boolean(task.completed);
+        if (completed) return false;
+        return canCurrentUserSeeTask(task);
+      }).length;
+
+      setChatUnreadCount(unreadChat);
+      setTaskUnreadCount(unreadTasks);
+    } catch (error) {
+      console.error('[DataProvider] Failed to refresh live badge counts:', error);
+      setChatUnreadCount(0);
+      setTaskUnreadCount(0);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    refreshLiveBadgeCounts();
+
+    const onChatMessage = () => refreshLiveBadgeCounts();
+    const onChatDelete = () => refreshLiveBadgeCounts();
+    const onTaskUpdate = () => refreshLiveBadgeCounts();
+
+    window.addEventListener('vh:chat-message', onChatMessage as EventListener);
+    window.addEventListener('vh:chat-message-deleted', onChatDelete as EventListener);
+    window.addEventListener('vh:chat-task', onTaskUpdate as EventListener);
+
+    const timer = window.setInterval(() => {
+      refreshLiveBadgeCounts();
+    }, 1500);
+
+    return () => {
+      window.removeEventListener('vh:chat-message', onChatMessage as EventListener);
+      window.removeEventListener('vh:chat-message-deleted', onChatDelete as EventListener);
+      window.removeEventListener('vh:chat-task', onTaskUpdate as EventListener);
+      window.clearInterval(timer);
+    };
+  }, [refreshLiveBadgeCounts]);
+
   // Calculate notification badges
   const notificationBadges = React.useMemo(() => {
-    return calculateNotifications(bookings, users || [], currentUser) as NotificationCounts;
-  }, [bookings, users, currentUser]);
+    const counts = calculateNotifications(bookings, users || [], currentUser) as NotificationCounts;
+
+    const teamChannelBadge = chatUnreadCount + taskUnreadCount;
+    if (teamChannelBadge > 0) {
+      counts['section-team-chat'] = teamChannelBadge;
+    }
+
+    if (taskUnreadCount > 0 && currentUser) {
+      if (currentUser.role === UserRole.VIDEO_EDITOR) {
+        counts['section-projects'] = Math.max(counts['section-projects'] || 0, taskUnreadCount);
+      } else {
+        counts['section-home'] = Math.max(counts['section-home'] || 0, taskUnreadCount);
+      }
+
+      if (
+        currentUser.role === UserRole.MANAGER ||
+        currentUser.role === UserRole.ADMIN ||
+        currentUser.role === UserRole.RECEPTION
+      ) {
+        counts['section-workflow'] = Math.max(counts['section-workflow'] || 0, taskUnreadCount);
+      }
+    }
+
+    return counts;
+  }, [bookings, users, currentUser, chatUnreadCount, taskUnreadCount]);
 
   // Load initial data
   useEffect(() => {
@@ -179,8 +277,7 @@ export function DataProvider({ children }: DataProviderProps) {
   // PostgreSQL connection monitoring
   useEffect(() => {
     const checkPgStatus = async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const api = (window as any).electronAPI;
+      const api = window.electronAPI;
       if (api?.db?.getStatus) {
         try {
           const status = await api.db.getStatus();
@@ -348,12 +445,4 @@ export function DataProvider({ children }: DataProviderProps) {
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
-}
-
-export function useData() {
-  const context = useContext(DataContext);
-  if (context === undefined) {
-    throw new Error('useData must be used within a DataProvider');
-  }
-  return context;
 }

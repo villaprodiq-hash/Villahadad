@@ -33,7 +33,7 @@ const SparklesEffect: React.FC = () => {
         speedY: (Math.random() - 0.5) * 0.2,
         life: 0,
         maxLife: Math.random() * 100 + 50,
-        color: colors[Math.floor(Math.random() * colors.length)],
+        color: colors[Math.floor(Math.random() * colors.length)] ?? '#FFFFFF',
       });
     };
 

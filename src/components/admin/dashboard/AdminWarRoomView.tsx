@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  AlertTriangle, Server, Clock,
+  Clock,
   ShieldAlert, Activity, Siren,
   RefreshCcw, CheckCircle, Database,
-  Wifi, WifiOff, HardDrive, Users,
-  Calendar, DollarSign, TrendingUp
+  Wifi, WifiOff, DollarSign
 } from 'lucide-react';
-import { electronBackend } from '../../../services/mockBackend';
+import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
 
 interface SystemAlert {
@@ -15,7 +14,7 @@ interface SystemAlert {
   source: string;
   message: string;
   time: string;
-  icon: any;
+  icon: LucideIcon;
 }
 
 interface SystemMetric {
@@ -24,6 +23,19 @@ interface SystemMetric {
   max: number;
   status: 'good' | 'warning' | 'critical';
   unit: string;
+}
+
+interface BookingStatsRow {
+  id: string;
+  status: string;
+  shootDate?: string;
+  totalAmount?: number | string | null;
+  paidAmount?: number | string | null;
+  deliveryDeadline?: string | null;
+}
+
+interface CountRow {
+  count: number | string;
 }
 
 const AdminWarRoomView = () => {
@@ -44,7 +56,7 @@ const AdminWarRoomView = () => {
 
   const fetchSystemData = useCallback(async () => {
     setLoading(true);
-    const api = (window as any).electronAPI;
+    const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
     const newAlerts: SystemAlert[] = [];
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
@@ -54,19 +66,21 @@ const AdminWarRoomView = () => {
       let totalBookings = 0, overdueBookings = 0, unpaidBookings = 0, todayBookings = 0;
       if (api?.db) {
         try {
-          const allBookings = await api.db.query("SELECT id, status, shootDate, totalAmount, paidAmount, deliveryDeadline FROM bookings WHERE deletedAt IS NULL");
+          const allBookings = (await api.db.query(
+            "SELECT id, status, shootDate, totalAmount, paidAmount, deliveryDeadline FROM bookings WHERE deletedAt IS NULL"
+          )) as BookingStatsRow[];
           totalBookings = allBookings.length;
-          const today = now.toISOString().split('T')[0];
-          todayBookings = allBookings.filter((b: any) => b.shootDate === today).length;
+          const today = now.toISOString().slice(0, 10);
+          todayBookings = allBookings.filter(b => b.shootDate === today).length;
 
           // Overdue: past delivery deadline and not delivered
-          overdueBookings = allBookings.filter((b: any) => {
+          overdueBookings = allBookings.filter(b => {
             if (!b.deliveryDeadline) return false;
             return b.deliveryDeadline < today && b.status !== 'Delivered' && b.status !== 'Archived';
           }).length;
 
           // Unpaid: balance > 0
-          unpaidBookings = allBookings.filter((b: any) => {
+          unpaidBookings = allBookings.filter(b => {
             const total = Number(b.totalAmount) || 0;
             const paid = Number(b.paidAmount) || 0;
             return total > 0 && paid < total && b.status !== 'Delivered' && b.status !== 'Archived';
@@ -101,15 +115,17 @@ const AdminWarRoomView = () => {
       let totalUsers = 0;
       if (api?.db) {
         try {
-          const usersResult = await api.db.query("SELECT COUNT(*) as count FROM users WHERE deletedAt IS NULL");
-          totalUsers = usersResult[0]?.count || 0;
+          const usersResult = (await api.db.query(
+            "SELECT COUNT(*) as count FROM users WHERE deletedAt IS NULL"
+          )) as CountRow[];
+          totalUsers = Number(usersResult[0]?.count || 0);
         } catch { /* ignore */ }
       }
 
       // 3. Check Supabase connectivity
       let syncStatus: 'online' | 'offline' = 'offline';
       try {
-        const { data, error } = await supabase.from('users').select('id').limit(1);
+        const { error } = await supabase.from('users').select('id').limit(1);
         if (!error) syncStatus = 'online';
       } catch {
         syncStatus = 'offline';
@@ -129,8 +145,10 @@ const AdminWarRoomView = () => {
       // 4. Check sync queue
       if (api?.db) {
         try {
-          const pendingSync = await api.db.query("SELECT COUNT(*) as count FROM sync_queue WHERE status = 'pending'");
-          const pendingCount = pendingSync[0]?.count || 0;
+          const pendingSync = (await api.db.query(
+            "SELECT COUNT(*) as count FROM sync_queue WHERE status = 'pending'"
+          )) as CountRow[];
+          const pendingCount = Number(pendingSync[0]?.count || 0);
           if (pendingCount > 10) {
             newAlerts.push({
               id: 'sync-queue',
@@ -147,8 +165,10 @@ const AdminWarRoomView = () => {
       // 5. Check activity logs for unusual activity
       if (api?.db) {
         try {
-          const recentLogs = await api.db.query("SELECT COUNT(*) as count FROM activity_logs WHERE createdAt > datetime('now', '-1 hour')");
-          const logCount = recentLogs[0]?.count || 0;
+          const recentLogs = (await api.db.query(
+            "SELECT COUNT(*) as count FROM activity_logs WHERE createdAt > datetime('now', '-1 hour')"
+          )) as CountRow[];
+          const logCount = Number(recentLogs[0]?.count || 0);
           if (logCount > 100) {
             newAlerts.push({
               id: 'activity',

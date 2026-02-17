@@ -27,8 +27,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   onNavigate, 
   currentUser, 
   onLogout,
-  onLock,
-  isSidebarCollapsed,
+  onLock: _onLock,
+  isSidebarCollapsed: _isSidebarCollapsed,
   badges
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -41,7 +41,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'section-hr', label: 'إدارة الفريق', icon: Users },
     { id: 'section-sentinel', label: 'مراقبة أداء الموظفين', icon: LayoutDashboard },
     { id: 'section-financial', label: 'الرقابة المالية', icon: BarChart3 },
-    { id: 'section-team-chat', label: 'غرفة التواصل', icon: MessageCircle, badge: badges?.chat },
+    { id: 'section-team-chat', label: 'غرفة التواصل', icon: MessageCircle, badge: badges?.['section-team-chat'] },
     { id: 'section-inventory', label: 'خزنة المعدات', icon: Package },
     { id: 'section-war-room', label: 'غرفة العمليات', icon: Siren },
   ];
@@ -53,12 +53,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
       <motion.aside
         initial={{ x: 100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        className={`fixed inset-y-0 right-0 z-50 w-72 bg-[#111111] border-l border-white/[0.06] shadow-2xl transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}
+        className={`fixed inset-y-0 right-0 z-50 w-72 bg-[#111111] border-l border-white/6 shadow-2xl transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}
       >
         <div className="flex flex-col h-full">
 
             {/* Header: Brand */}
-            <div className="p-6 pb-4 text-right border-b border-white/[0.06]">
+            <div className="p-6 pb-4 text-right border-b border-white/6">
                 <div className="flex items-center justify-end gap-3">
                     <div>
                         <h2 className="text-lg font-bold tracking-tight text-white leading-none">فيلا حداد</h2>
@@ -106,7 +106,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
             </nav>
 
             {/* User Profile Footer */}
-            <div className="border-t border-white/[0.06]">
+            <div className="border-t border-white/6">
                 {currentUser && (
                     <ProfileDropdown
                         currentUser={currentUser}

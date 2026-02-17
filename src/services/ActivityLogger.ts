@@ -30,7 +30,7 @@ class ActivityLoggerClass {
     entityType: string,
     entityId: string,
     action: ActivityAction,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ): Promise<void> {
     try {
       const user = CurrentUserService.getCurrentUser();
@@ -82,7 +82,6 @@ class ActivityLoggerClass {
       return result.map((row) => {
           // Parse role from details if possible
           let role = 'Unknown';
-          const details = row.details;
           if (row.details) {
               try {
                   const d = JSON.parse(row.details);

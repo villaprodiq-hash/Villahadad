@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Booking, BookingCategory } from '../../../../types';
+import { Booking } from '../../../../types';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
-import { Search, Phone, User as UserIcon, Calendar, ArrowUpRight } from 'lucide-react';
+import { Search, Phone, User as UserIcon, Calendar } from 'lucide-react';
 import { formatMoney } from '../../../../utils/formatMoney';
 
 interface ClientsLogWidgetProps {

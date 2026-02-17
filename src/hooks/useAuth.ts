@@ -2,6 +2,6 @@
  * Custom hook for authentication
  * Provides access to auth context and user state
  */
-import { useAuth as useAuthContext } from '../providers/AuthProvider';
+import { useAuthContextValue } from '../providers/auth-context';
 
-export const useAuth = useAuthContext;
+export const useAuth = useAuthContextValue;

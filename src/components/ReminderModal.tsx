@@ -89,13 +89,13 @@ const ReminderModal: React.FC<ReminderModalProps> = ({ isOpen, onClose, onSubmit
   const CurrentIconComponent = ICONS.find(i => i.id === currentIconId)?.icon || Bell;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-300">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-300">
       <Draggable nodeRef={nodeRef} handle=".modal-header">
         <div ref={nodeRef} className="bg-[#1E1E1E] border border-white/10 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in duration-300 ring-1 ring-white/5">
           
           {/* Header */}
-          <div className="modal-header cursor-move bg-gradient-to-l from-[#262626] to-[#1E1E1E] p-6 flex items-center gap-4 border-b border-white/5">
-            <div className="p-3 bg-gradient-to-br from-[#F7931E] to-[#F9BE70] rounded-xl text-white shadow-[0_0_15px_rgba(247,147,30,0.3)]">
+          <div className="modal-header cursor-move bg-linear-to-l from-[#262626] to-[#1E1E1E] p-6 flex items-center gap-4 border-b border-white/5">
+            <div className="p-3 bg-linear-to-br from-[#F7931E] to-[#F9BE70] rounded-xl text-white shadow-[0_0_15px_rgba(247,147,30,0.3)]">
               <Bell size={24} />
             </div>
             <div className="flex-1">
@@ -131,7 +131,7 @@ const ReminderModal: React.FC<ReminderModalProps> = ({ isOpen, onClose, onSubmit
                          : 'bg-black/20 border-white/5 hover:bg-white/5'
                      }`}
                    >
-                     <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${t.color} flex items-center justify-center text-white shadow-lg ${type === t.id ? 'scale-110' : 'scale-100 grayscale group-hover:grayscale-0'} transition-all duration-300`}>
+                     <div className={`h-8 w-8 rounded-full bg-linear-to-br ${t.color} flex items-center justify-center text-white shadow-lg ${type === t.id ? 'scale-110' : 'scale-100 grayscale group-hover:grayscale-0'} transition-all duration-300`}>
                        {t.icon}
                      </div>
                      <span className={`text-xs font-bold ${type === t.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>
@@ -224,7 +224,7 @@ const ReminderModal: React.FC<ReminderModalProps> = ({ isOpen, onClose, onSubmit
               <button 
                 type="submit"
                 disabled={!title || !date}
-                className="px-8 py-3 text-sm font-bold bg-gradient-to-r from-[#F7931E] to-[#F9BE70] text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-[0_0_20px_rgba(247,147,30,0.5)] transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-8 py-3 text-sm font-bold bg-linear-to-r from-[#F7931E] to-[#F9BE70] text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-[0_0_20px_rgba(247,147,30,0.5)] transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {initialData ? 'حفظ التغييرات' : 'حفظ التذكير'}
               </button>

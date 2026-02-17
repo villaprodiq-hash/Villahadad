@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   X,
   CheckCircle2,
@@ -15,9 +15,7 @@ import {
   AlertCircle,
   History,
   CreditCard,
-  Plus,
-  Trash2,
-  Receipt,
+  Percent,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner'; // ✅ Import toast
@@ -26,8 +24,10 @@ import {
   BookingCategory,
   BookingStatus,
   Currency,
+  AppliedDiscount,
   EVENT_TYPES,
   PACKAGES_DATA,
+  PackageData,
   formatDropdownLabel,
 } from '../types';
 import TimePicker from './shared/TimePicker';
@@ -35,7 +35,8 @@ import DatePicker from './shared/DatePicker';
 import Draggable from 'react-draggable';
 import { MoneyInput } from './ui/MoneyInput';
 import { bookingService } from '../services/db/services/BookingService';
-import { zainCashService } from '../services/zaincash';
+import { zainCashService, type ZainCashInitResponse } from '../services/zaincash';
+import { electronBackend } from '../services/mockBackend';
 
 // ✅ تنظيف رقم الهاتف → آخر 10 أرقام (بدون مفتاح الدولة)
 // مثال: "07701234567" → "7701234567", "+9647701234567" → "7701234567"
@@ -152,6 +153,7 @@ interface BookingFormData {
   notes: string;
   allowPublishing: boolean;
   allowPhotography: boolean;
+  isCrewShooting: boolean;
   isFamous: boolean;
   isVIP: boolean;
   extraItems: ExtraItem[];
@@ -208,6 +210,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
       locationLink: '',
       notes: '',
       allowPublishing: false,
+      allowPhotography: true,
       isFamous: false,
       isCrewShooting: false,
       isVIP: false,
@@ -217,20 +220,21 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
 
   // Watch form values
   const formData = watch();
+  const fallbackEventTypeId = EVENT_TYPES[0]?.id ?? 'wedding';
 
   // Dynamic Package Data
-  const [availablePackages, setAvailablePackages] = useState<any[]>(PACKAGES_DATA);
+  const [availablePackages, setAvailablePackages] = useState<PackageData[]>(PACKAGES_DATA);
   const [showDepositPopup, setShowDepositPopup] = useState(false);
   const depositInputRef = useRef<HTMLInputElement>(null);
   const nodeRef = useRef(null);
 
   // حالة البنود الإضافية
   const [extraItems, setExtraItems] = useState<ExtraItem[]>([]);
-  const [newItemAmount, setNewItemAmount] = useState<string>('');
-  const [newItemDescription, setNewItemDescription] = useState<string>('');
 
   // Initialize category based on mode prop: 'location' for villa bookings, first event type for shoot
-  const [selectedCategoryId, setSelectedCategoryId] = useState(mode === 'location' ? 'venue' : EVENT_TYPES[0].id);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(
+    mode === 'location' ? 'venue' : fallbackEventTypeId
+  );
   const [venueTab, setVenueTab] = useState<
     'venue_party' | 'venue_room' | 'venue_session' | 'venue_commercial'
   >('venue_session');
@@ -238,9 +242,9 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
   // Reset selectedCategoryId when modal opens with a different mode
   useEffect(() => {
     if (isOpen && !editingBooking) {
-      setSelectedCategoryId(mode === 'location' ? 'venue' : EVENT_TYPES[0].id);
+      setSelectedCategoryId(mode === 'location' ? 'venue' : fallbackEventTypeId);
     }
-  }, [isOpen, mode, editingBooking]);
+  }, [isOpen, mode, editingBooking, fallbackEventTypeId]);
 
   // Load Merged Packages on Mount
   useEffect(() => {
@@ -266,15 +270,16 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
         const details = editingBooking.details || {};
 
         // Try to map existing category to event type ID for dropdown
-        const eventType =
-          EVENT_TYPES.find(e => e.mapTo === editingBooking.category) || EVENT_TYPES[0];
-        setSelectedCategoryId(eventType.id);
+        const eventType = EVENT_TYPES.find(e => e.mapTo === editingBooking.category);
+        setSelectedCategoryId(eventType?.id ?? fallbackEventTypeId);
 
         // Populate form
         // حساب baseAmount من totalAmount - extraItems
         const extraItemsList = details.extraItems || [];
         const extraItemsTotal = extraItemsList.reduce((sum, item) => sum + (item.amount || 0), 0);
-        const baseAmount = Math.max(0, (editingBooking.totalAmount || 0) - extraItemsTotal);
+        const existingDiscount = (details.discount as AppliedDiscount | undefined) || undefined;
+        const totalBeforeDiscount = existingDiscount?.subtotalAmount ?? editingBooking.totalAmount ?? 0;
+        const baseAmount = Math.max(0, totalBeforeDiscount - extraItemsTotal);
 
         reset({
           category: editingBooking.category,
@@ -306,28 +311,36 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
           allowPhotography:
             details.allowPhotography !== undefined ? details.allowPhotography : true,
           isFamous: editingBooking.isFamous || false,
+          isCrewShooting: editingBooking.isCrewShooting || false,
           isVIP: editingBooking.isVIP || false,
           extraItems: extraItemsList,
         });
         // تحميل البنود الإضافية في الحالة المحلية
         setExtraItems(details.extraItems || []);
+        setAppliedDiscount(existingDiscount || null);
+        setDiscountCodeInput(existingDiscount?.code || '');
+        setDiscountReason(existingDiscount?.reason || '');
+        setDiscountFeedback({ type: null, message: '' });
+        setShowDiscountPopup(false);
       } else {
         // --- Add Mode: Reset to Defaults ---
         setIsCustomPackage(false);
         setShowDepositPopup(false);
         // ✅ FIX: استخدام mode بدلاً من initialCategory لتحديد القائمة الصحيحة
-        const startCatId = mode === 'location' ? 'venue' : EVENT_TYPES[0].id;
+        const startCatId = mode === 'location' ? 'venue' : fallbackEventTypeId;
         setSelectedCategoryId(startCatId);
         setVenueTab('venue_session');
 
         // ✅ إذا هناك بيانات عميل مسبقة (إعادة حجز) — نملأ الاسم والرقم
         const nameParts = rebookClient?.name?.split(/\s+و\s+/) || [];
+        const firstName = nameParts[0] ?? '';
+        const secondName = nameParts[1] ?? '';
         const hasTwo = nameParts.length >= 2;
 
         reset({
           category: initialCategory,
-          groomName: rebookClient ? (hasTwo ? nameParts[0].trim() : nameParts[0]?.trim() || '') : '',
-          brideName: rebookClient ? (hasTwo ? nameParts[1].trim() : '') : '',
+          groomName: rebookClient ? (hasTwo ? firstName.trim() : firstName.trim()) : '',
+          brideName: rebookClient ? (hasTwo ? secondName.trim() : '') : '',
           personName: rebookClient ? rebookClient.name : '',
           isPhotographer: false,
           groomPhone: rebookClient ? rebookClient.phone : '',
@@ -348,18 +361,74 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
           brideBirthday: '',
           familyName: '',
           isFamous: false,
+          isCrewShooting: false,
           isVIP: false,
           extraItems: [],
         });
         // إعادة تعيين البنود الإضافية
         setExtraItems([]);
-        setNewItemAmount('');
-        setNewItemDescription('');
+        setAppliedDiscount(null);
+        setDiscountCodeInput('');
+        setDiscountReason('');
+        setDiscountFeedback({ type: null, message: '' });
+        setShowDiscountPopup(false);
       }
     }
-  }, [isOpen, initialCategory, initialDate, reset, editingBooking, rebookClient]); // availablePackages removed to prevent infinite loop
+  }, [
+    isOpen,
+    initialCategory,
+    initialDate,
+    reset,
+    editingBooking,
+    rebookClient,
+    mode,
+    availablePackages,
+    fallbackEventTypeId,
+  ]);
 
   const [isCustomPackage, setIsCustomPackage] = useState(false);
+  const [discountCodeInput, setDiscountCodeInput] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const [discountFeedback, setDiscountFeedback] = useState<{
+    type: 'success' | 'error' | 'info' | null;
+    message: string;
+  }>({ type: null, message: '' });
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
+  const [showDiscountPopup, setShowDiscountPopup] = useState(false);
+
+  const discountIndicator = useMemo(() => {
+    if (discountFeedback.type === 'error') {
+      return {
+        button:
+          'border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/20',
+        dot: 'bg-red-400',
+        label: 'خطأ خصم',
+      };
+    }
+
+    if (appliedDiscount) {
+      return {
+        button:
+          'border-amber-400/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/20',
+        dot: 'bg-amber-300',
+        label: 'خصم مفعّل',
+      };
+    }
+
+    return {
+      button:
+        'border-white/15 bg-white/[0.04] text-gray-400 hover:bg-white/[0.08] hover:text-gray-300',
+      dot: 'bg-gray-500',
+      label: 'خصم غير مفعّل',
+    };
+  }, [appliedDiscount, discountFeedback.type]);
+
+  const calculateSubtotal = useCallback((base: number, items: ExtraItem[]) => {
+    const safeBase = Number(base || 0);
+    const extras = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    return Math.max(0, safeBase + extras);
+  }, []);
 
   // --- Conflict Detection Logic (Standard) ---
   const bookingConflict = useMemo(() => {
@@ -441,6 +510,9 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
       const lastBooking = matches.sort(
         (a, b) => new Date(b.shootDate).getTime() - new Date(a.shootDate).getTime()
       )[0];
+      if (!lastBooking) {
+        return null;
+      }
       return {
         count: matches.length,
         lastTitle: lastBooking.title,
@@ -499,7 +571,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
       setIsCustomPackage(true);
       setValue('servicePackage', 'عرض مخصص');
       setValue('baseAmount', 0);
-      updateTotalAmount(0, extraItems);
+      updateTotalAmount(0, extraItems, appliedDiscount);
       setShowDepositPopup(false);
     } else {
       setIsCustomPackage(false);
@@ -508,7 +580,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
         setValue('servicePackage', pkg.title);
         setValue('baseAmount', pkg.price);
         setValue('currency', pkg.currency);
-        updateTotalAmount(pkg.price, extraItems);
+        updateTotalAmount(pkg.price, extraItems, appliedDiscount);
         setShowDepositPopup(true);
       }
     }
@@ -518,7 +590,12 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
     setSelectedCategoryId(catId);
     setValue('servicePackage', '');
     setValue('baseAmount', 0);
-    updateTotalAmount(0, extraItems);
+    setAppliedDiscount(null);
+    setDiscountCodeInput('');
+    setDiscountReason('');
+    setDiscountFeedback({ type: null, message: '' });
+    setShowDiscountPopup(false);
+    updateTotalAmount(0, extraItems, null);
     setIsCustomPackage(false);
     setShowDepositPopup(false);
 
@@ -537,57 +614,179 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
     }
   };
 
-  // دالة لتحديث المجموع الكلي
-  const updateTotalAmount = (base: number, items: ExtraItem[]) => {
-    const extraTotal = items.reduce((sum, item) => sum + item.amount, 0);
-    setValue('totalAmount', base + extraTotal);
-  };
+  const subtotalAmount = useMemo(
+    () => calculateSubtotal(formData.baseAmount, extraItems),
+    [calculateSubtotal, formData.baseAmount, extraItems]
+  );
 
-  // دوال إدارة البنود الإضافية
-  const addExtraItem = () => {
-    const amount = parseFloat(newItemAmount);
-    if (!amount || amount <= 0 || !newItemDescription.trim()) {
-      toast.error('يرجى إدخال مبلغ صحيح ووصف');
+  // دالة لتحديث المجموع الكلي (مع دعم الخصم المطبق)
+  const updateTotalAmount = useCallback(
+    (base: number, items: ExtraItem[], discount?: AppliedDiscount | null) => {
+      const subtotal = calculateSubtotal(base, items);
+
+      if (!discount) {
+        setValue('totalAmount', subtotal);
+        if (formData.paidAmount > subtotal) {
+          setValue('paidAmount', subtotal);
+        }
+        return;
+      }
+
+      const discountAmount =
+        discount.type === 'percentage'
+          ? Math.min(subtotal, (subtotal * Math.max(0, Math.min(100, discount.value))) / 100)
+          : Math.min(subtotal, Math.max(0, discount.value));
+      const finalAmount = Math.max(0, subtotal - discountAmount);
+
+      setValue('totalAmount', finalAmount);
+      if (formData.paidAmount > finalAmount) {
+        setValue('paidAmount', finalAmount);
+      }
+    },
+    [calculateSubtotal, formData.paidAmount, setValue]
+  );
+
+  const calculateExtraItemsTotal = useCallback(() => {
+    return extraItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [extraItems]);
+
+  const clearAppliedDiscount = useCallback(() => {
+    setAppliedDiscount(null);
+    setDiscountFeedback({ type: 'info', message: 'تم إلغاء الخصم' });
+    updateTotalAmount(formData.baseAmount, extraItems, null);
+  }, [extraItems, formData.baseAmount, updateTotalAmount]);
+
+  const applyDiscountCode = useCallback(async (): Promise<boolean> => {
+    const normalizedCode = discountCodeInput.trim().toUpperCase();
+    if (!normalizedCode) {
+      setDiscountFeedback({ type: 'error', message: 'أدخل كود الخصم أولاً' });
+      return false;
+    }
+
+    if (subtotalAmount <= 0) {
+      setDiscountFeedback({ type: 'error', message: 'لا يمكن تطبيق خصم على مبلغ صفر' });
+      return false;
+    }
+
+    setIsApplyingDiscount(true);
+    try {
+      const validation = await electronBackend.validateDiscountCode(normalizedCode, subtotalAmount);
+      if (!validation.valid || !validation.discount) {
+        setAppliedDiscount(null);
+        updateTotalAmount(formData.baseAmount, extraItems, null);
+        setDiscountFeedback({
+          type: 'error',
+          message: validation.message || 'تعذر تطبيق كود الخصم',
+        });
+        return false;
+      }
+
+      const nextDiscount: AppliedDiscount = {
+        codeId: validation.discount.codeId,
+        code: validation.discount.code,
+        type: validation.discount.type,
+        value: validation.discount.value,
+        reason: discountReason.trim(),
+        subtotalAmount: validation.discount.subtotalAmount,
+        discountAmount: validation.discount.discountAmount,
+        finalAmount: validation.discount.finalAmount,
+        appliedAt: new Date().toISOString(),
+      };
+
+      setAppliedDiscount(nextDiscount);
+      setDiscountCodeInput(validation.discount.code);
+      setValue('totalAmount', validation.discount.finalAmount);
+      if (formData.paidAmount > validation.discount.finalAmount) {
+        setValue('paidAmount', validation.discount.finalAmount);
+      }
+      setDiscountFeedback({
+        type: 'success',
+        message: `تم تطبيق خصم ${validation.discount.discountAmount.toLocaleString()} بنجاح`,
+      });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'فشل التحقق من كود الخصم';
+      setDiscountFeedback({ type: 'error', message });
+      return false;
+    } finally {
+      setIsApplyingDiscount(false);
+    }
+  }, [
+    discountCodeInput,
+    subtotalAmount,
+    formData.baseAmount,
+    extraItems,
+    discountReason,
+    setValue,
+    formData.paidAmount,
+    updateTotalAmount,
+  ]);
+
+  // عند تغيير المبلغ الأساسي/الإضافات: إما تحديث الخصم أو الرجوع إلى subtotal
+  useEffect(() => {
+    if (!appliedDiscount?.code) {
+      updateTotalAmount(formData.baseAmount, extraItems, null);
       return;
     }
 
-    const newItem: ExtraItem = {
-      id: Date.now().toString(),
-      amount,
-      description: newItemDescription.trim(),
+    let isCancelled = false;
+    const refreshAppliedDiscount = async () => {
+      try {
+        const validation = await electronBackend.validateDiscountCode(appliedDiscount.code, subtotalAmount);
+        if (isCancelled) return;
+
+        if (!validation.valid || !validation.discount) {
+          setAppliedDiscount(null);
+          updateTotalAmount(formData.baseAmount, extraItems, null);
+          setDiscountFeedback({
+            type: 'error',
+            message: validation.message || 'تم إلغاء الخصم لأن الشروط تغيّرت',
+          });
+          return;
+        }
+
+        setAppliedDiscount(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            subtotalAmount: validation.discount?.subtotalAmount ?? prev.subtotalAmount,
+            discountAmount: validation.discount?.discountAmount ?? prev.discountAmount,
+            finalAmount: validation.discount?.finalAmount ?? prev.finalAmount,
+          };
+        });
+        setValue('totalAmount', validation.discount.finalAmount);
+        if (formData.paidAmount > validation.discount.finalAmount) {
+          setValue('paidAmount', validation.discount.finalAmount);
+        }
+      } catch {
+        // keep previous discount state without hard-failing UX
+      }
     };
 
-    const updatedItems = [...extraItems, newItem];
-    setExtraItems(updatedItems);
-    setValue('extraItems', updatedItems);
+    refreshAppliedDiscount();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    appliedDiscount?.code,
+    subtotalAmount,
+    formData.baseAmount,
+    extraItems,
+    formData.paidAmount,
+    setValue,
+    updateTotalAmount,
+  ]);
 
-    // تحديث المجموع الكلي (baseAmount + extraItems)
-    updateTotalAmount(formData.baseAmount || 0, updatedItems);
-
-    // إعادة تعيين الحقول
-    setNewItemAmount('');
-    setNewItemDescription('');
-
-    toast.success('تم إضافة البند بنجاح');
-  };
-
-  const removeExtraItem = (itemId: string) => {
-    const item = extraItems.find(i => i.id === itemId);
-    if (!item) return;
-
-    const updatedItems = extraItems.filter(i => i.id !== itemId);
-    setExtraItems(updatedItems);
-    setValue('extraItems', updatedItems);
-
-    // تحديث المجموع الكلي (baseAmount + extraItems)
-    updateTotalAmount(formData.baseAmount || 0, updatedItems);
-
-    toast.success('تم حذف البند');
-  };
-
-  const calculateExtraItemsTotal = () => {
-    return extraItems.reduce((sum, item) => sum + item.amount, 0);
-  };
+  useEffect(() => {
+    setAppliedDiscount(prev =>
+      prev
+        ? {
+            ...prev,
+            reason: discountReason.trim(),
+          }
+        : prev
+    );
+  }, [discountReason]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [conflictAlert, setConflictAlert] = useState<string | null>(null);
@@ -666,10 +865,24 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
       selectedPrimary: primaryPhone,
       category: selectedCategoryId
     });
+    const normalizedPrimaryPhone = normalizePhone(primaryPhone);
+    const secondaryPhone =
+      [formData.groomPhone, formData.bridePhone, formData.genericPhone]
+        .map((value) => value.trim())
+        .find((value) => value && normalizePhone(value) !== normalizedPrimaryPhone) || '';
 
     const statusToSave = shouldBePending ? BookingStatus.INQUIRY : BookingStatus.CONFIRMED;
     const approvalStatusToSave: 'pending' | 'approved' | 'rejected' | undefined = shouldBePending
       ? 'pending'
+      : undefined;
+    const normalizedDiscount: AppliedDiscount | undefined = appliedDiscount
+      ? {
+          ...appliedDiscount,
+          reason: discountReason.trim(),
+          subtotalAmount,
+          finalAmount: Number(formData.totalAmount || 0),
+          appliedAt: appliedDiscount.appliedAt || new Date().toISOString(),
+        }
       : undefined;
 
     onSave({
@@ -696,6 +909,10 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
       details: {
         groomName,
         brideName,
+        groomPhone: formData.groomPhone || undefined,
+        bridePhone: formData.bridePhone || undefined,
+        genericPhone: formData.genericPhone || undefined,
+        secondaryPhone: secondaryPhone || undefined,
         personName,
         familyName,
         groomBirthday: formData.groomBirthday || undefined,
@@ -712,6 +929,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
         allowPhotography: formData.allowPhotography,
         extraItems: extraItems,
         baseAmount: formData.baseAmount, // سعر الباقة الأساسية
+        discount: normalizedDiscount,
       },
       location: formData.locationLink || '',
     });
@@ -750,6 +968,13 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
         : formData.genericPhone.length > 3;
 
     return basicValid && phoneValid && nameValid;
+  };
+
+  const handleApplyDiscountFromPopup = async () => {
+    const isApplied = await applyDiscountCode();
+    if (isApplied) {
+      setShowDiscountPopup(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -808,7 +1033,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
                               `temp_${Date.now()}`,
                               formData.servicePackage
                             )
-                            .then((response: any) => {
+                            .then((response: ZainCashInitResponse) => {
                               if (window.open) {
                                 window.open(response.url, '_blank');
                               }
@@ -820,7 +1045,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
                         className="px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white rounded-xl transition-all flex items-center justify-center active:scale-95 group relative"
                         title="دفع إلكتروني (قريباً)"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer" />
+                        <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer" />
                         <CreditCard size={22} />
                       </button>
                     </div>
@@ -918,9 +1143,39 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
 
                 {/* Section 1: تفاصيل العرض والوقت */}
                 <div className="space-y-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1 h-5 bg-[#C94557] rounded-full"></div>
-                    <h4 className="text-white font-bold text-sm">بيانات العرض والوقت</h4>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-5 bg-[#C94557] rounded-full"></div>
+                      <h4 className="text-white font-bold text-sm">بيانات العرض والوقت</h4>
+                    </div>
+
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowDiscountPopup(true)}
+                        disabled={readOnly}
+                        title={discountIndicator.label}
+                        className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border transition-all text-[10px] font-bold ${
+                          appliedDiscount
+                            ? 'bg-amber-500/12 border-amber-400/35 text-amber-200 shadow-[0_0_16px_rgba(245,158,11,0.28)]'
+                            : discountFeedback.type === 'error'
+                              ? 'bg-red-500/10 border-red-500/30 text-red-200'
+                              : 'bg-[#1f242c] border-white/10 text-gray-300 hover:border-amber-400/35 hover:text-amber-200'
+                        } ${readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        <Percent size={12} />
+                        <span>خصم</span>
+                        <span
+                          className={`absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full border border-black/50 ${discountIndicator.dot}`}
+                        />
+                      </button>
+
+                      {appliedDiscount && (
+                        <span className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 rounded-md border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 whitespace-nowrap shadow-[0_0_10px_rgba(16,185,129,0.22)]">
+                          -{Math.max(0, appliedDiscount.discountAmount).toLocaleString()} {formData.currency}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -973,7 +1228,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
                           value={formData.baseAmount}
                           onChange={val => {
                             setValue('baseAmount', val);
-                            updateTotalAmount(val, extraItems);
+                            updateTotalAmount(val, extraItems, appliedDiscount);
                           }}
                           placeholder="أدخل سعر الباقة"
                         />
@@ -1006,7 +1261,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
                         value={formData.startTime}
                         onChange={val => {
                           setValue('startTime', val);
-                          const [hours, minutes] = val.split(':').map(Number);
+                          const [hours = 0, minutes = 0] = val.split(':').map(Number);
                           const endMinutes = minutes + 30;
                           const endHours = hours + Math.floor(endMinutes / 60);
                           const finalMinutes = endMinutes % 60;
@@ -1315,6 +1570,122 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({
           </div>
         </Draggable>
       </div>
+
+      {showDiscountPopup && (
+        <div className="fixed inset-0 z-[300000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#1a1d24] shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center ${discountIndicator.button}`}
+                >
+                  <Percent size={15} />
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-sm">إدارة الخصم</h4>
+                  <p className="text-[11px] text-gray-500">{discountIndicator.label}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiscountPopup(false)}
+                className="w-8 h-8 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <X size={15} className="mx-auto" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="space-y-2">
+                <label className="text-xs text-gray-300 font-bold">كود الخصم</label>
+                <input
+                  type="text"
+                  value={discountCodeInput}
+                  onChange={e => setDiscountCodeInput(e.target.value.toUpperCase())}
+                  placeholder="مثال: VIP2026"
+                  autoFocus
+                  className="w-full bg-[#0f1218] border border-white/10 hover:border-white/20 focus:border-[#F7931E] rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-gray-300 font-bold">السبب</label>
+                <input
+                  type="text"
+                  value={discountReason}
+                  onChange={e => setDiscountReason(e.target.value)}
+                  placeholder="سبب الخصم (اختياري)"
+                  className="w-full bg-[#0f1218] border border-white/10 hover:border-white/20 focus:border-[#C94557] rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                  <p className="text-gray-400 mb-1">قبل الخصم</p>
+                  <p className="text-white font-bold">
+                    {subtotalAmount.toLocaleString()} {formData.currency}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                  <p className="text-gray-400 mb-1">الخصم</p>
+                  <p className="text-[#F9BE70] font-bold">
+                    {Math.max(0, appliedDiscount?.discountAmount || 0).toLocaleString()} {formData.currency}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                  <p className="text-emerald-300/80 mb-1">بعد الخصم</p>
+                  <p className="text-emerald-300 font-bold">
+                    {Number(formData.totalAmount || 0).toLocaleString()} {formData.currency}
+                  </p>
+                </div>
+              </div>
+
+              {discountFeedback.message && (
+                <p
+                  className={`text-xs font-bold ${
+                    discountFeedback.type === 'success'
+                      ? 'text-emerald-300'
+                      : discountFeedback.type === 'error'
+                        ? 'text-red-300'
+                        : 'text-gray-300'
+                  }`}
+                >
+                  {discountFeedback.message}
+                </p>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-white/10 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={clearAppliedDiscount}
+                disabled={!appliedDiscount || readOnly}
+                className="h-10 px-3 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-red-300 text-xs font-bold transition-all"
+              >
+                إزالة الخصم
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDiscountPopup(false)}
+                  className="h-10 px-4 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-xs font-bold transition-all"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyDiscountFromPopup}
+                  disabled={isApplyingDiscount || readOnly}
+                  className="h-10 px-4 rounded-lg bg-[#F7931E] hover:bg-[#F9BE70] disabled:opacity-60 disabled:cursor-not-allowed text-black text-xs font-bold transition-all"
+                >
+                  {isApplyingDiscount ? 'جارِ التحقق...' : 'تطبيق الكود'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPendingConfirmation && (
         <div className="fixed inset-0 z-[300000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">

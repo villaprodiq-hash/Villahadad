@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { User, UserRole } from '../../types';
-import { X, Shield, User as UserIcon, Lock, Save, RefreshCw, Eye, EyeOff, Search, Upload, Mail, Smile, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User } from '../../types';
+import { X, Shield, User as UserIcon, Lock, Save, RefreshCw, Eye, EyeOff, Search, Upload, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthService } from '../../services/auth/AuthService';
 
@@ -63,6 +63,11 @@ const compressImage = (dataUrl: string, maxSizeKB: number = 150): Promise<string
   });
 };
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, onUpdateUser, isSafeMode }: SettingsModalProps) {
   React.useEffect(() => {
     if (isOpen) console.log('⚙️ SettingsModal MOUNTED/OPENED');
@@ -92,13 +97,13 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
   }, []);
 
   // Helper to clean legacy avatar urls
-  const cleanAvatar = (a?: string) => {
+  const cleanAvatar = (a?: string): string => {
       if (!a) return 'bg-blue-500';
       // If it's a class (bg-...) keep it
       if (a.startsWith('bg-') || a.startsWith('content-')) return a;
       // If it's wrapped in url(...), strip it
       const match = a.match(/^url\(['"]?(.+?)['"]?\)$/);
-      return match ? match[1] : a;
+      return match?.[1] ?? a;
   };
 
   const [name, setName] = useState(currentUser.name);
@@ -127,7 +132,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
   // Check Biometrics on Mount
   React.useEffect(() => {
       const checkBio = async () => {
-          const api = (window as any).electronAPI;
+          const api = window.electronAPI;
           if (api && api.auth) {
               const supported = await api.auth.checkBiometric();
               setBiometricAvailable(supported);
@@ -147,7 +152,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
           toast.info('تم تعطيل الدخول بالبصمة');
       } else {
           // Enable (Verify First)
-          const api = (window as any).electronAPI;
+          const api = window.electronAPI;
           if (api && api.auth) {
               const success = await api.auth.promptTouchID('تأكيد البصمة لتفعيل الدخول');
               if (success) {
@@ -254,10 +259,10 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
         setSaveStatus('idle');
       }, 500);
       
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('💥 handleSaveProfile ERROR:', e);
       setSaveStatus('error');
-      toast.error(`خطأ في الحفظ: ${e.message || 'فشل التحديث'}`);
+      toast.error(`خطأ في الحفظ: ${getErrorMessage(e, 'فشل التحديث')}`);
     } finally {
       setIsLoading(false);
       console.log('🏁 handleSaveProfile FINISHED');
@@ -295,9 +300,9 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
       setNewPassword('');
       setConfirmPassword('');
       onClose();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      toast.error(`فشل تغيير كلمة المرور: ${e.message}`);
+      toast.error(`فشل تغيير كلمة المرور: ${getErrorMessage(e, 'حدث خطأ غير متوقع')}`);
     } finally {
       setIsLoading(false);
     }
@@ -587,7 +592,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
                             وضع المشرف الآمن
                         </h3>
                         <p className="text-xs text-gray-400">
-                            يمكنك من هنا عرض جميع المستخدمين وإعادة تعيين كلمات مرورهم في حال نسيانها. الرمز الافتراضي لإعادة التعيين هو <b>"123"</b>.
+                            يمكنك من هنا عرض جميع المستخدمين وإعادة تعيين كلمات مرورهم في حال نسيانها. الرمز الافتراضي لإعادة التعيين هو <b>&quot;123&quot;</b>.
                         </p>
                     </div>
 
@@ -674,24 +679,24 @@ export default function SettingsModal({ isOpen, onClose, currentUser, allUsers, 
                                     setCheckingUpdate(true);
                                     setUpdateStatus('جاري الاتصال...');
                                     try {
-                                        const api = (window as any).electronAPI;
+                                        const api = window.electronAPI;
                                         if (api?.checkForUpdates) {
-                                            const appVer = await api.getAppVersion();
+                                            const appVer = api.getAppVersion ? await api.getAppVersion() : null;
                                             const res = await api.checkForUpdates();
                                             
                                             if (res.error) throw new Error(res.error);
                                             
-                                            if (res.version && res.version !== appVer.version) {
+                                            if (res.version && appVer?.version && res.version !== appVer.version) {
                                                 setUpdateStatus('تحديث متاح!');
                                             } else {
                                                 setUpdateStatus('نسختك محدثة');
-                                                toast.success(`🎉 أنت على أحدث إصدار (v${appVer.version})`);
+                                                toast.success(`🎉 أنت على أحدث إصدار${appVer?.version ? ` (v${appVer.version})` : ''}`);
                                             }
                                         } else {
                                             setUpdateStatus('خدمة التحديث غير متوفرة');
                                         }
-                                    } catch (e: any) {
-                                        setUpdateStatus('فشل البحث: ' + e.message);
+                                    } catch (e: unknown) {
+                                        setUpdateStatus('فشل البحث: ' + getErrorMessage(e, 'حدث خطأ غير متوقع'));
                                     } finally {
                                         setTimeout(() => setCheckingUpdate(false), 2000);
                                     }

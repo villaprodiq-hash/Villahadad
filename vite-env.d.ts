@@ -5,5 +5,5 @@ declare module '*.png';
 declare module '*.jpg';
 declare module '*.svg';
 
-declare const electronBackend: any;
-declare const socketService: any;
+declare const electronBackend: unknown;
+declare const socketService: unknown;

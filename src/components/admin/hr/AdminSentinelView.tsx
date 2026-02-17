@@ -1,14 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Eye, Clock, Activity, TrendingUp, TrendingDown,
-  Users, CheckCircle2, XCircle, AlertTriangle, Zap,
-  Briefcase, Camera, Video, Printer as PrinterIcon, Shield, Palette
+  Eye, Clock, Activity, Users, CheckCircle2, Zap
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuth } from '../../../providers/AuthProvider';
-import { useData } from '../../../providers/DataProvider';
-import { UserRole } from '../../../types';
+import { useAuth } from '../../../hooks/useAuth';
+import { useData } from '../../../hooks/useData';
+import { UserRole, BookingStatus } from '../../../types';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const getRoleLabel = (role: string) => {
@@ -36,24 +34,29 @@ const getRoleColor = (role: string) => {
   }
 };
 
-const getRoleBg = (role: string) => {
-  switch (role) {
-    case UserRole.MANAGER: return 'bg-amber-500/10 border-amber-500/20';
-    case UserRole.ADMIN: return 'bg-purple-500/10 border-purple-500/20';
-    case UserRole.RECEPTION: return 'bg-rose-500/10 border-rose-500/20';
-    case UserRole.PHOTO_EDITOR: return 'bg-blue-500/10 border-blue-500/20';
-    case UserRole.VIDEO_EDITOR: return 'bg-emerald-500/10 border-emerald-500/20';
-    case UserRole.PRINTER: return 'bg-indigo-500/10 border-indigo-500/20';
-    default: return 'bg-zinc-500/10 border-zinc-500/20';
-  }
-};
+interface ProductivityPoint {
+  time: string;
+  actions: number;
+}
+
+interface AttendanceEntry {
+  userId: string;
+  status?: string;
+  checkIn?: string | null;
+  checkOut?: string | null;
+}
+
+interface EmployeeActionEntry {
+  userId: string;
+  actionCount: number;
+}
 
 const AdminSentinelView = () => {
     const { users } = useAuth();
     const { bookings } = useData();
-    const [productivityData, setProductivityData] = useState<any[]>([]);
-    const [attendance, setAttendance] = useState<any[]>([]);
-    const [employeeActions, setEmployeeActions] = useState<any[]>([]);
+    const [productivityData, setProductivityData] = useState<ProductivityPoint[]>([]);
+    const [attendance, setAttendance] = useState<AttendanceEntry[]>([]);
+    const [employeeActions, setEmployeeActions] = useState<EmployeeActionEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -64,9 +67,26 @@ const AdminSentinelView = () => {
                 electronBackend.getTodayAttendance(),
                 electronBackend.getEmployeeActionsToday(),
             ]);
-            setProductivityData(stats);
-            setAttendance(todayAttendance);
-            setEmployeeActions(actions);
+            setProductivityData(
+                (stats || []).map((item: Record<string, unknown>) => ({
+                    time: String(item.time || ''),
+                    actions: Number(item.actions || 0),
+                }))
+            );
+            setAttendance(
+                (todayAttendance || []).map((item: Record<string, unknown>) => ({
+                    userId: String(item.userId || ''),
+                    status: item.status ? String(item.status) : undefined,
+                    checkIn: item.checkIn ? String(item.checkIn) : null,
+                    checkOut: item.checkOut ? String(item.checkOut) : null,
+                }))
+            );
+            setEmployeeActions(
+                (actions || []).map((item: Record<string, unknown>) => ({
+                    userId: String(item.userId || ''),
+                    actionCount: Number(item.actionCount || 0),
+                }))
+            );
             setLoading(false);
         };
         loadData();
@@ -87,7 +107,7 @@ const AdminSentinelView = () => {
         // Calculate lateness (assuming work starts at 09:00)
         let lateMinutes = 0;
         if (checkIn) {
-            const [h, m] = checkIn.split(':').map(Number);
+            const [h = 0, m = 0] = checkIn.split(':').map(Number);
             const checkInMinutes = h * 60 + m;
             const startMinutes = 9 * 60; // 09:00
             if (checkInMinutes > startMinutes) {
@@ -104,8 +124,8 @@ const AdminSentinelView = () => {
             b.createdBy === userId
         );
 
-        const completedBookings = assignedBookings.filter(b =>
-            b.status === 'delivered' || b.status === 'completed'
+        const completedBookings = assignedBookings.filter(
+            b => b.status === BookingStatus.DELIVERED || b.status === BookingStatus.ARCHIVED
         );
 
         return {
@@ -123,10 +143,9 @@ const AdminSentinelView = () => {
     const totalPresent = attendance.filter(a => a.status === 'Present' || a.checkIn).length;
     const totalLate = attendance.filter(a => {
         if (!a.checkIn) return false;
-        const [h, m] = a.checkIn.split(':').map(Number);
+        const [h = 0, m = 0] = a.checkIn.split(':').map(Number);
         return (h * 60 + m) > (9 * 60);
     }).length;
-    const totalAbsent = staffList.length - totalPresent;
     const totalActions = employeeActions.reduce((sum, a) => sum + Number(a.actionCount || 0), 0);
 
     if (loading) return <div className="h-full flex items-center justify-center text-zinc-500">جارِ التحميل...</div>;
@@ -148,7 +167,7 @@ const AdminSentinelView = () => {
                      </p>
                 </div>
                 <div className="flex items-center gap-3">
-                     <div className="px-3 py-1.5 bg-zinc-900 border border-white/[0.06] text-xs text-zinc-400 flex items-center gap-2">
+                     <div className="px-3 py-1.5 bg-zinc-900 border border-white/6 text-xs text-zinc-400 flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-green-500 animate-pulse" />
                         {new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                      </div>
@@ -157,7 +176,7 @@ const AdminSentinelView = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-4 gap-3">
-                <div className="bg-[#111] border border-white/[0.06] p-4">
+                <div className="bg-[#111] border border-white/6 p-4">
                     <div className="flex items-center justify-between mb-2">
                         <Users size={16} className="text-zinc-500" />
                         <span className="text-[10px] text-zinc-500">الفريق</span>
@@ -165,7 +184,7 @@ const AdminSentinelView = () => {
                     <div className="text-2xl font-black text-white">{staffList.length}</div>
                     <div className="text-[10px] text-zinc-500 mt-1">عدد الموظفين</div>
                 </div>
-                <div className="bg-[#111] border border-white/[0.06] p-4">
+                <div className="bg-[#111] border border-white/6 p-4">
                     <div className="flex items-center justify-between mb-2">
                         <CheckCircle2 size={16} className="text-emerald-500" />
                         <span className="text-[10px] text-zinc-500">حاضر</span>
@@ -173,7 +192,7 @@ const AdminSentinelView = () => {
                     <div className="text-2xl font-black text-emerald-400">{totalPresent}</div>
                     <div className="text-[10px] text-zinc-500 mt-1">سجلوا حضور</div>
                 </div>
-                <div className="bg-[#111] border border-white/[0.06] p-4">
+                <div className="bg-[#111] border border-white/6 p-4">
                     <div className="flex items-center justify-between mb-2">
                         <Clock size={16} className="text-amber-500" />
                         <span className="text-[10px] text-zinc-500">متأخر</span>
@@ -181,7 +200,7 @@ const AdminSentinelView = () => {
                     <div className="text-2xl font-black text-amber-400">{totalLate}</div>
                     <div className="text-[10px] text-zinc-500 mt-1">تأخروا اليوم</div>
                 </div>
-                <div className="bg-[#111] border border-white/[0.06] p-4">
+                <div className="bg-[#111] border border-white/6 p-4">
                     <div className="flex items-center justify-between mb-2">
                         <Zap size={16} className="text-blue-500" />
                         <span className="text-[10px] text-zinc-500">إجراءات</span>
@@ -194,7 +213,7 @@ const AdminSentinelView = () => {
             <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
 
                 {/* Productivity Chart */}
-                <div className="col-span-12 lg:col-span-8 bg-[#111] border border-white/[0.06] p-5 flex flex-col">
+                <div className="col-span-12 lg:col-span-8 bg-[#111] border border-white/6 p-5 flex flex-col">
                      <div className="flex justify-between items-center mb-4">
                          <h3 className="text-sm font-bold text-white flex items-center gap-2">
                             <Activity className="text-yellow-500" size={16} />
@@ -230,7 +249,7 @@ const AdminSentinelView = () => {
                 </div>
 
                 {/* Late Arrivals Today */}
-                <div className="col-span-12 lg:col-span-4 bg-[#111] border border-white/[0.06] p-5 flex flex-col">
+                <div className="col-span-12 lg:col-span-4 bg-[#111] border border-white/6 p-5 flex flex-col">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
                         <Clock className="text-red-400" size={16} />
                         التأخيرات اليوم
@@ -268,7 +287,7 @@ const AdminSentinelView = () => {
                 </div>
 
                 {/* Full Employee Table */}
-                <div className="col-span-12 bg-[#111] border border-white/[0.06] p-5 flex flex-col">
+                <div className="col-span-12 bg-[#111] border border-white/6 p-5 flex flex-col">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-sm font-bold text-white flex items-center gap-2">
                             <Users className="text-zinc-400" size={16} />
@@ -279,7 +298,7 @@ const AdminSentinelView = () => {
 
                     <div className="overflow-x-auto flex-1">
                         <table className="w-full text-right border-collapse">
-                            <thead className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider border-b border-white/[0.06]">
+                            <thead className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider border-b border-white/6">
                                 <tr>
                                     <th className="py-3 px-3">الموظف</th>
                                     <th className="py-3 px-3">الوظيفة</th>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ConflictService, ConflictRecord } from '../../services/sync/ConflictService';
 import { X, Check, Trash2, ArrowRight } from 'lucide-react';
 import { supabase } from '../../services/supabase';
@@ -8,30 +8,33 @@ interface ModalProps {
     managerName?: string;
 }
 
+type BookingSnapshot = Record<string, unknown>;
+
 export const ConflictResolverModal: React.FC<ModalProps> = ({ onClose, managerName = "Manager" }) => {
     const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
     const [loading, setLoading] = useState(true);
-    const [currentBooking, setCurrentBooking] = useState<any>(null);
+    const [currentBooking, setCurrentBooking] = useState<BookingSnapshot | null>(null);
 
-    useEffect(() => {
-        loadConflicts();
+    const fetchCurrentVersion = useCallback(async (bookingId: string) => {
+        const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
+        setCurrentBooking((data as BookingSnapshot | null) ?? null);
     }, []);
 
-    const loadConflicts = async () => {
+    const loadConflicts = useCallback(async () => {
         setLoading(true);
         const data = await ConflictService.fetchPendingConflicts();
         setConflicts(data);
         setLoading(false);
         
-        if (data.length > 0) {
-             fetchCurrentVersion(data[0].booking_id);
+        const firstConflict = data[0];
+        if (firstConflict) {
+             void fetchCurrentVersion(firstConflict.booking_id);
         }
-    };
+    }, [fetchCurrentVersion]);
 
-    const fetchCurrentVersion = async (bookingId: string) => {
-        const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
-        setCurrentBooking(data);
-    };
+    useEffect(() => {
+        void loadConflicts();
+    }, [loadConflicts]);
 
     const handleResolve = async (id: string, decision: 'ACCEPT' | 'REJECT') => {
         try {
@@ -40,12 +43,13 @@ export const ConflictResolverModal: React.FC<ModalProps> = ({ onClose, managerNa
             const remaining = conflicts.filter(c => c.id !== id);
             setConflicts(remaining);
             
-            if (remaining.length > 0) {
-                fetchCurrentVersion(remaining[0].booking_id);
+            const nextConflict = remaining[0];
+            if (nextConflict) {
+                void fetchCurrentVersion(nextConflict.booking_id);
             } else {
                 onClose();
             }
-        } catch (e) {
+        } catch (_error) {
             alert("فشل في تنفيذ العملية. تأكد من الاتصال.");
         }
     };
@@ -85,7 +89,7 @@ export const ConflictResolverModal: React.FC<ModalProps> = ({ onClose, managerNa
                                 النسخة الحالية (السحابية)
                             </span>
                             <span className="text-xs text-gray-500">
-                                آخر تعديل: {currentBooking?.updated_by_name || 'غير معروف'}
+                                آخر تعديل: {String(currentBooking?.updated_by_name ?? 'غير معروف')}
                             </span>
                         </div>
                         
@@ -142,8 +146,21 @@ export const ConflictResolverModal: React.FC<ModalProps> = ({ onClose, managerNa
 };
 
 // Helper Component to display booking data
-const BookingCard = ({ data, isProposed, original }: { data: any, isProposed: boolean, original?: any }) => {
+const BookingCard = ({
+    data,
+    isProposed,
+    original,
+}: {
+    data: BookingSnapshot | null;
+    isProposed: boolean;
+    original?: BookingSnapshot | null;
+}) => {
     if (!data) return <div className="p-10 text-center text-gray-400">جاري التحميل...</div>;
+
+    const stringifyValue = (value: unknown): string => {
+        if (value === null || value === undefined || value === '') return '-';
+        return String(value);
+    };
 
     const fields = [
         { key: 'client_name', label: 'العميل' },
@@ -160,17 +177,17 @@ const BookingCard = ({ data, isProposed, original }: { data: any, isProposed: bo
             {fields.map(f => {
                 const val = data[f.key];
                 const originalVal = original ? original[f.key] : null;
-                const isChanged = isProposed && original && val != originalVal;
+                const isChanged = isProposed && Boolean(original) && val !== originalVal;
 
                 return (
                     <div key={f.key} className={`p-3 rounded-lg border ${isChanged ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' : 'border-transparent hover:bg-white dark:hover:bg-gray-800'} transition-all`}>
                         <div className="text-xs text-gray-400 mb-1">{f.label}</div>
                         <div className={`font-medium ${isChanged ? 'text-amber-800 dark:text-amber-200' : 'text-gray-800 dark:text-gray-200'}`}>
-                            {val || '-'}
+                            {stringifyValue(val)}
                         </div>
                         {isChanged && (
                             <div className="mt-1 text-xs text-red-400 line-through">
-                                كان: {originalVal || '(فارغ)'}
+                                كان: {stringifyValue(originalVal) === '-' ? '(فارغ)' : stringifyValue(originalVal)}
                             </div>
                         )}
                     </div>

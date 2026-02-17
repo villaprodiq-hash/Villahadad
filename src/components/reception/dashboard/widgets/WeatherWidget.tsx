@@ -60,7 +60,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ isManager = false }) => {
   }, []);
 
   return (
-    <div className={`w-full h-full ${isManager ? 'bg-[#1a1c22] rounded-xl border border-white/10 shadow-2xl' : 'bg-gradient-to-br from-[#2a2a2a] to-[#202020] rounded-3xl'} p-3 flex flex-col justify-between overflow-hidden relative shadow-inner`}>
+    <div className={`w-full h-full ${isManager ? 'bg-[#1a1c22] rounded-xl border border-white/10 shadow-2xl' : 'bg-linear-to-br from-[#2a2a2a] to-[#202020] rounded-3xl'} p-3 flex flex-col justify-between overflow-hidden relative shadow-inner`}>
       
       {/* Top Section: Recessed "Square" Container */}
       {/* هذا المربع المحفور يحتوي البيانات العلوية ليشبه مربع التقويم */}
@@ -91,7 +91,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ isManager = false }) => {
       <div className="w-full py-1 z-10 flex flex-col justify-center mt-3 mb-1 px-1">
         <div className="relative h-2.5 w-full bg-[#111] rounded-full overflow-hidden shadow-[inset_3px_3px_6px_rgba(0,0,0,0.9),inset_-1px_-1px_2px_rgba(255,255,255,0.08)] border-b border-white/5">
           <div 
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#FF5722] to-[#FF8A65] opacity-90 shadow-[0_0_10px_#FF5722]"
+            className="absolute top-0 left-0 h-full bg-linear-to-r from-[#FF5722] to-[#FF8A65] opacity-90 shadow-[0_0_10px_#FF5722]"
             style={{ width: `${sunPosition}%` }}
           ></div>
         </div>

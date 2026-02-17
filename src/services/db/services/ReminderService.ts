@@ -15,7 +15,9 @@ export class ReminderService {
       return res as unknown as Reminder[];
   }
 
-  async addReminder(data: any): Promise<Reminder> {
+  async addReminder(
+    data: Partial<Reminder> & Pick<Reminder, 'title' | 'dueDate' | 'type'>
+  ): Promise<Reminder> {
     const validated = ReminderSchema.parse({
       ...data,
       id: data.id || `r_${Date.now()}`,
@@ -31,8 +33,16 @@ export class ReminderService {
     // Kysely insert
     await db
         .insertInto('reminders')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .values(insertData as any)
+        .values({
+          id: insertData.id,
+          bookingId: insertData.bookingId || null,
+          title: insertData.title,
+          dueDate: insertData.dueDate,
+          completed: insertData.completed,
+          type: insertData.type,
+          customIcon: null,
+          deletedAt: insertData.deletedAt,
+        })
         .execute();
     
     return validated as unknown as Reminder;
@@ -64,19 +74,34 @@ export class ReminderService {
         .execute();
   }
 
-  async updateReminder(id: string, updates: any): Promise<void> {
+  async updateReminder(id: string, updates: Partial<Reminder>): Promise<void> {
     if (Object.keys(updates).length === 0) return;
 
-    // Handle boolean conversions
-    const safeUpdates = { ...updates };
-    if (typeof safeUpdates.completed === 'boolean') {
-        safeUpdates.completed = safeUpdates.completed ? 1 : 0;
+    const dbUpdates: {
+      id?: string;
+      bookingId?: string | null;
+      title?: string;
+      dueDate?: string;
+      completed?: number;
+      type?: Reminder['type'];
+      customIcon?: string | null;
+    } = {};
+
+    if (typeof updates.id === 'string') dbUpdates.id = updates.id;
+    if (Object.prototype.hasOwnProperty.call(updates, 'bookingId')) {
+      dbUpdates.bookingId = updates.bookingId ?? null;
+    }
+    if (typeof updates.title === 'string') dbUpdates.title = updates.title;
+    if (typeof updates.dueDate === 'string') dbUpdates.dueDate = updates.dueDate;
+    if (typeof updates.completed === 'boolean') dbUpdates.completed = updates.completed ? 1 : 0;
+    if (typeof updates.type === 'string') dbUpdates.type = updates.type;
+    if (Object.prototype.hasOwnProperty.call(updates, 'customIcon')) {
+      dbUpdates.customIcon = updates.customIcon ?? null;
     }
 
     await db
         .updateTable('reminders')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .set(safeUpdates)
+        .set(dbUpdates)
         .where('id', '=', id)
         .execute();
   }

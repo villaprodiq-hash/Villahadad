@@ -9,7 +9,7 @@ interface VideoEditorSidebarProps {
   onNavigate: (tab: string) => void;
   onLogout: () => void;
   onOpenSettings?: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 

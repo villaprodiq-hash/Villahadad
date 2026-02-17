@@ -22,7 +22,7 @@ interface MainLayoutProps {
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <ErrorBoundary
-      onError={(error, errorInfo) => {
+      onError={(_error, _errorInfo) => {
         // Send to error tracking service in production
         if (import.meta.env.PROD) {
           // Example: Sentry.captureException(error, { extra: errorInfo });

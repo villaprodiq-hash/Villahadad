@@ -55,8 +55,6 @@ test.describe('VillaApps Full System Audit', () => {
     console.log('🔹 [Manager] Assigning Task to Reception...');
     // Open Tasks Widget/Sidebar (assuming it's on dashboard or team view)
     await page.getByTestId('section-home').click(); // Back to dashboard
-    // Look for "Add Task" button in the Tasks Widget
-    const addTaskBtn = page.locator('button:has(svg.lucide-plus)').first(); 
     // This is heuristic, might need precise ID later. 
     // Let's assume the TasksWidget is visible.
     

@@ -58,7 +58,7 @@ export class AuthService {
      * Map Supabase User to Local User Role
      * Uses user metadata (assuming 'role' is stored in metadata)
      */
-    static getRoleFromUser(user: any): UserRole {
+    static getRoleFromUser(user: { user_metadata?: { role?: string } } | null | undefined): UserRole {
         if (!user || !user.user_metadata || !user.user_metadata.role) {
             return UserRole.RECEPTION; // Default fallback
         }

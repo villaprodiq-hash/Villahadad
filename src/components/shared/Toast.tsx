@@ -41,7 +41,7 @@ const Toast: React.FC<ToastProps> = ({ message, isVisible, onClose, duration = 4
         <div className="relative bg-[#1E1E1E]/90 backdrop-blur-xl border border-white/10 pr-4 pl-10 py-4 rounded-2xl shadow-2xl flex items-center gap-4 min-w-[320px] overflow-hidden">
           
           {/* Gradient Status Line */}
-          <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-green-400 to-green-600" />
+          <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-linear-to-b from-green-400 to-green-600" />
           
           {/* Icon */}
           <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500 shadow-[0_0_15px_rgba(34,197,94,0.2)]">

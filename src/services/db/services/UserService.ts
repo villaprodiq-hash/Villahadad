@@ -7,16 +7,16 @@ export class UserService {
     return await userRepo.getAll() as unknown as User[];
   }
 
-  async addUser(data: any): Promise<User> {
+  async addUser(data: Partial<User> & { name: string; role: User['role'] }): Promise<User> {
     const validated = UserSchema.parse({
       ...data,
       id: data.id || `u_${Date.now()}`,
     });
-    await userRepo.create(validated as any);
+    await userRepo.create(validated as User);
     return validated as unknown as User;
   }
 
-  async updateUser(id: string, updates: any): Promise<void> {
+  async updateUser(id: string, updates: Partial<User>): Promise<void> {
     await userRepo.update(id, updates);
   }
 

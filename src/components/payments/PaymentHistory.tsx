@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { CreditCard, DollarSign, Calendar, User, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { formatMoney } from '../../utils/formatMoney';
 import { paymentService } from '../../services/db/services/PaymentService';
 import { PaymentHistoryEntry } from '../../types/addon.types';
-import { Booking, Currency } from '../../../types';
+import { Booking } from '../../../types';
 
 interface PaymentHistoryProps {
   booking: Booking;
@@ -54,11 +54,7 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({ booking }) => {
     remainingBalance: number;
   } | null>(null);
 
-  useEffect(() => {
-    loadPaymentHistory();
-  }, [booking.id]);
-
-  const loadPaymentHistory = async () => {
+  const loadPaymentHistory = useCallback(async () => {
     setLoading(true);
     try {
       const history = await paymentService.getPaymentHistory(booking.id);
@@ -71,7 +67,11 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({ booking }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [booking.id]);
+
+  useEffect(() => {
+    void loadPaymentHistory();
+  }, [loadPaymentHistory]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -102,28 +102,28 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({ booking }) => {
       {/* Balance Summary Cards */}
       {balanceInfo && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
+          <div className="bg-linear-to-br from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
             <p className="text-xs text-gray-500 mb-1">الباقة الأصلية</p>
             <p className="text-lg font-bold text-gray-900">
               {formatMoney(balanceInfo.originalPackagePrice, booking.currency)}
             </p>
           </div>
           
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
+          <div className="bg-linear-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
             <p className="text-xs text-blue-600 mb-1">الإضافات</p>
             <p className="text-lg font-bold text-blue-700">
               {formatMoney(balanceInfo.totalAddOns, booking.currency)}
             </p>
           </div>
           
-          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 rounded-xl border border-emerald-200">
+          <div className="bg-linear-to-br from-emerald-50 to-emerald-100 p-4 rounded-xl border border-emerald-200">
             <p className="text-xs text-emerald-600 mb-1">المدفوع</p>
             <p className="text-lg font-bold text-emerald-700">
               {formatMoney(balanceInfo.paidAmount, booking.currency)}
             </p>
           </div>
           
-          <div className="bg-gradient-to-br from-rose-50 to-rose-100 p-4 rounded-xl border border-rose-200">
+          <div className="bg-linear-to-br from-rose-50 to-rose-100 p-4 rounded-xl border border-rose-200">
             <p className="text-xs text-rose-600 mb-1">المتبقي</p>
             <p className="text-lg font-bold text-rose-700">
               {formatMoney(balanceInfo.remainingBalance, booking.currency)}
@@ -161,7 +161,7 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({ booking }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {payments.map((payment, index) => {
+                {payments.map(payment => {
                   const typeInfo = getPaymentTypeInfo(payment.type);
                   return (
                     <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
@@ -223,7 +223,7 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({ booking }) => {
 
       {/* Summary Footer */}
       {payments.length > 0 && balanceInfo && (
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 rounded-xl border border-emerald-200">
+        <div className="bg-linear-to-r from-emerald-50 to-teal-50 p-4 rounded-xl border border-emerald-200">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-emerald-800 mb-1">إجمالي المدفوعات</p>

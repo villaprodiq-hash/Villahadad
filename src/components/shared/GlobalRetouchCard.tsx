@@ -40,12 +40,12 @@ const GlobalRetouchCard: React.FC<GlobalRetouchCardProps> = ({ preferences, onSa
   };
   
   return (
-    <div className="bg-[#21242b] rounded-[2rem] p-6 shadow-[10px_10px_20px_#16181d,-10px_-10px_20px_#2c3039] border border-white/5">
+    <div className="bg-[#21242b] rounded-4xl p-6 shadow-[10px_10px_20px_#16181d,-10px_-10px_20px_#2c3039] border border-white/5">
       
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-xl bg-linear-to-br from-purple-500 to-pink-600 flex items-center justify-center">
             <Palette size={20} className="text-white" />
           </div>
           <div>

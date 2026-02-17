@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ArrowRight, CheckCircle2, Tag, ExternalLink, 
+  ArrowRight, ExternalLink, 
   FolderOpen, Check, X, ZoomIn, ZoomOut
 } from 'lucide-react';
-import { Album, AlbumImage } from '../PhotoEditorDashboard';
+import type { Album, AlbumImage } from '../types';
 
 interface ImageDetailViewProps {
   image: AlbumImage;
@@ -14,7 +14,7 @@ interface ImageDetailViewProps {
   onNavigate?: (image: AlbumImage) => void;
 }
 
-const ImageDetailView: React.FC<ImageDetailViewProps> = ({ image, album, onBack, allImages = [], onNavigate }) => {
+const ImageDetailView: React.FC<ImageDetailViewProps> = ({ image, album: _album, onBack, allImages = [], onNavigate }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [isMarkedDone, setIsMarkedDone] = useState(image.status === 'completed');
@@ -27,19 +27,23 @@ const ImageDetailView: React.FC<ImageDetailViewProps> = ({ image, album, onBack,
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < allImages.length - 1;
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (hasPrev && onNavigate) {
-      onNavigate(allImages[currentIndex - 1]);
+      const prevImage = allImages[currentIndex - 1];
+      if (!prevImage) return;
+      onNavigate(prevImage);
       setPan({ x: 0, y: 0 }); // Reset pan on image change
     }
-  };
+  }, [allImages, currentIndex, hasPrev, onNavigate]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (hasNext && onNavigate) {
-      onNavigate(allImages[currentIndex + 1]);
+      const nextImage = allImages[currentIndex + 1];
+      if (!nextImage) return;
+      onNavigate(nextImage);
       setPan({ x: 0, y: 0 }); // Reset pan on image change
     }
-  };
+  }, [allImages, currentIndex, hasNext, onNavigate]);
 
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -75,18 +79,33 @@ const ImageDetailView: React.FC<ImageDetailViewProps> = ({ image, album, onBack,
     setIsDragging(false);
   };
 
-  const handleZoomChange = (newZoom: number) => {
+  const handleZoomChange = useCallback((newZoom: number) => {
     setZoom(newZoom);
     if (newZoom <= 100) {
       setPan({ x: 0, y: 0 });
     }
-  };
+  }, []);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     setContextMenuPosition({ x: e.clientX, y: e.clientY });
     setShowContextMenu(true);
   };
+
+  const handleOpenInPhotoshop = useCallback(() => {
+    alert(`Open in Photoshop: ${image.path}`);
+    setShowContextMenu(false);
+  }, [image.path]);
+
+  const handleShowInExplorer = useCallback(() => {
+    alert(`Show in Explorer: ${image.path}`);
+    setShowContextMenu(false);
+  }, [image.path]);
+
+  const handleMarkAsDone = useCallback(() => {
+    setIsMarkedDone(!isMarkedDone);
+    alert(isMarkedDone ? 'Unmarked as done' : 'Marked as done');
+  }, [isMarkedDone]);
 
   useEffect(() => {
     const handleClick = () => setShowContextMenu(false);
@@ -107,22 +126,15 @@ const ImageDetailView: React.FC<ImageDetailViewProps> = ({ image, album, onBack,
       document.removeEventListener('click', handleClick);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentIndex, allImages, zoom]);
-
-  const handleOpenInPhotoshop = () => {
-    alert(`Open in Photoshop: ${image.path}`);
-    setShowContextMenu(false);
-  };
-
-  const handleShowInExplorer = () => {
-    alert(`Show in Explorer: ${image.path}`);
-    setShowContextMenu(false);
-  };
-
-  const handleMarkAsDone = () => {
-    setIsMarkedDone(!isMarkedDone);
-    alert(isMarkedDone ? 'Unmarked as done' : 'Marked as done');
-  };
+  }, [
+    handleZoomChange,
+    handleMarkAsDone,
+    handleNext,
+    handleOpenInPhotoshop,
+    handlePrev,
+    handleShowInExplorer,
+      zoom,
+    ]);
 
   return (
     <div className="h-full flex">

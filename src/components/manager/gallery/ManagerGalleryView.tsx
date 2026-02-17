@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { FolderOpen, ChevronRight, Filter, Search, FolderPlus, X, Calendar, User, Hash, Briefcase, Plus } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 
 // Widgets
 // Widgets
 import GalleryHeroWidget from './widgets/GalleryHeroWidget';
-import GalleryFilterBar from './widgets/GalleryFilterBar';
 // import GalleryGridWidget from './widgets/GalleryGridWidget'; // Replaced
 import SelectionFolderView from '../../selection/widgets/SelectionFolderView'; // New
 import SelectionLightbox from '../../selection/widgets/SelectionLightbox'; // New
@@ -27,14 +26,27 @@ const EDITING_TAGS = [
   'تنحيف الجسم'
 ];
 
+interface LocalFsItem {
+  isDirectory: boolean;
+  name: string;
+  path: string;
+  mtime: string | number | Date;
+}
+
+const toDateKey = (value: string | number | Date): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+};
+
 const ManagerGalleryView: React.FC = () => {
   const [viewMode, setViewMode] = useState<'folders' | 'images'>('folders');
   const [activeTab, setActiveTab] = useState('All');
   const [selectedPhoto, setSelectedPhoto] = useState<PortfolioItem | null>(null);
-  const [showRatings, setShowRatings] = useState(true);
+  const showRatings = true;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFolder, setActiveFolder] = useState<GalleryFolder | null>(null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false); // Dev Preview State
+  const isPreviewMode = false; // Dev Preview State
   
   // State for real folders
   const [folders, setFolders] = useState<GalleryFolder[]>([]);
@@ -42,13 +54,11 @@ const ManagerGalleryView: React.FC = () => {
   // Real Data: Open Directory
   const handleOpenDirectory = async () => {
     try {
-        // @ts-ignore
         if (!window.electronAPI?.fileSystem?.openDirectory) {
             toast.error("هذه الميزة غير مدعومة في المتصفح");
             return;
         }
 
-        // @ts-ignore
         const path = await window.electronAPI.fileSystem.openDirectory();
         if (path) {
             loadDirectory(path);
@@ -61,17 +71,21 @@ const ManagerGalleryView: React.FC = () => {
 
   const loadDirectory = async (path: string) => {
       try {
-          // @ts-ignore
-          const items = await window.electronAPI.fileSystem.listDirectory(path);
+          const listDirectory = window.electronAPI?.fileSystem?.listDirectory;
+          if (!listDirectory) {
+            toast.error('ميزة قراءة المجلدات غير متاحة');
+            return;
+          }
+          const items = (await listDirectory(path)) as LocalFsItem[];
           
           const newFolders: GalleryFolder[] = items
-            .filter((i: any) => i.isDirectory)
-            .map((i: any, index: number) => ({
+            .filter((i) => i.isDirectory)
+            .map((i, index: number) => ({
               id: index + 1,
               title: i.name,
               client: 'مجلد محلي',
               bookingId: i.path, // Store full path here
-              date: new Date(i.mtime).toISOString().split('T')[0],
+              date: toDateKey(i.mtime),
               category: 'محلي',
               coverImage: 'https://images.unsplash.com/photo-1542038784456-1ea0e93ca64b?q=80&w=2000', // Default
               imageCount: 0, 
@@ -79,7 +93,7 @@ const ManagerGalleryView: React.FC = () => {
               progress: 0,
               assignedTo: { name: 'Local', avatar: '' },
               lastUpdate: 'الآن',
-              timestamp: i.mtime
+              timestamp: new Date(i.mtime).getTime()
           }));
 
           setFolders(newFolders);
@@ -91,7 +105,9 @@ const ManagerGalleryView: React.FC = () => {
 
   // Replace mockFolders with folders
   const activeFolders = folders;
-  const sortedFolders = [...activeFolders].sort((a, b) => b.timestamp - a.timestamp);
+  const sortedFolders = [...activeFolders].sort(
+    (a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0)
+  );
 
   // بيانات الصور (تبقى كما هي)
   // بيانات الصور (تبقى كما هي)
@@ -153,22 +169,26 @@ const ManagerGalleryView: React.FC = () => {
      
      // Load Images from Folder
      if (folder.bookingId && folder.bookingId.startsWith('/')) { // Check if it is a path
-        try {
-            // @ts-ignore
-            const items = await window.electronAPI.fileSystem.listDirectory(folder.bookingId);
-            const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
-            
-            const newPortfolioItems: PortfolioItem[] = items
-                .filter((i: any) => !i.isDirectory && imageExtensions.some(ext => i.name.toLowerCase().endsWith(ext)))
-                .map((i: any, index: number) => ({
-                   id: index + 1000,
-                   title: i.name,
-                   category: 'Local',
+          try {
+              const listDirectory = window.electronAPI?.fileSystem?.listDirectory;
+              if (!listDirectory) {
+                toast.error('ميزة قراءة المجلدات غير متاحة');
+                return;
+              }
+              const items = (await listDirectory(folder.bookingId)) as LocalFsItem[];
+              const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
+              
+              const newPortfolioItems: PortfolioItem[] = items
+                  .filter((i) => !i.isDirectory && imageExtensions.some(ext => i.name.toLowerCase().endsWith(ext)))
+                  .map((i, index: number) => ({
+                     id: index + 1000,
+                     title: i.name,
+                     category: 'Local',
                    image: `file://${i.path}`, // Use local file protocol
                    likes: 0,
                    status: 'pending',
                    assignedTo: { name: 'Local', avatar: '' },
-                   date: new Date(i.mtime).toISOString().split('T')[0],
+                   date: toDateKey(i.mtime),
                    camera: 'Unknown',
                    editingRequests: []
                 }));
@@ -202,14 +222,16 @@ const ManagerGalleryView: React.FC = () => {
     if (!selectedPhoto) return;
     const currentIndex = filteredItems.findIndex(p => p.id === selectedPhoto.id);
     const nextIndex = (currentIndex + 1) % filteredItems.length;
-    setSelectedPhoto(filteredItems[nextIndex]);
+    const nextItem = filteredItems[nextIndex];
+    if (nextItem) setSelectedPhoto(nextItem);
   };
 
   const handlePrev = () => {
     if (!selectedPhoto) return;
     const currentIndex = filteredItems.findIndex(p => p.id === selectedPhoto.id);
     const prevIndex = (currentIndex - 1 + filteredItems.length) % filteredItems.length;
-    setSelectedPhoto(filteredItems[prevIndex]);
+    const prevItem = filteredItems[prevIndex];
+    if (prevItem) setSelectedPhoto(prevItem);
   };
 
   const handleToggleTag = (id: number, tag: string) => {
@@ -302,7 +324,7 @@ const ManagerGalleryView: React.FC = () => {
     client: '',
     bookingId: '',
     category: 'أعراس',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().slice(0, 10)
   });
 
   const handleCreateFolder = () => {
@@ -334,7 +356,7 @@ const ManagerGalleryView: React.FC = () => {
         client: '',
         bookingId: '',
         category: 'أعراس',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().slice(0, 10)
     });
     
     // 2. Call API to Create Physical Folder
@@ -523,12 +545,12 @@ const ManagerGalleryView: React.FC = () => {
                        if (input) input.click();
                     }}
                     onItemClick={(item) => setSelectedPhoto(item)}
-                    onRate={(id, rating) => {
-                       setPortfolioItems(prev => prev.map(p => p.id === id ? { ...p, rating } : p));
-                    }}
-                    showRatings={true}
-                 />
-              )}
+                      onRate={(id, rating) => {
+                         setPortfolioItems(prev => prev.map(p => p.id === id ? { ...p, rating } : p));
+                      }}
+                      showRatings={showRatings}
+                   />
+                )}
           </div>
       </div>
 

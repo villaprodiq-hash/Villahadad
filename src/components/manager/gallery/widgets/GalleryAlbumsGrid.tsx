@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GalleryFolderCard, { GalleryFolder } from './GalleryFolderCard';
-import { FolderPlus } from 'lucide-react';
 
 interface GalleryAlbumsGridProps {
   folders: GalleryFolder[];

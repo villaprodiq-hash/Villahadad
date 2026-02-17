@@ -58,7 +58,7 @@ const ParallaxSlideshow: React.FC<ParallaxSlideshowProps> = ({ images, onClose }
   // We apply the slide transition to the container, and the zoom drift to the image inside.
   
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 z-100 bg-black flex items-center justify-center overflow-hidden">
       
       {/* Background Blur (Optional Atmospheric Effect) */}
       <div className="absolute inset-0 opacity-30 blur-3xl scale-110">
@@ -97,7 +97,7 @@ const ParallaxSlideshow: React.FC<ParallaxSlideshowProps> = ({ images, onClose }
                 />
                 
                 {/* Caption Gradient Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-12 text-white">
+                <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 via-black/40 to-transparent p-12 text-white">
                     <motion.h2 
                         initial={{ y: 20, opacity: 0 }} 
                         animate={{ y: 0, opacity: 1 }} 

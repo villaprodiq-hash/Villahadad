@@ -18,7 +18,7 @@ const TeamEfficiencyWidget: React.FC = () => {
             <span className="text-white font-bold font-mono">87%</span>
          </div>
          <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 w-[87%] rounded-full shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
+            <div className="h-full bg-linear-to-r from-blue-600 to-cyan-400 w-[87%] rounded-full shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
          </div>
          <p className="text-[10px] text-gray-500 mt-2 text-left">↑ 12% تحسن عن الأسبوع الماضي</p>
       </div>

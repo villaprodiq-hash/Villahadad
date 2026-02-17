@@ -1,40 +1,37 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  LayoutGrid, Image, CheckSquare, Clock, BarChart3, 
-  Settings, Layers, Sliders, Zap, Tag, MessageCircle
+  LayoutGrid, MessageCircle, Image
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import ProfileDropdown from '../../shared/ProfileDropdown';
+import type { User } from '../../../types';
 
 interface PhotoEditorSidebarProps {
   activeSection: string;
   onNavigate: (sectionId: string) => void;
   isCollapsed: boolean;
   toggleCollapse: () => void;
-  currentUser: any;
+  currentUser?: User;
   onLogout: () => void;
 
   onOpenSettings?: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 
 const PhotoEditorSidebar: React.FC<PhotoEditorSidebarProps> = ({
   activeSection,
   onNavigate,
-  isCollapsed,
-  toggleCollapse,
+  isCollapsed: _isCollapsed,
+  toggleCollapse: _toggleCollapse,
   currentUser,
   onLogout,
   onOpenSettings,
   badges
 }) => {
   const tools = [
-    { id: 'section-home', icon: LayoutGrid, label: 'المهام', tooltip: 'Task List' },
-    { id: 'section-quality', icon: CheckSquare, label: 'الجودة', tooltip: 'Quality Check' },
-    { id: 'section-stats', icon: BarChart3, label: 'الإحصائيات', tooltip: 'Statistics' },
+    { id: 'section-home', icon: LayoutGrid, label: 'الداشبورد', tooltip: 'Dashboard' },
+    { id: 'section-files', icon: Image, label: 'المعرض', tooltip: 'Gallery' },
     { id: 'section-team-chat', icon: MessageCircle, label: 'الدردشة', tooltip: 'Team Chat' },
-    { id: 'section-presets', icon: Sliders, label: 'Presets', tooltip: 'Presets' },
   ];
 
   return (
@@ -47,7 +44,7 @@ const PhotoEditorSidebar: React.FC<PhotoEditorSidebarProps> = ({
       {/* Tools */}
       <div className="flex-1 flex flex-col gap-1 w-full px-1">
       {tools.filter(tool => !currentUser?.preferences?.hiddenSections?.includes(tool.id)).map((tool) => {
-        const badgeCount = badges ? badges[tool.id] : 0;
+        const badgeCount = badges?.[tool.id] ?? 0;
         return (
           <button
             key={tool.id}

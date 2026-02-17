@@ -1,43 +1,29 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Camera,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Download,
+  Expand,
   Heart,
   Image as ImageIcon,
+  KeyRound,
   Loader2,
   Lock,
+  Phone,
   Send,
   X,
   XCircle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { supabase } from '../services/supabase';
+import { ClientPortalError, callClientPortal } from '../services/clientPortalService';
 
-async function callPortal(body: Record<string, unknown>) {
-  const fnUrl = (supabase as any).functionsUrl || `${(supabase as any).supabaseUrl}/functions/v1`;
-  const anonKey = (supabase as any).supabaseKey;
-
-  const res = await fetch(`${fnUrl}/client-portal`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(errBody || `HTTP ${res.status}`);
-  }
-
-  return res.json();
-}
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim().length > 0) return error;
+  return fallback;
+};
 
 type ImageStatus = 'pending' | 'selected' | 'rejected';
 
@@ -59,11 +45,29 @@ interface BookingInfo {
   status: string;
 }
 
+interface AccessStateResponse {
+  booking?: BookingInfo;
+  tokenExpiresAt?: string;
+  requiresPassword?: boolean;
+  requiresPhone?: boolean;
+  requiresOtp?: boolean;
+  hasSession?: boolean;
+}
+
+interface AccessVerifyResponse {
+  success: boolean;
+  sessionToken?: string;
+  sessionExpiresAt?: string;
+}
+
 type LoadingState = 'idle' | 'loading' | 'loaded' | 'error' | 'submitting' | 'submitted';
-type DownloadState = 'idle' | 'downloading' | 'done';
 type PortalView = 'welcome' | 'gallery' | 'review' | 'done';
 type StatusFilter = 'all' | ImageStatus;
 type BrandMode = 'classic' | 'vip' | 'simple';
+type AuthStep = 'idle' | 'password';
+const DOUBLE_TAP_MS = 450;
+const PORTAL_PASSWORD_LENGTH = 6;
+const PORTAL_PASSWORD_REGEX = /^\d{6}$/;
 
 const STATUS_META: Record<ImageStatus, { label: string; badge: string; ring: string }> = {
   selected: {
@@ -131,6 +135,14 @@ const ClientPortal: React.FC = () => {
   const [portalView, setPortalView] = useState<PortalView>('welcome');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [forcedBrandMode, setForcedBrandMode] = useState<BrandMode | null>(null);
+  const [authStep, setAuthStep] = useState<AuthStep>('idle');
+  const [portalSessionToken, setPortalSessionToken] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [requiresPhone, setRequiresPhone] = useState(true);
+  const [authHint, setAuthHint] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [images, setImages] = useState<PortalImage[]>([]);
@@ -141,16 +153,59 @@ const ClientPortal: React.FC = () => {
   const [compareOffset, setCompareOffset] = useState({ x: 0, y: 0 });
   const [isCompareDragging, setIsCompareDragging] = useState(false);
   const [compareDragStart, setCompareDragStart] = useState({ x: 0, y: 0 });
-  const [downloadState, setDownloadState] = useState<DownloadState>('idle');
-  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+  const [gridHeartImageId, setGridHeartImageId] = useState<string | null>(null);
+  const [gridFlipImageId, setGridFlipImageId] = useState<string | null>(null);
+  const [lightboxHeartPulse, setLightboxHeartPulse] = useState(false);
+  const lastLightboxTapRef = useRef(0);
+  const gridTapTimesRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setToken(params.get('token'));
+    setToken(params.get('t') || params.get('token'));
     const style = params.get('style');
     if (style === 'vip' || style === 'simple' || style === 'classic') {
       setForcedBrandMode(style);
     }
+  }, []);
+
+  const sessionStorageKey = useMemo(() => {
+    if (!token) return '';
+    return `villahadad_portal_session_${token}`;
+  }, [token]);
+
+  useEffect(() => {
+    if (!sessionStorageKey) return;
+    try {
+      const saved = window.localStorage.getItem(sessionStorageKey);
+      if (saved) setPortalSessionToken(saved);
+    } catch {
+      // Ignore storage errors
+    }
+  }, [sessionStorageKey]);
+
+  useEffect(() => {
+    const htmlStyle = document.documentElement.style;
+    const bodyStyle = document.body.style;
+    const previousHtmlOverflow = htmlStyle.overflow;
+    const previousBodyOverflow = bodyStyle.overflow;
+    const previousBodyOverflowX = bodyStyle.overflowX;
+    const previousBodyTouchAction = bodyStyle.touchAction;
+    const previousBodyOverscroll = bodyStyle.overscrollBehaviorY;
+
+    // Keep a single vertical scroll container (portal root) and prevent page-level dual scrollbars.
+    htmlStyle.overflow = 'hidden';
+    bodyStyle.overflow = 'hidden';
+    bodyStyle.overflowX = 'hidden';
+    bodyStyle.touchAction = 'pan-y';
+    bodyStyle.overscrollBehaviorY = 'none';
+
+    return () => {
+      htmlStyle.overflow = previousHtmlOverflow;
+      bodyStyle.overflow = previousBodyOverflow;
+      bodyStyle.overflowX = previousBodyOverflowX;
+      bodyStyle.touchAction = previousBodyTouchAction;
+      bodyStyle.overscrollBehaviorY = previousBodyOverscroll;
+    };
   }, []);
 
   const brandMode = useMemo<BrandMode>(() => {
@@ -162,35 +217,227 @@ const ClientPortal: React.FC = () => {
 
   const brand = BRAND_PRESETS[brandMode];
 
-  const fetchPhotos = useCallback(async () => {
+  const fetchPhotos = useCallback(async (sessionTokenOverride?: string) => {
     if (!token) return;
     setLoadingState('loading');
     setErrorMsg('');
 
     try {
-      const data = await callPortal({ action: 'get_photos', token });
-      if (data?.error) throw new Error(data.error);
-      setBooking(data.booking);
+      const activeSessionToken = sessionTokenOverride || portalSessionToken;
+      const data = await callClientPortal<{ booking?: BookingInfo; images?: PortalImage[] }>({
+        action: 'get_photos',
+        token,
+        sessionToken: activeSessionToken,
+      });
+      setBooking(data.booking || null);
       setImages(data.images || []);
       setLoadingState('loaded');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'تعذر تحميل الصور.');
+    } catch (err: unknown) {
+      if (err instanceof ClientPortalError) {
+        if (
+          err.code === 'PASSWORD_REQUIRED' ||
+          err.code === 'OTP_REQUIRED' ||
+          err.code === 'SESSION_INVALID' ||
+          err.code === 'SESSION_EXPIRED'
+        ) {
+          setAuthStep('password');
+          setPortalView('welcome');
+          setLoadingState('idle');
+          return;
+        }
+        if (err.code === 'TOKEN_EXPIRED') {
+          setErrorMsg('انتهت صلاحية الرابط. تواصل مع الاستوديو للحصول على رابط جديد');
+          setLoadingState('error');
+          return;
+        }
+      }
+      setErrorMsg(getErrorMessage(err, 'تعذر تحميل الصور.'));
       setLoadingState('error');
     }
-  }, [token]);
+  }, [portalSessionToken, token]);
 
   const handleEnterGallery = useCallback(() => {
-    setPortalView('gallery');
-    fetchPhotos();
-  }, [fetchPhotos]);
+    if (!token) return;
+
+    const checkAccess = async () => {
+      setAuthLoading(true);
+      setErrorMsg('');
+      try {
+        const state = await callClientPortal<AccessStateResponse>({
+          action: 'get_access_state',
+          token,
+          sessionToken: portalSessionToken || undefined,
+        });
+
+        setBooking(state.booking || null);
+        setRequiresPhone(state.requiresPhone !== false);
+        if (state.tokenExpiresAt) setTokenExpiresAt(state.tokenExpiresAt);
+
+        if (state.requiresPassword || state.requiresOtp) {
+          setAuthStep('password');
+          setAuthHint('');
+          if (state.requiresPhone === false) {
+            setPhoneInput('');
+          }
+          setPasswordInput('');
+          return;
+        }
+
+        setAuthStep('idle');
+        setPortalView('gallery');
+        await fetchPhotos();
+      } catch (err: unknown) {
+        if (err instanceof ClientPortalError && err.code === 'TOKEN_EXPIRED') {
+          setErrorMsg('انتهت صلاحية الرابط. تواصل مع الاستوديو للحصول على رابط جديد');
+          setLoadingState('error');
+          return;
+        }
+        setErrorMsg(getErrorMessage(err, 'تعذر التحقق من صلاحية الرابط.'));
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    void checkAccess();
+  }, [fetchPhotos, portalSessionToken, token]);
+
+  const handleVerifyAccess = useCallback(async () => {
+    if (!token) return;
+    const phone = phoneInput.trim();
+    const password = passwordInput.trim();
+    if (requiresPhone && !phone) {
+      setErrorMsg('يرجى إدخال رقم الهاتف');
+      return;
+    }
+    if (!password) {
+      setErrorMsg('يرجى إدخال كلمة المرور');
+      return;
+    }
+    if (!PORTAL_PASSWORD_REGEX.test(password)) {
+      setErrorMsg(`كلمة المرور يجب أن تكون ${PORTAL_PASSWORD_LENGTH} أرقام`);
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthHint('');
+    setErrorMsg('');
+    try {
+      const response = await callClientPortal<AccessVerifyResponse>({
+        action: 'verify_access',
+        token,
+        phone: requiresPhone ? phone : undefined,
+        password,
+      });
+
+      const sessionToken = String(response.sessionToken || '');
+      if (!sessionToken) {
+        throw new Error('لم يتم إرجاع جلسة تحقق');
+      }
+
+      setPortalSessionToken(sessionToken);
+      if (sessionStorageKey) {
+        try {
+          window.localStorage.setItem(sessionStorageKey, sessionToken);
+        } catch {
+          // Ignore storage errors
+        }
+      }
+
+      setAuthStep('idle');
+      setPortalView('gallery');
+      setPasswordInput('');
+      setAuthHint('تم تسجيل الدخول بنجاح');
+      await fetchPhotos(sessionToken);
+    } catch (err: unknown) {
+      if (err instanceof ClientPortalError) {
+        if (err.code === 'PASSWORD_INVALID') {
+          const payload = (err.payload || {}) as { attemptsRemaining?: number };
+          if (typeof payload.attemptsRemaining === 'number') {
+            setErrorMsg(`كلمة المرور غير صحيحة. المحاولات المتبقية: ${payload.attemptsRemaining}`);
+          } else {
+            setErrorMsg('كلمة المرور غير صحيحة');
+          }
+        } else if (err.code === 'PASSWORD_BLOCKED') {
+          setErrorMsg('تم حظر المحاولة لمدة 15 دقيقة');
+        } else if (err.code === 'PASSWORD_NOT_SET') {
+          setErrorMsg('لم يتم إعداد كلمة مرور لهذا الرابط. اطلب رابطًا جديدًا من الاستوديو');
+        } else {
+          setErrorMsg(getErrorMessage(err, 'تعذر تسجيل الدخول'));
+        }
+      } else {
+        setErrorMsg(getErrorMessage(err, 'تعذر تسجيل الدخول'));
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [fetchPhotos, passwordInput, phoneInput, requiresPhone, sessionStorageKey, token]);
 
   const setImageStatus = useCallback((imageId: string, status: ImageStatus) => {
-    setImages(prev => prev.map(img => (img.id === imageId ? { ...img, status } : img)));
+    setImages(prev =>
+      prev.map(img =>
+        img.id === imageId ? { ...img, status, liked: status === 'selected' ? 1 : 0 } : img
+      )
+    );
   }, []);
 
   const applyStatusToAll = useCallback((status: ImageStatus | 'pending') => {
-    setImages(prev => prev.map(img => ({ ...img, status })));
+    setImages(prev =>
+      prev.map(img => ({
+        ...img,
+        status,
+        liked: status === 'selected' ? 1 : 0,
+      }))
+    );
   }, []);
+
+  const setImageNote = useCallback((imageId: string, notes: string) => {
+    setImages(prev => prev.map(img => (img.id === imageId ? { ...img, notes } : img)));
+  }, []);
+
+  const flashHeart = useCallback((target: 'grid' | 'lightbox', imageId: string) => {
+    if (target === 'grid') {
+      setGridHeartImageId(imageId);
+      setGridFlipImageId(imageId);
+      window.setTimeout(() => {
+        setGridFlipImageId(current => (current === imageId ? null : current));
+      }, 420);
+      window.setTimeout(() => {
+        setGridHeartImageId(current => (current === imageId ? null : current));
+      }, 650);
+      return;
+    }
+
+    setLightboxHeartPulse(true);
+    window.setTimeout(() => setLightboxHeartPulse(false), 650);
+  }, []);
+
+  const selectWithHeart = useCallback(
+    (imageId: string, target: 'grid' | 'lightbox') => {
+      setImages(prev =>
+        prev.map(img => (img.id === imageId ? { ...img, status: 'selected', liked: 1 } : img))
+      );
+      flashHeart(target, imageId);
+    },
+    [flashHeart]
+  );
+
+  const toggleGridHeartStatus = useCallback(
+    (imageId: string) => {
+      setImages(prev =>
+        prev.map(img => {
+          if (img.id !== imageId) return img;
+          const isSelected = img.status === 'selected';
+          return {
+            ...img,
+            status: isSelected ? 'pending' : 'selected',
+            liked: isSelected ? 0 : 1,
+          };
+        })
+      );
+      flashHeart('grid', imageId);
+    },
+    [flashHeart]
+  );
 
   const selectedCount = useMemo(() => images.filter(i => i.status === 'selected').length, [images]);
   const rejectedCount = useMemo(() => images.filter(i => i.status === 'rejected').length, [images]);
@@ -214,6 +461,7 @@ const ClientPortal: React.FC = () => {
 
   const closeLightbox = useCallback(() => setLightboxIndex(null), []);
   const openLightbox = useCallback((index: number) => setLightboxIndex(index), []);
+  const isOverlayOpen = lightboxIndex !== null || compareOpen;
 
   const currentImage = lightboxIndex !== null ? filteredImages[lightboxIndex] : null;
 
@@ -235,11 +483,9 @@ const ClientPortal: React.FC = () => {
       if (e.key === 'ArrowLeft') showPrevImage();
     };
 
-    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeyDown);
 
     return () => {
-      document.body.style.overflow = 'auto';
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [lightboxIndex, closeLightbox, showNextImage, showPrevImage]);
@@ -248,6 +494,12 @@ const ClientPortal: React.FC = () => {
 
   const handleSubmitSelection = useCallback(async () => {
     if (!token) return;
+    if (!portalSessionToken) {
+      setPortalView('welcome');
+      setAuthStep('password');
+      setErrorMsg('يلزم تسجيل الدخول بكلمة المرور قبل الإرسال');
+      return;
+    }
     setLoadingState('submitting');
 
     try {
@@ -255,111 +507,89 @@ const ClientPortal: React.FC = () => {
         imageId: img.id,
         status: img.status,
         liked: img.status === 'selected',
+        notes: img.notes?.trim() || null,
       }));
 
-      const data = await callPortal({ action: 'update_selection', token, selections });
-      if (data?.error) throw new Error(data.error);
+      await callClientPortal({
+        action: 'update_selection',
+        token,
+        sessionToken: portalSessionToken,
+        selections,
+      });
 
-      const confirmData = await callPortal({ action: 'confirm_selection', token });
-      if (confirmData?.error) throw new Error(confirmData.error);
+      await callClientPortal({
+        action: 'confirm_selection',
+        token,
+        sessionToken: portalSessionToken,
+      });
 
       setLoadingState('submitted');
       setPortalView('done');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'تعذر إرسال الاختيار.');
+    } catch (err: unknown) {
+      if (err instanceof ClientPortalError) {
+        if (
+          err.code === 'PASSWORD_REQUIRED' ||
+          err.code === 'OTP_REQUIRED' ||
+          err.code === 'SESSION_INVALID' ||
+          err.code === 'SESSION_EXPIRED'
+        ) {
+          setPortalView('welcome');
+          setAuthStep('password');
+          setErrorMsg('انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى');
+          setLoadingState('idle');
+          return;
+        }
+      }
+      setErrorMsg(getErrorMessage(err, 'تعذر إرسال الاختيار.'));
       setLoadingState('loaded');
     }
-  }, [images, token]);
+  }, [images, portalSessionToken, token]);
 
-  const downloadBlobFile = useCallback(async (url: string, fileName: string) => {
-    const a = document.createElement('a');
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      a.href = blobUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      // CORS-safe fallback for custom CDN domains
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
+  const formatExpiry = useCallback((iso?: string | null) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString('ar-IQ', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }, []);
 
-  const handleDownloadSingle = useCallback(
-    async (image: PortalImage) => {
-      const url = image.cloudUrl || image.thumbnailUrl;
-      if (!url) return;
-      try {
-        await downloadBlobFile(url, image.fileName);
-      } catch {
-        // no-op
-      }
-    },
-    [downloadBlobFile]
-  );
-
-  const handleDownloadBatch = useCallback(
-    async (downloads: Array<{ fileName: string; url: string }>) => {
-      if (!downloads.length || downloadState === 'downloading') return;
-      setDownloadState('downloading');
-      setDownloadProgress({ current: 0, total: downloads.length });
-
-      try {
-        for (let i = 0; i < downloads.length; i++) {
-          const { fileName, url } = downloads[i];
-          try {
-            await downloadBlobFile(url, fileName);
-          } catch {
-            // continue
-          }
-          setDownloadProgress({ current: i + 1, total: downloads.length });
-          if (i < downloads.length - 1) await new Promise(r => setTimeout(r, 250));
-        }
-        setDownloadState('done');
-        setTimeout(() => setDownloadState('idle'), 2500);
-      } catch {
-        setDownloadState('idle');
-      }
-    },
-    [downloadBlobFile, downloadState]
-  );
-
-  const handleDownloadAll = useCallback(async () => {
-    if (!token || downloadState === 'downloading') return;
-
-    try {
-      const data = await callPortal({ action: 'get_download_urls', token });
-      if (data?.error) throw new Error(data.error);
-
-      const downloads: { fileName: string; url: string }[] = data.downloads || [];
-      await handleDownloadBatch(downloads);
-    } catch {
-      setDownloadState('idle');
+  const handleLightboxImageTap = useCallback(() => {
+    if (!currentImage) return;
+    const now = Date.now();
+    if (now - lastLightboxTapRef.current <= DOUBLE_TAP_MS) {
+      selectWithHeart(currentImage.id, 'lightbox');
+      lastLightboxTapRef.current = 0;
+      return;
     }
-  }, [downloadState, handleDownloadBatch, token]);
+    lastLightboxTapRef.current = now;
+  }, [currentImage, selectWithHeart]);
 
-  const handleDownloadVisible = useCallback(async () => {
-    const list = filteredImages
-      .filter(img => !!(img.cloudUrl || img.thumbnailUrl))
-      .map(img => ({ fileName: img.fileName, url: (img.cloudUrl || img.thumbnailUrl) as string }));
-    await handleDownloadBatch(list);
-  }, [filteredImages, handleDownloadBatch]);
+  const handleGridImageTap = useCallback(
+    (imageId: string) => {
+      const now = Date.now();
+      const lastTap = gridTapTimesRef.current[imageId] ?? 0;
+      if (now - lastTap <= DOUBLE_TAP_MS) {
+        selectWithHeart(imageId, 'grid');
+        gridTapTimesRef.current[imageId] = 0;
+        return;
+      }
+      gridTapTimesRef.current[imageId] = now;
+    },
+    [selectWithHeart]
+  );
 
   const toggleCompareCandidate = useCallback((imageId: string) => {
     setCompareIds(prev => {
       if (prev.includes(imageId)) return prev.filter(id => id !== imageId);
-      if (prev.length >= 2) return [prev[1], imageId];
+      if (prev.length >= 2) {
+        const keepId = prev[1] ?? prev[0];
+        return keepId ? [keepId, imageId] : [imageId];
+      }
       return [...prev, imageId];
     });
   }, []);
@@ -424,9 +654,16 @@ const ClientPortal: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen text-white font-[Cairo,sans-serif] relative overflow-x-hidden"
+      className={`h-[100dvh] min-h-screen text-white font-[Cairo,sans-serif] relative overflow-x-hidden ${
+        isOverlayOpen ? 'overflow-hidden' : 'overflow-y-auto'
+      }`}
       dir="rtl"
-      style={{ backgroundColor: brand.bg }}
+      style={{
+        backgroundColor: brand.bg,
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehaviorY: 'contain',
+        touchAction: 'pan-y',
+      }}
     >
       <div
         className={`pointer-events-none absolute inset-0 ${brandMode === 'simple' ? 'opacity-40' : 'opacity-80'}`}
@@ -509,13 +746,94 @@ const ClientPortal: React.FC = () => {
                 style={{ backgroundColor: brand.primary }}
                 onClick={handleEnterGallery}
               >
-                دخول المعرض
+                {authLoading ? 'جارٍ التحقق...' : 'دخول المعرض'}
               </button>
+
+              {authStep !== 'idle' && (
+                <div className="mt-4 space-y-3 text-right">
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-[12px] text-zinc-300 mb-3">
+                      {requiresPhone
+                        ? 'أدخل رقم الهاتف المسجّل وكلمة مرور الرابط لمرة واحدة.'
+                        : 'أدخل كلمة مرور الرابط لمرة واحدة.'}
+                    </p>
+
+                    {requiresPhone && (
+                      <>
+                        <label className="block text-[11px] text-zinc-400 mb-1.5">رقم الهاتف</label>
+                        <div className="relative">
+                          <Phone size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                          <input
+                            type="tel"
+                            value={phoneInput}
+                            onChange={e => setPhoneInput(e.target.value)}
+                            placeholder="07xxxxxxxxx"
+                            className="w-full h-10 rounded-lg border border-white/10 bg-black/35 pr-9 pl-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/15"
+                            dir="ltr"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div className={requiresPhone ? 'mt-3' : ''}>
+                      <label className="block text-[11px] text-zinc-400 mb-1.5">كلمة المرور</label>
+                      <div className="relative">
+                        <KeyRound
+                          size={14}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                        />
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={PORTAL_PASSWORD_LENGTH}
+                          value={passwordInput}
+                          onChange={e =>
+                            setPasswordInput(
+                              e.target.value.replace(/\D/g, '').slice(0, PORTAL_PASSWORD_LENGTH)
+                            )
+                          }
+                          placeholder="••••••"
+                          className="w-full h-10 rounded-lg border border-white/10 bg-black/35 pr-9 pl-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/15"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    {authHint && (
+                      <p className="mt-2 text-[11px] text-emerald-300">{authHint}</p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleVerifyAccess}
+                        disabled={
+                          authLoading ||
+                          (requiresPhone && !phoneInput.trim()) ||
+                          !passwordInput.trim()
+                        }
+                        className="px-3 py-2 rounded-lg text-xs font-bold bg-emerald-500/20 border border-emerald-500/35 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {authLoading ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 flex items-center justify-center gap-2 text-xs text-zinc-500">
                 <Lock size={12} />
                 <span>رابط خاص وآمن</span>
               </div>
+              {tokenExpiresAt && (
+                <p className="mt-2 text-[11px] text-zinc-500">
+                  ينتهي الرابط: {formatExpiry(tokenExpiresAt)}
+                </p>
+              )}
+              {errorMsg && portalView === 'welcome' && (
+                <p className="mt-2 text-[11px] text-rose-300">{errorMsg}</p>
+              )}
             </motion.div>
             <footer className="mt-8 text-center text-zinc-500 text-xs">
               &copy; {new Date().getFullYear()} Villa Hadad Studio
@@ -614,20 +932,6 @@ const ClientPortal: React.FC = () => {
                       تصفير
                     </button>
                     <button
-                      disabled={downloadState === 'downloading' || selectedCount === 0}
-                      onClick={handleDownloadAll}
-                      className="px-3 py-1.5 rounded-lg text-xs bg-white/10 border border-white/15 text-zinc-100 hover:bg-white/20 disabled:bg-zinc-700 disabled:text-zinc-500"
-                    >
-                      تحميل المقبولة
-                    </button>
-                    <button
-                      disabled={downloadState === 'downloading' || filteredImages.length === 0}
-                      onClick={handleDownloadVisible}
-                      className="px-3 py-1.5 rounded-lg text-xs bg-white/10 border border-white/15 text-zinc-100 hover:bg-white/20 disabled:bg-zinc-700 disabled:text-zinc-500"
-                    >
-                      تحميل الظاهر
-                    </button>
-                    <button
                       onClick={() => setCompareOpen(true)}
                       disabled={compareImages.length !== 2}
                       className="px-3 py-1.5 rounded-lg text-xs bg-indigo-500/20 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-500/30 disabled:bg-zinc-700 disabled:border-zinc-600 disabled:text-zinc-500"
@@ -645,11 +949,6 @@ const ClientPortal: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                {downloadState === 'downloading' && (
-                  <div className="mt-3 text-xs text-zinc-300">
-                    جارِ التحميل: {downloadProgress.current}/{downloadProgress.total}
-                  </div>
-                )}
               </div>
             </header>
 
@@ -670,7 +969,9 @@ const ClientPortal: React.FC = () => {
                   <AlertCircle size={44} className="text-rose-400 mb-4" />
                   <p className="text-rose-300 text-sm mb-4">{errorMsg}</p>
                   <button
-                    onClick={fetchPhotos}
+                    onClick={() => {
+                      void fetchPhotos();
+                    }}
                     className="px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20"
                   >
                     إعادة المحاولة
@@ -700,58 +1001,102 @@ const ClientPortal: React.FC = () => {
                         transition={{ delay: index * 0.015 }}
                         className="mb-3 break-inside-avoid"
                       >
-                        <button
-                          onClick={() => openLightbox(index)}
+                        <div
                           className={`group relative w-full overflow-hidden rounded-2xl border transition-all ${STATUS_META[img.status].ring}`}
+                          style={{ perspective: '1200px' }}
                         >
-                          <img
-                            src={img.thumbnailUrl || img.cloudUrl || ''}
-                            alt={img.fileName}
-                            className="w-full h-auto block object-contain transition-transform duration-500 group-hover:scale-[1.02]"
-                            loading="lazy"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
-                          <div className="absolute top-3 right-3">
-                            <span
-                              className={`px-2 py-1 text-[11px] rounded-full border ${STATUS_META[img.status].badge}`}
-                            >
-                              {STATUS_META[img.status].label}
-                            </span>
-                          </div>
-                          <div className="absolute bottom-2 left-2 right-2 text-right">
-                            <p className="text-[10px] text-white/80 truncate">{img.fileName}</p>
-                          </div>
-                          <div className="absolute top-3 left-3">
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                toggleCompareCandidate(img.id);
-                              }}
-                              className={`px-2 py-1 rounded-md text-[10px] border ${
-                                compareIds.includes(img.id)
-                                  ? 'bg-indigo-500 text-white border-indigo-400'
-                                  : 'bg-black/40 text-zinc-100 border-white/20 hover:bg-black/70'
-                              }`}
-                              title="إضافة للمقارنة"
-                              aria-label="إضافة للمقارنة"
-                            >
-                              {compareIds.includes(img.id) ? 'مضاف' : 'قارن'}
-                            </button>
-                          </div>
-                          <div className="absolute bottom-2 left-2">
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                handleDownloadSingle(img);
-                              }}
-                              className="w-8 h-8 rounded-lg bg-black/45 hover:bg-black/70 text-white flex items-center justify-center"
-                              title="تحميل الصورة"
-                              aria-label="تحميل الصورة"
-                            >
-                              <Download size={14} />
-                            </button>
-                          </div>
-                        </button>
+                          <motion.div
+                            animate={{ rotateY: gridFlipImageId === img.id ? 180 : 0 }}
+                            transition={{ duration: 0.42, ease: 'easeInOut' }}
+                            style={{ transformStyle: 'preserve-3d' }}
+                          >
+                            <img
+                              src={img.thumbnailUrl || img.cloudUrl || ''}
+                              alt={img.fileName}
+                              className="w-full h-auto block object-contain transition-transform duration-500 group-hover:scale-[1.02]"
+                              loading="lazy"
+                              onClick={() => handleGridImageTap(img.id)}
+                              onDoubleClick={() => selectWithHeart(img.id, 'grid')}
+                            />
+                            <div className="absolute inset-0 bg-linear-to-t from-black/55 via-transparent to-transparent" />
+                            <div className="absolute top-3 right-3">
+                              <span
+                                className={`px-2 py-1 text-[11px] rounded-full border ${STATUS_META[img.status].badge}`}
+                              >
+                                {STATUS_META[img.status].label}
+                              </span>
+                            </div>
+                            <div className="absolute bottom-2 left-2 right-2 text-right">
+                              <p className="text-[10px] text-white/80 truncate">{img.fileName}</p>
+                            </div>
+                            <div className="absolute top-3 left-3 flex items-center gap-2">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  toggleGridHeartStatus(img.id);
+                                }}
+                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+                                  img.status === 'selected'
+                                    ? 'bg-rose-500/90 border-rose-400 text-white'
+                                    : 'bg-black/45 border-white/20 text-zinc-100 hover:bg-black/70'
+                                }`}
+                                title={img.status === 'selected' ? 'إلغاء الاختيار' : 'اختيار بالقلب'}
+                                aria-label={img.status === 'selected' ? 'إلغاء الاختيار' : 'اختيار بالقلب'}
+                              >
+                                <Heart
+                                  size={14}
+                                  className={img.status === 'selected' ? 'fill-current' : ''}
+                                />
+                              </button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  openLightbox(index);
+                                }}
+                                className="w-8 h-8 rounded-lg bg-black/45 hover:bg-black/70 text-white flex items-center justify-center"
+                                title="فتح الصورة"
+                                aria-label="فتح الصورة"
+                              >
+                                <Expand size={14} />
+                              </button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  toggleCompareCandidate(img.id);
+                                }}
+                                className={`px-2 py-1 rounded-md text-[10px] border ${
+                                  compareIds.includes(img.id)
+                                    ? 'bg-indigo-500 text-white border-indigo-400'
+                                    : 'bg-black/40 text-zinc-100 border-white/20 hover:bg-black/70'
+                                }`}
+                                title="إضافة للمقارنة"
+                                aria-label="إضافة للمقارنة"
+                              >
+                                {compareIds.includes(img.id) ? 'مضاف' : 'قارن'}
+                              </button>
+                            </div>
+                            <div className="absolute bottom-2 left-2">
+                              {img.notes?.trim() ? (
+                                <span className="px-2 py-1 rounded-md text-[10px] border bg-black/50 border-white/20 text-zinc-100">
+                                  ملاحظة
+                                </span>
+                              ) : null}
+                            </div>
+                          </motion.div>
+                          <AnimatePresence>
+                            {gridHeartImageId === img.id && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.6 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 1.3 }}
+                                transition={{ duration: 0.45 }}
+                                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                              >
+                                <Heart size={72} className="text-rose-500 fill-rose-500" />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </motion.div>
                     ))}
                   </div>
@@ -763,13 +1108,13 @@ const ClientPortal: React.FC = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[1350] bg-black/95 p-4 md:p-8"
+                        className="fixed inset-0 z-[1350] bg-black/95 p-4 md:p-8 overflow-y-auto overflow-x-hidden overscroll-y-contain"
                         onClick={() => {
                           setCompareOpen(false);
                           resetCompareView();
                         }}
                       >
-                        <div className="max-w-7xl mx-auto h-full flex flex-col">
+                        <div className="max-w-7xl mx-auto min-h-full flex flex-col">
                           <div className="flex items-center justify-between mb-4">
                             <h3 className="text-base md:text-lg font-black">
                               مقارنة صورتين قبل الاختيار
@@ -809,7 +1154,7 @@ const ClientPortal: React.FC = () => {
                                   setCompareOpen(false);
                                   resetCompareView();
                                 }}
-                                className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"
+                                className="w-10 h-10 rounded-full bg-rose-500/85 hover:bg-rose-500 text-white flex items-center justify-center"
                               >
                                 <X size={18} />
                               </button>
@@ -896,28 +1241,48 @@ const ClientPortal: React.FC = () => {
                             e.stopPropagation();
                             closeLightbox();
                           }}
-                          className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center z-10"
+                          className="absolute top-5 right-5 w-10 h-10 rounded-full bg-rose-500/90 hover:bg-rose-500 text-white flex items-center justify-center z-10"
                         >
                           <X size={18} />
                         </button>
 
                         <div className="h-full w-full flex flex-col items-center justify-center px-4">
-                          <img
-                            src={currentImage.cloudUrl || currentImage.thumbnailUrl || ''}
-                            alt={currentImage.fileName}
-                            className="max-w-[92vw] max-h-[72vh] object-contain rounded-lg"
-                          />
+                          <div className="relative">
+                            <img
+                              src={currentImage.cloudUrl || currentImage.thumbnailUrl || ''}
+                              alt={currentImage.fileName}
+                              className="max-w-[92vw] max-h-[72vh] object-contain rounded-lg cursor-pointer select-none"
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleLightboxImageTap();
+                              }}
+                              onDoubleClick={e => {
+                                e.stopPropagation();
+                                selectWithHeart(currentImage.id, 'lightbox');
+                              }}
+                            />
+                            <AnimatePresence>
+                              {lightboxHeartPulse && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.6 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 1.35 }}
+                                  transition={{ duration: 0.45 }}
+                                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                >
+                                  <Heart size={94} className="text-rose-500 fill-rose-500" />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                          <p className="mt-3 text-xs text-zinc-400">
+                            نقرتين على الصورة = اختيارها مباشرة
+                          </p>
 
                           <div
                             className="mt-4 flex flex-wrap items-center justify-center gap-2"
                             onClick={e => e.stopPropagation()}
                           >
-                            <button
-                              onClick={() => handleDownloadSingle(currentImage)}
-                              className="px-4 py-2 rounded-lg text-sm border bg-white/10 border-white/20 text-white hover:bg-white/20"
-                            >
-                              تحميل هذه الصورة
-                            </button>
                             <button
                               onClick={() => setImageStatus(currentImage.id, 'selected')}
                               className={`px-4 py-2 rounded-lg text-sm border ${currentImage.status === 'selected' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'}`}
@@ -936,6 +1301,24 @@ const ClientPortal: React.FC = () => {
                             >
                               معلقة
                             </button>
+                          </div>
+
+                          <div
+                            className="mt-3 w-full max-w-2xl"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <label className="block text-xs text-zinc-300 mb-2 text-right">
+                              ملاحظة على هذه الصورة (اختياري)
+                            </label>
+                            <textarea
+                              value={currentImage.notes ?? ''}
+                              onChange={e => setImageNote(currentImage.id, e.target.value.slice(0, 500))}
+                              className="w-full min-h-24 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/20"
+                              placeholder="مثال: خفف الإضاءة على الوجه أو عدل اللون..."
+                            />
+                            <p className="mt-1 text-[11px] text-zinc-500 text-left">
+                              {(currentImage.notes ?? '').length}/500
+                            </p>
                           </div>
                         </div>
 
@@ -987,27 +1370,6 @@ const ClientPortal: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    disabled={selectedCount === 0 || downloadState === 'downloading'}
-                    className="px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 disabled:bg-zinc-700 disabled:text-zinc-500"
-                    onClick={handleDownloadAll}
-                  >
-                    {downloadState === 'downloading' ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 size={14} className="animate-spin" /> {downloadProgress.current}/
-                        {downloadProgress.total}
-                      </span>
-                    ) : downloadState === 'done' ? (
-                      <span className="inline-flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-emerald-400" /> تم التحميل
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <Download size={14} /> تحميل المختارة
-                      </span>
-                    )}
-                  </button>
-
                   <button
                     disabled={selectedCount === 0 || loadingState === 'submitting'}
                     onClick={handleSubmitSelection}
@@ -1072,14 +1434,11 @@ const ClientPortal: React.FC = () => {
                         <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">
                           {idx + 1}
                         </div>
-                        <button
-                          onClick={() => handleDownloadSingle(img)}
-                          className="absolute bottom-2 left-2 w-7 h-7 rounded-md bg-black/45 hover:bg-black/70 text-white flex items-center justify-center"
-                          title="تحميل الصورة"
-                          aria-label="تحميل الصورة"
-                        >
-                          <Download size={13} />
-                        </button>
+                        {img.notes?.trim() ? (
+                          <div className="absolute bottom-2 left-2 right-2 rounded-md bg-black/65 px-2 py-1 text-[10px] text-zinc-100 text-right truncate">
+                            {img.notes}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -1109,7 +1468,7 @@ const ClientPortal: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="min-h-screen flex flex-col items-center justify-center p-6 text-center"
           >
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mb-8 shadow-2xl shadow-emerald-500/20">
+            <div className="w-24 h-24 rounded-full bg-linear-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mb-8 shadow-2xl shadow-emerald-500/20">
               <CheckCircle2 size={48} className="text-white" />
             </div>
             <h2 className="text-2xl font-black mb-3">تم إرسال اختيارك بنجاح</h2>
@@ -1117,23 +1476,6 @@ const ClientPortal: React.FC = () => {
               وصلنا اختيارك. تم اعتماد{' '}
               <span className="text-emerald-300 font-bold">{selectedCount}</span> صورة للتعديل.
             </p>
-
-            <button
-              disabled={downloadState === 'downloading'}
-              className="px-6 py-3 rounded-xl bg-white/10 border border-white/10 text-sm hover:bg-white/20"
-              onClick={handleDownloadAll}
-            >
-              {downloadState === 'downloading' ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 size={14} className="animate-spin" /> {downloadProgress.current}/
-                  {downloadProgress.total}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2">
-                  <Download size={14} /> تحميل الصور المقبولة
-                </span>
-              )}
-            </button>
             <p className="mt-8 text-xs text-zinc-500">هوية بصرية: Villa Hadad Client Portal</p>
           </motion.div>
         )}

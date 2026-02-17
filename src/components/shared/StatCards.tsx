@@ -30,7 +30,7 @@ const StatCard: React.FC<StatCardProps> = React.memo(({
           <span className="text-gray-400 text-xs font-bold tracking-wider uppercase">{title}</span>
           <h3 className="text-3xl font-bold text-white tracking-tight mt-1">{value}</h3>
         </div>
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-gradient-to-br from-white/10 to-white/5 border border-white/10 shadow-[0_8px_16px_-6px_rgba(0,0,0,0.5)] group-hover:scale-110 transition-transform duration-500 ease-out">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-linear-to-br from-white/10 to-white/5 border border-white/10 shadow-[0_8px_16px_-6px_rgba(0,0,0,0.5)] group-hover:scale-110 transition-transform duration-500 ease-out">
           <Icon size={24} className="text-white/90 drop-shadow-lg" />
         </div>
       </div>
@@ -46,6 +46,7 @@ const StatCard: React.FC<StatCardProps> = React.memo(({
     </GlowCard>
   </motion.div>
 ));
+StatCard.displayName = 'StatCard';
 
 export const StatCards = () => {
   const stats = [
@@ -157,7 +158,7 @@ export const StorageCard = () => {
             <span className="text-white font-bold">7.2 TB</span>
           </div>
           <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 w-[75%]" />
+            <div className="h-full bg-linear-to-r from-blue-500 to-cyan-400 w-[75%]" />
           </div>
           <div className="flex justify-between text-xs text-gray-500">
             <span>75% ممتلئ</span>
@@ -177,7 +178,7 @@ export const ProfileCard = () => {
        <div className="absolute top-2 right-2">
           <button className="text-gray-500 hover:text-white"><MoreVertical size={16}/></button>
        </div>
-       <div className="w-20 h-20 rounded-full p-[2px] bg-gradient-to-br from-[#C94557] to-purple-600 mb-4 shadow-[0_0_20px_rgba(201,69,87,0.3)]">
+       <div className="w-20 h-20 rounded-full p-[2px] bg-linear-to-br from-[#C94557] to-purple-600 mb-4 shadow-[0_0_20px_rgba(201,69,87,0.3)]">
           <div className="w-full h-full rounded-full bg-zinc-900 border-2 border-zinc-800 overflow-hidden">
              {/* Avatar Image Placeholder */}
              <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-2xl">👩‍💼</div>

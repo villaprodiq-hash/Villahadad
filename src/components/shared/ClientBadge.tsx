@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Heart, Star, Sparkles } from 'lucide-react';
+import { Crown, Heart } from 'lucide-react';
 import { Booking } from '../../types';
 
 interface ClientBadgeProps {
@@ -35,7 +35,7 @@ const ClientBadge: React.FC<ClientBadgeProps> = ({ booking, allBookings = [], co
       {booking.isFamous && (
         <div className="relative group/badge">
           <div className="absolute inset-0 bg-yellow-400/20 blur-[4px] rounded-full animate-pulse"></div>
-          <div className="relative p-0.5 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-md shadow-[0_0_10px_rgba(251,191,36,0.4)]">
+          <div className="relative p-0.5 bg-linear-to-br from-yellow-400 to-amber-600 rounded-md shadow-[0_0_10px_rgba(251,191,36,0.4)]">
             <Crown size={iconSize} className="text-white fill-white" />
           </div>
         </div>
@@ -43,7 +43,7 @@ const ClientBadge: React.FC<ClientBadgeProps> = ({ booking, allBookings = [], co
 
       {/* VIP Badge - text only, no icon as requested */}
       {isAutoVIP && (
-        <div className="px-1.5 py-0.5 bg-gradient-to-br from-purple-500/20 to-indigo-600/20 rounded-md border border-purple-400/30">
+        <div className="px-1.5 py-0.5 bg-linear-to-br from-purple-500/20 to-indigo-600/20 rounded-md border border-purple-400/30">
           <span className={`text-purple-400 font-bold leading-none ${compact ? 'text-[7px]' : 'text-[8px]'}`}>VIP</span>
         </div>
       )}

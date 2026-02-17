@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, Check, Share2, User, Sparkles, Instagram, PenTool, Zap, PartyPopper, Settings, Save, X, RefreshCw, HeartHandshake, Wand2 } from 'lucide-react';
+import { Copy, Check, Share2, User, Sparkles, Instagram, PenTool, Zap, PartyPopper, Settings, X, RefreshCw, HeartHandshake, Wand2 } from 'lucide-react';
 
 // --- 1. نصوص "بداية الخير" (دعاء + تحفيز) ---
 const STARTUP_DB = [
@@ -115,7 +115,7 @@ const SmartAIWidget: React.FC<SmartAIWidgetProps> = ({ userName = "المبدع"
     const randomMsg = STARTUP_DB[Math.floor(Math.random() * STARTUP_DB.length)];
     const greeting = `${randomMsg} \n(منور ${userGender === 'male' ? 'استاذ' : 'ست'} ${userName})`;
     typeText(greeting);
-  }, []);
+  }, [userGender, userName]);
 
   const saveApiKey = () => {
       if (!apiKey.trim()) return;
@@ -154,7 +154,6 @@ const SmartAIWidget: React.FC<SmartAIWidgetProps> = ({ userName = "المبدع"
     if (useAI && apiKey) {
         setLoading(true);
         try {
-            const userTitle = userGender === 'male' ? 'أخوكم المصور' : 'أختكم المصورة';
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -253,7 +252,7 @@ const SmartAIWidget: React.FC<SmartAIWidgetProps> = ({ userName = "المبدع"
                 </div>
             ) : (
                 <p className={`text-xs font-medium leading-relaxed dir-rtl ${mode === 'social' ? 'text-blue-50' : 'text-gray-100'}`}>
-                    "{displayedText}"
+                    &quot;{displayedText}&quot;
                 </p>
             )}
         </div>

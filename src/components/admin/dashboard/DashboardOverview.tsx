@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
-  Users, Calendar, Clock, AlertTriangle, 
-  CheckCircle2, AlertCircle, TrendingUp, 
+  Calendar, Clock, AlertTriangle, 
+  CheckCircle2,
   Activity, MapPin, DollarSign, Command
 } from 'lucide-react';
 import { User, Booking, BookingStatus, UserRole } from '../../../types';
@@ -27,7 +27,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   }, []);
 
   // Filter Today's Bookings
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
   const todaysBookings = bookings.filter(b => b.shootDate.startsWith(today));
 
   // Sort by Time
@@ -40,8 +40,10 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   // Staff counts from real users
   const safeUsers = users || [];
+  const isShooter = (role: UserRole | string | undefined): boolean =>
+    role === UserRole.MANAGER || String(role ?? '').toLowerCase() === 'shooter';
   const staffStatus = {
-    photographers: safeUsers.filter(u => u.role === UserRole.MANAGER || (u.role as any) === 'shooter').length,
+    photographers: safeUsers.filter(u => isShooter(u.role)).length,
     editors: safeUsers.filter(u => u.role === UserRole.PHOTO_EDITOR || u.role === UserRole.VIDEO_EDITOR).length,
     reception: safeUsers.filter(u => u.role === UserRole.RECEPTION).length,
   };
@@ -203,41 +205,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
     </div>
   );
-};
-
-
-
-
-// --- Helper: Domino Effect Calculator ---
-const calculateDominoEffect = (bookings: Booking[]) => {
-    // Sort by start time
-    const sorted = [...bookings].sort((a, b) => (a.details?.startTime || '').localeCompare(b.details?.startTime || ''));
-    
-    const impacts: Record<string, { delayMin: number, affectsNext: boolean }> = {};
-    
-    let previousEnd = 0; // Minutes from midnight
-
-    sorted.forEach((booking, index) => {
-        const startParts = (booking.details?.startTime || '00:00').split(':').map(Number);
-        const startMin = startParts[0] * 60 + startParts[1];
-        const duration = booking.details?.duration || 2; // Default 2 hours
-        const plannedEnd = startMin + (duration * 60);
-        
-        // Mock "Actual Arrival" for demo (In real app, use booking.details.actualArrivalTime)
-        // For now, let's assume if status is 'Shooting', they might be late? 
-        // We will just prioritize showing the PLANNED timeline for now to detect overlaps.
-        
-        // Overlap Check
-        if (index > 0 && startMin < previousEnd) {
-             impacts[booking.id] = { delayMin: previousEnd - startMin, affectsNext: true };
-        } else {
-             impacts[booking.id] = { delayMin: 0, affectsNext: false };
-        }
-        
-        previousEnd = plannedEnd;
-    });
-
-    return impacts;
 };
 
 // --- Sub-Component: Smart Booking Card ---

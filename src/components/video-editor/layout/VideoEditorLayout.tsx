@@ -11,7 +11,7 @@ interface VideoEditorLayoutProps {
   activeTab: string;
 
   onNavigate: (tab: string) => void;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 

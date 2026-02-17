@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { 
   Settings, Shield, Database, Users, Lock, 
-  Cpu, Activity, RefreshCw, Radio, Server, ShieldAlert, Trash2,
-  User as UserIcon, CheckCircle, XCircle, Terminal 
+  Cpu, Activity, RefreshCw, Server, ShieldAlert, Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import { User, UserRole, RoleLabels } from '../../../types';
 
@@ -12,11 +12,19 @@ interface AdminSystemViewProps {
   onUpdateUser?: (id: string, updates: Partial<User>) => void;
 }
 
-const AdminSystemView: React.FC<AdminSystemViewProps> = ({ users = [], onUpdateUser }) => {
+type ToggleState = {
+  maintenance: boolean;
+  tracking: boolean;
+  backup: boolean;
+  mfa: boolean;
+  encryption: boolean;
+};
+
+const AdminSystemView: React.FC<AdminSystemViewProps> = ({ users = [], onUpdateUser: _onUpdateUser }) => {
     const [activeTab, setActiveTab] = useState('general');
     
     // Toggle State Map
-    const [toggles, setToggles] = useState<Record<string, boolean>>({
+    const [toggles, setToggles] = useState<ToggleState>({
         maintenance: false,
         tracking: true,
         backup: true,
@@ -24,7 +32,7 @@ const AdminSystemView: React.FC<AdminSystemViewProps> = ({ users = [], onUpdateU
         encryption: true
     });
 
-    const toggleSetting = (key: string) => {
+    const toggleSetting = (key: keyof ToggleState) => {
         setToggles(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
@@ -274,7 +282,7 @@ const AdminSystemView: React.FC<AdminSystemViewProps> = ({ users = [], onUpdateU
                                     </button>
                                 </div>
                                 <p className="text-[10px] text-gray-500 leading-relaxed">
-                                    * "تنظيف البيانات الوهمية" سيقوم بحذف الحجوزات التي تحتوي على أسماء "Test", "Demo" أو أرقام هواتف غير صحيحة فقط. هذا الإجراء آمن للاستخدام.
+                                    * &quot;تنظيف البيانات الوهمية&quot; سيقوم بحذف الحجوزات التي تحتوي على أسماء &quot;Test&quot;, &quot;Demo&quot; أو أرقام هواتف غير صحيحة فقط. هذا الإجراء آمن للاستخدام.
                                 </p>
                              </div>
                         </div>
@@ -285,14 +293,26 @@ const AdminSystemView: React.FC<AdminSystemViewProps> = ({ users = [], onUpdateU
     );
 };
 
-const SectionHeader = ({ title, icon: Icon }: any) => (
+interface SectionHeaderProps {
+  title: string;
+  icon: LucideIcon;
+}
+
+interface SettingToggleProps {
+  label: string;
+  desc: string;
+  active: boolean;
+  onToggle: () => void;
+}
+
+const SectionHeader: React.FC<SectionHeaderProps> = ({ title, icon: Icon }) => (
     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
         <Icon size={18} className="text-cyan-400" />
         <h3 className="text-sm font-black text-white uppercase tracking-wider">{title}</h3>
     </div>
 );
 
-const SettingToggle = ({ label, desc, active, onToggle }: any) => (
+const SettingToggle: React.FC<SettingToggleProps> = ({ label, desc, active, onToggle }) => (
     <button onClick={onToggle} className="w-full flex items-center justify-between p-4 bg-black/40 border border-white/5 rounded-2xl hover:border-cyan-500/20 transition-all group cursor-pointer text-right">
         <div>
             <h4 className="text-xs font-bold text-gray-200 mb-1 group-hover:text-cyan-400 transition-colors">{label}</h4>

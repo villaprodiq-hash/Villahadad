@@ -1,14 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  ShieldAlert, Search, Download, Trash2, AlertTriangle, 
-  FileText, DollarSign, UserX, Key, Clock, Filter, ChevronDown
+  ShieldAlert, Search, Trash2, AlertTriangle, 
+  FileText, DollarSign, Clock, Filter, ChevronDown
 } from 'lucide-react';
 import { Booking, User } from '../../../types';
-import { format } from 'date-fns';
 
 interface AdminAuditViewProps {
     bookings: Booking[];
     users: User[];
+}
+
+type AuditSeverity = 'info' | 'medium' | 'high' | 'critical';
+
+interface AuditLogEntry {
+    id: string;
+    timestamp: string;
+    actorId?: string;
+    action: string;
+    target: string;
+    targetId: string;
+    severity: AuditSeverity;
+    details: string;
 }
 
 const AdminAuditView: React.FC<AdminAuditViewProps> = ({ bookings, users }) => {
@@ -18,7 +30,7 @@ const AdminAuditView: React.FC<AdminAuditViewProps> = ({ bookings, users }) => {
 
     // 1. Synthesize Logs from Bookings Data
     const realLogs = useMemo(() => {
-        const logs: any[] = [];
+        const logs: AuditLogEntry[] = [];
         
         bookings.forEach(b => {
              // A. Creation Log
@@ -77,7 +89,7 @@ const AdminAuditView: React.FC<AdminAuditViewProps> = ({ bookings, users }) => {
         return users.find(u => u.id === id)?.name || id || 'Unknown Staff';
     };
 
-    const getSeverityColor = (severity: string) => {
+    const getSeverityColor = (severity: AuditSeverity) => {
         switch(severity) {
             case 'critical': return 'text-rose-500 bg-rose-500/10 border-rose-500/20';
             case 'high': return 'text-orange-500 bg-orange-500/10 border-orange-500/20';

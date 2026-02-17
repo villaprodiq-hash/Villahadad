@@ -48,7 +48,7 @@ const NeumorphicClockWidget: React.FC = () => {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
-  const calendarDays = [];
+  const calendarDays: Array<number | null> = [];
   for (let i = 0; i < firstDay; i++) {
     calendarDays.push(null);
   }

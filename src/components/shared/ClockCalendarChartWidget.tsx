@@ -6,6 +6,14 @@ interface ClockCalendarChartWidgetProps {
   bookings: Booking[];
 }
 
+interface WeeklyClockDayData {
+  nameEn: string;
+  count: number;
+  isToday: boolean;
+  isPast: boolean;
+  isCompleted: boolean;
+}
+
 const ClockCalendarChartWidget: React.FC<ClockCalendarChartWidgetProps> = ({ bookings }) => {
   const [time, setTime] = useState(new Date());
 
@@ -36,7 +44,7 @@ const ClockCalendarChartWidget: React.FC<ClockCalendarChartWidgetProps> = ({ boo
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
-  const calendarDays = [];
+  const calendarDays: Array<number | null> = [];
   for (let i = 0; i < firstDay; i++) {
     calendarDays.push(null);
   }
@@ -46,7 +54,7 @@ const ClockCalendarChartWidget: React.FC<ClockCalendarChartWidgetProps> = ({ boo
 
   // Weekly chart data
   const weekData = useMemo(() => {
-    const days = [];
+    const days: WeeklyClockDayData[] = [];
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - ((today.getDay() + 1) % 7));
@@ -66,7 +74,7 @@ const ClockCalendarChartWidget: React.FC<ClockCalendarChartWidgetProps> = ({ boo
       const isPast = day < today && !isToday;
       
       days.push({
-        nameEn: dayNamesEn[i],
+        nameEn: dayNamesEn[i] ?? '',
         count: bookingsCount,
         isToday,
         isPast,
@@ -82,14 +90,14 @@ const ClockCalendarChartWidget: React.FC<ClockCalendarChartWidgetProps> = ({ boo
   return (
     <div className="bg-[#1E1E1E] backdrop-blur-xl rounded-2xl p-4 border border-gray-700/5 shadow-[0_8px_32px_rgba(0,0,0,0.3)] h-full flex gap-3 relative overflow-hidden">
       {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-br from-white/[0.02] to-transparent pointer-events-none" />
       
       {/* Noise texture */}
       <div className="absolute inset-0 opacity-[0.06] pointer-events-none mix-blend-overlay" 
            style={{backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='ncc'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23ncc)'/%3E%3C/svg%3E")`, backgroundSize: '150px'}} />
       
       {/* Left: Analog Clock with Digital Time Inside - BIGGER */}
-      <div className="relative flex-shrink-0 z-10 flex items-center justify-center">
+      <div className="relative shrink-0 z-10 flex items-center justify-center">
         <div className="relative w-32 h-32">
           <svg viewBox="0 0 200 200" className="w-full h-full">
             {/* Clock face */}

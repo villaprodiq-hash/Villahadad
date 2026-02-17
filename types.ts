@@ -122,6 +122,39 @@ export interface BookingExtraItem {
   description: string;
 }
 
+export type DiscountCodeType = 'percentage' | 'fixed';
+
+export interface AppliedDiscount {
+  codeId: string;
+  code: string;
+  type: DiscountCodeType;
+  value: number;
+  reason: string;
+  subtotalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+  appliedAt: string;
+  appliedBy?: string;
+  appliedByName?: string;
+}
+
+export interface DiscountCode {
+  id: string;
+  code: string;
+  type: DiscountCodeType;
+  value: number;
+  startAt: string;
+  endAt?: string;
+  isActive: boolean;
+  isPublished: boolean;
+  notes?: string;
+  usageCount: number;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BookingDetails {
   baseAmount?: number; // سعر الباقة الأساسية (بدون البنود الإضافية)
   groomName?: string;
@@ -153,12 +186,33 @@ export interface BookingDetails {
   allowPublishing?: boolean;
   allowPhotography?: boolean;
   zaffaTime?: string;
+  groomPhone?: string;
+  bridePhone?: string;
+  genericPhone?: string;
   secondaryPhone?: string;
   printerNotificationSentAt?: string;
   printerDeliveredAt?: string;
+  printerProductId?: string; // Selected product from printer catalog
+  printerUnitPrice?: number;
+  printerQuantity?: number;
   actualArrivalTime?: string; // وقت الوصول الفعلي للعميل (لحساب التأخير)
   selectionAppointment?: string; // موعد الاختيار
+  selectionCompletedAt?: string; // وقت اكتمال الاختيار من بوابة العميل
   extraItems?: BookingExtraItem[]; // بنود إضافية مالية
+  discount?: AppliedDiscount; // applied booking discount code
+  // Legacy assignment/media fields used by admin/reception dashboards
+  includesVideo?: boolean;
+  assignedTo?: string;
+  photographer?: string;
+  editor?: string;
+  videoNotes?: string;
+  // Photo editor completion metadata
+  photoEditorStartedAt?: string;
+  photoEditorCompletedAt?: string;
+  photoEditorCompletedById?: string;
+  photoEditorCompletedByName?: string;
+  photoEditorDurationMinutes?: number;
+  photoEditorCompletedImages?: number;
 }
 
 export interface Booking {
@@ -180,8 +234,12 @@ export interface Booking {
   nasProgress?: number;
   details?: BookingDetails;
   folderPath?: string;
+  nasSessionId?: string; // Session directory identifier (legacy + migration compatibility)
   extras?: ExtraService[];
   notes?: string;
+  packageName?: string; // Legacy naming used by financial widgets
+  assignedToName?: string; // Legacy presentation field
+  createdByName?: string; // Legacy presentation field
 
   // Smart Liability Fields (60-60 Rule)
   selectionDeadline?: string; // 60 days after shoot date
@@ -228,7 +286,9 @@ export interface Booking {
 
   // Staff Audit Trail (Individual Attribution)
   created_by?: string; // User ID (from public.users) who created booking
+  createdBy?: string; // Legacy camelCase alias
   updated_by?: string; // User ID (from public.users) who last modified
+  updatedBy?: string; // Legacy camelCase alias
   updated_at?: string; // ISO String of last modification timestamp
 
   // Performance Metrics
@@ -494,7 +554,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canDeleteBookings: false,
     canViewGallery: true,
     canEditGallery: false,
-    canViewClientPhone: false,
+    canViewClientPhone: true,
     canViewPrices: false,
     canAccessSettings: false,
     canAssignTasks: false,

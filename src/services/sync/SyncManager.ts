@@ -1,4 +1,5 @@
 import { supabase, callSyncFunction } from '../supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { UserRepository as userRepo } from '../db/repositories/UserRepository';
 import { BookingRepository as bookingRepo } from '../db/repositories/BookingRepository';
 import { SyncQueueService } from './SyncQueue';
@@ -22,7 +23,7 @@ export class SyncManager {
   private static onlineHandler: (() => void) | null = null;
   private static offlineHandler: (() => void) | null = null;
   private static syncInProgress = false; // 🔒 SECURITY: Prevent race conditions
-  private static recoveredSessionQueueOnce = false;
+  private static pendingRetryTimer: ReturnType<typeof setTimeout> | null = null; // 🔒 Single retry guard
 
   // 🔔 Real-time Event Emitter for UI Updates
   private static listeners: Set<(event: string, data?: unknown) => void> = new Set();
@@ -60,6 +61,26 @@ export class SyncManager {
   static async init() {
     console.log('🔄 SyncManager: Initializing...');
 
+    // One-time hygiene: remove legacy attendance rows that cannot sync (non-UUID user_id).
+    const purgedAttendanceItems = await SyncQueueService.purgeInvalidAttendanceItems();
+    if (purgedAttendanceItems > 0) {
+      console.log(
+        `🧹 SyncManager: Purged ${purgedAttendanceItems} invalid attendance item(s) from sync queue`
+      );
+    }
+
+    // One-time recovery: revive previously failed session/session_image items
+    // after schema-compat sync improvements.
+    const revivedGalleryItems = await SyncQueueService.reviveFailedByEntities([
+      'session',
+      'session_image',
+    ]);
+    if (revivedGalleryItems > 0) {
+      console.log(
+        `♻️ SyncManager: Revived ${revivedGalleryItems} failed gallery sync item(s)`
+      );
+    }
+
     // 1. Listen for network changes (✅ FIX: Add cleanup tracking)
     if (!this.networkListenersAttached) {
       this.onlineHandler = () => this.handleNetworkChange(true);
@@ -72,7 +93,7 @@ export class SyncManager {
     }
 
     // 2. Listen for Auth Changes (Trigger Sync on Login)
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    supabase.auth.onAuthStateChange(async (event, _session) => {
       console.log(`🔐 Auth State Changed: ${event}`);
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
@@ -151,14 +172,26 @@ export class SyncManager {
   }
 
   /**
+   * Schedule a single retry — cancels any existing pending retry to prevent storm
+   */
+  private static scheduleRetry(delayMs: number) {
+    if (this.pendingRetryTimer) {
+      clearTimeout(this.pendingRetryTimer);
+    }
+    this.pendingRetryTimer = setTimeout(() => {
+      this.pendingRetryTimer = null;
+      this.pushChanges();
+    }, delayMs);
+  }
+
+  /**
    * Process persistent offline queue with "Smart Rank" logic
    */
   private static async processSyncQueue() {
     // 🔒 SECURITY: Prevent concurrent sync operations
     if (this.syncInProgress) {
-      console.log('⚠️ SyncManager: Sync already in progress, queueing retry...');
-      // Schedule retry after current sync completes
-      setTimeout(() => this.pushChanges(), SYNC_BUSY_RETRY_DELAY_MS);
+      console.log('⚠️ SyncManager: Sync already in progress, scheduling single retry...');
+      this.scheduleRetry(SYNC_BUSY_RETRY_DELAY_MS);
       return;
     }
 
@@ -168,14 +201,6 @@ export class SyncManager {
     let failedCount = 0;
 
     try {
-      if (!this.recoveredSessionQueueOnce) {
-        this.recoveredSessionQueueOnce = true;
-        const revived = await SyncQueueService.reviveFailedByEntities(['session', 'session_image']);
-        if (revived > 0) {
-          console.log(`♻️ SyncManager: Revived ${revived} failed session queue items`);
-        }
-      }
-
       const queueItems = await SyncQueueService.peekAll();
       if (queueItems.length === 0) {
         console.log('✅ SyncManager: Queue is empty.');
@@ -273,18 +298,36 @@ export class SyncManager {
             }
           }
         } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
           console.error(
-            `❌ CRITICAL: Failed to sync item ${item.id}:`,
-            JSON.stringify(err, null, 2)
+            `❌ CRITICAL: Failed to sync item ${item.id} [${item.entity}]:`,
+            errMsg
           );
           failedCount++;
 
-          // Retry logic for exceptions
-          const newRetryCount = (item.retryCount || 0) + 1;
-          if (newRetryCount < MAX_SYNC_RETRIES) {
-            await SyncQueueService.updateRetryCount(item.id, newRetryCount);
-          } else {
+          // Permanent failures: don't retry items that will never succeed
+          const isPermanent =
+            errMsg.includes('not yet uploaded') ||
+            errMsg.includes('violates not-null') ||
+            errMsg.includes('Skipping sync') ||
+            errMsg.includes('relation') ||
+            errMsg.includes('does not exist') ||
+            errMsg.includes('Missing SERVICE_ROLE_KEY') ||
+            errMsg.includes('Invalid API key') ||
+            errMsg.includes('invalid input syntax for type uuid') ||
+            errMsg.includes('permission denied');
+
+          if (isPermanent) {
+            console.warn(`🗑️ Permanently failing item ${item.id} — will not retry`);
             await SyncQueueService.markAsFailed(item.id);
+          } else {
+            // Retry logic for transient exceptions
+            const newRetryCount = (item.retryCount || 0) + 1;
+            if (newRetryCount < MAX_SYNC_RETRIES) {
+              await SyncQueueService.updateRetryCount(item.id, newRetryCount);
+            } else {
+              await SyncQueueService.markAsFailed(item.id);
+            }
           }
         }
       }
@@ -312,11 +355,11 @@ export class SyncManager {
       // 🔒 Always release lock
       this.syncInProgress = false;
 
-      // If there are still pending items, schedule another sync
+      // If there are still pending items, schedule a single retry (deduplicated)
       const remainingItems = await SyncQueueService.peekAll();
       if (remainingItems.length > 0) {
         console.log(`🔄 ${remainingItems.length} items remaining, scheduling retry...`);
-        setTimeout(() => this.pushChanges(), SYNC_RETRY_DELAY_MS);
+        this.scheduleRetry(SYNC_RETRY_DELAY_MS);
       }
     }
   }
@@ -395,8 +438,8 @@ export class SyncManager {
    * Subscribe to Real-time Changes (Cloud -> Local)
    * Cleans up previous subscriptions before creating new ones to prevent leaks.
    */
-  private static syncBookingsChannel: any = null;
-  private static syncUsersChannel: any = null;
+  private static syncBookingsChannel: RealtimeChannel | null = null;
+  private static syncUsersChannel: RealtimeChannel | null = null;
 
   static subscribeToChanges() {
     // Remove only OUR previous sync channels (not all channels which kills mockBackend subscriptions)

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
 import { Booking } from '../../../../types';
 import { formatMoney } from '../../../../utils/formatMoney';
 import { GlowCard } from '../../../shared/GlowCard';
@@ -10,6 +9,17 @@ interface TransactionHistoryWidgetProps {
   onUpdateBooking?: (id: string, updates: Partial<Booking>) => void;
   disableTilt?: boolean;
 }
+
+interface PaymentRecord {
+  currency?: string;
+  amount?: number;
+}
+
+type BookingWithPaymentMeta = Booking & {
+  originalPackagePrice?: number;
+  addOnTotal?: number;
+  paymentRecords?: PaymentRecord[];
+};
 
 const TransactionHistoryWidget: React.FC<TransactionHistoryWidgetProps> = ({
     bookings,
@@ -42,7 +52,7 @@ const TransactionHistoryWidget: React.FC<TransactionHistoryWidgetProps> = ({
 
   return (
     <GlowCard
-        disableTilt={true}
+        disableTilt={disableTilt}
         className="flex-1 flex flex-col bg-white dark:bg-[#1a1c22] rounded-4xl shadow-sm overflow-hidden border border-transparent dark:border-white/5 transition-colors duration-300"
     >
        <div
@@ -60,7 +70,7 @@ const TransactionHistoryWidget: React.FC<TransactionHistoryWidgetProps> = ({
                 </tr>
              </thead>
              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {bookings.map((b, idx) => (
+                {bookings.map((b) => (
                    <tr
                      key={b.id}
                      className="group hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
@@ -84,13 +94,13 @@ const TransactionHistoryWidget: React.FC<TransactionHistoryWidgetProps> = ({
                        <td className="py-2">
                           {(() => {
                              // ✅ Detect mixed-currency add-ons
-                             const bAny = b as any;
-                             const originalPrice = bAny.originalPackagePrice || b.totalAmount;
-                             const addOnTotal = bAny.addOnTotal || 0;
-                             const records: any[] = bAny.paymentRecords || [];
+                             const bookingMeta = b as BookingWithPaymentMeta;
+                             const originalPrice = bookingMeta.originalPackagePrice || b.totalAmount;
+                             const addOnTotal = bookingMeta.addOnTotal || 0;
+                             const records: PaymentRecord[] = bookingMeta.paymentRecords || [];
                              const otherCurrencyPaid = records
-                                .filter((r: any) => r.currency && r.currency !== b.currency)
-                                .reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
+                                .filter((r) => r.currency && r.currency !== b.currency)
+                                .reduce((sum, r) => sum + (r.amount || 0), 0);
                              const hasMixedCurrency = otherCurrencyPaid > 0;
                              const otherCurrLabel = b.currency === 'USD' ? 'د.ع' : '$';
 
@@ -160,10 +170,10 @@ const TransactionHistoryWidget: React.FC<TransactionHistoryWidgetProps> = ({
                              </span>
                              {/* Show add-on payments in other currency */}
                              {(() => {
-                                const records: any[] = (b as any).paymentRecords || [];
+                                const records: PaymentRecord[] = (b as BookingWithPaymentMeta).paymentRecords || [];
                                 const otherPaid = records
-                                   .filter((r: any) => r.currency && r.currency !== b.currency)
-                                   .reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
+                                   .filter((r) => r.currency && r.currency !== b.currency)
+                                   .reduce((sum, r) => sum + (r.amount || 0), 0);
                                 if (otherPaid > 0) {
                                    return (
                                       <span className="text-[9px] font-mono text-blue-500 dark:text-blue-400 font-bold">

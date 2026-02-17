@@ -1,9 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { 
-  Database, HardDrive, ShieldCheck, Activity, 
-  Search, Folder, CheckCircle, Clock, Server, 
-  Cpu, Zap, BarChart3, RefreshCw
+  HardDrive, Folder, Clock, Server
 } from 'lucide-react';
 import { Booking, BookingStatus, BookingCategory } from '../../../types';
 
@@ -59,7 +57,7 @@ const AdminStorageView: React.FC<AdminStorageViewProps> = ({ bookings }) => {
 
         {/* Assets Grid (Abstract Terminals) */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 overflow-y-auto custom-scrollbar pb-12">
-            {bookings.map((booking, i) => (
+            {bookings.map((booking) => (
                 <div key={booking.id} className="bg-[#0B0E14]/60 backdrop-blur-md border border-white/5 rounded-xl p-3 hover:border-cyan-500/30 group transition-all relative overflow-hidden flex flex-col gap-3">
                     
                     {/* Header: Icon & Name */}

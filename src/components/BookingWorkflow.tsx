@@ -10,10 +10,13 @@ import { LayoutGrid, Table, List, Settings } from 'lucide-react';
 // Import Designs
 import UnifiedPulse from './manager/workflow/designs/UnifiedPulse';
 
-const getTimeInStage = (statusHistory: any[], currentStatus: BookingStatus) => {
+const getTimeInStage = (
+  statusHistory: Array<{ status?: BookingStatus; timestamp?: string }>,
+  currentStatus: BookingStatus
+) => {
   if (!statusHistory || statusHistory.length === 0) return 0;
   const lastEntry = [...statusHistory].reverse().find(h => h.status === currentStatus);
-  if (!lastEntry) return 0;
+  if (!lastEntry?.timestamp) return 0;
   return differenceInDays(new Date(), parseISO(lastEntry.timestamp));
 };
 
@@ -54,7 +57,7 @@ const LuminaWorkflowCard = ({ children, className = "", onClick, onDragStart, dr
     children: React.ReactNode; 
     className?: string;
     onClick?: () => void;
-    onDragStart?: (e: React.DragEvent) => void;
+    onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
     draggable?: boolean;
     disableTilt?: boolean;
 }) => {
@@ -104,7 +107,7 @@ const LuminaWorkflowCard = ({ children, className = "", onClick, onDragStart, dr
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
-      onDragStart={onDragStart as any}
+      onDragStartCapture={onDragStart}
       draggable={draggable}
       style={{ transform }}
       initial={{ opacity: 0, y: 30, scale: 0.95 }}
@@ -147,7 +150,7 @@ const LuminaWorkflowCard = ({ children, className = "", onClick, onDragStart, dr
 };
 
 
-const WorkflowColumn: React.FC<{
+export const WorkflowColumn: React.FC<{
   id: string;
   title: string;
   icon: React.ReactNode;
@@ -159,7 +162,7 @@ const WorkflowColumn: React.FC<{
   isManager?: boolean;
   users: User[];
   disableTilt?: boolean;
-}> = ({ id, title, icon, color, count, bookings, onViewBooking, onDrop, isManager, users, disableTilt = true }) => {
+}> = ({ id: _id, title, icon, color, count, bookings, onViewBooking, onDrop, isManager: _isManager, users, disableTilt = true }) => {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -180,13 +183,6 @@ const WorkflowColumn: React.FC<{
     }
   };
 
-  // Nixtio Color Mapping
-  const themeColor = {
-      blue: 'text-gray-900', // Upcoming - Neutral/Dark
-      red: 'text-amber-600', // Shooting - Amber/Gold
-      green: 'text-emerald-600' // Done - Emerald/Green
-  };
-  
   const iconBg = {
       blue: 'bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white',
       red: 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500',
@@ -645,7 +641,7 @@ const BookingWorkflow: React.FC<BookingWorkflowProps> = ({
   users,
   onViewBooking, 
   onStatusUpdate,
-  isManager = false
+  isManager: _isManager = false
 }) => {
   const [filterType, setFilterType] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [searchQuery, setSearchQuery] = useState('');
@@ -680,32 +676,9 @@ const BookingWorkflow: React.FC<BookingWorkflowProps> = ({
             title.toLowerCase().includes(query);
   };
 
-  const upcomingBookings = bookings.filter(b => b.status === BookingStatus.CONFIRMED && isDateInFilter(b.shootDate) && isSearchMatch(b));
-  const shootingNowBookings = bookings.filter(b => b.status === BookingStatus.SHOOTING && isDateInFilter(b.shootDate) && isSearchMatch(b));
-  const selectionBookings = bookings.filter(b => b.status === BookingStatus.SELECTION && isDateInFilter(b.shootDate) && isSearchMatch(b));
-  const editingBookings = bookings.filter(b => b.status === BookingStatus.EDITING && isDateInFilter(b.shootDate) && isSearchMatch(b));
-  const printingBookings = bookings.filter(b => b.status === BookingStatus.READY_TO_PRINT && isDateInFilter(b.shootDate) && isSearchMatch(b));
-  const pickupBookings = bookings.filter(b => b.status === BookingStatus.READY_FOR_PICKUP && isDateInFilter(b.shootDate) && isSearchMatch(b));
-  const completedBookings = bookings.filter(b => b.status === BookingStatus.DELIVERED && isDateInFilter(b.shootDate) && isSearchMatch(b));
-
-  const handleDrop = (bookingId: string, targetId: string) => {
-    if (onStatusUpdate && bookingId) {
-      let newStatus: BookingStatus;
-      switch (targetId) {
-        case 'upcoming': newStatus = BookingStatus.CONFIRMED; break;
-        case 'shooting': newStatus = BookingStatus.SHOOTING; break;
-        case 'selection': newStatus = BookingStatus.SELECTION; break;
-        case 'editing': newStatus = BookingStatus.EDITING; break;
-        case 'printing': newStatus = BookingStatus.READY_TO_PRINT; break;
-        case 'pickup': newStatus = BookingStatus.READY_FOR_PICKUP; break;
-        case 'completed': newStatus = BookingStatus.DELIVERED; break;
-        default: newStatus = targetId as BookingStatus;
-      }
-      onStatusUpdate(bookingId, newStatus);
-    }
-  };
-
-  const sortFn = (a: Booking, b: Booking) => new Date(a.shootDate).getTime() - new Date(b.shootDate).getTime();
+  const visibleBookings = bookings.filter(
+    booking => isDateInFilter(booking.shootDate) && isSearchMatch(booking)
+  );
 
   return (
     <div className="h-full flex flex-col pt-6 px-6 pb-0 bg-transparent relative overflow-hidden" dir="rtl">
@@ -801,20 +774,20 @@ const BookingWorkflow: React.FC<BookingWorkflowProps> = ({
         <div className="flex-1 min-h-0 relative z-10 px-1 overflow-hidden">
             {layoutView === 'pulse' ? (
                 <UnifiedPulse 
-                    bookings={bookings.filter(isSearchMatch)} 
+                    bookings={visibleBookings} 
                     users={users} 
                     onViewBooking={onViewBooking || (() => {})} 
                     onStatusUpdate={onStatusUpdate || (() => {})} 
                 />
             ) : layoutView === 'list' ? (
                 <ListView 
-                    bookings={bookings.filter(isSearchMatch)} 
+                    bookings={visibleBookings} 
                     users={users} 
                     onViewBooking={onViewBooking || (() => {})} 
                 />
             ) : (
                 <PhotoGroupView 
-                    bookings={bookings.filter(isSearchMatch)} 
+                    bookings={visibleBookings} 
                     users={users} 
                     onViewBooking={onViewBooking || (() => {})} 
                     onStatusUpdate={onStatusUpdate}

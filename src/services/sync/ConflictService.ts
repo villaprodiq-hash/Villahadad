@@ -5,7 +5,7 @@ export interface ConflictRecord {
     booking_id: string;
     proposed_by_name: string;
     proposed_by_rank: string;
-    proposed_data: any;
+    proposed_data: Record<string, unknown>;
     status: 'PENDING' | 'RESOLVED' | 'REJECTED';
     created_at: string;
     
@@ -63,11 +63,13 @@ export class ConflictService {
 
         if (decision === 'ACCEPT') {
             // Overwrite the actual booking with the proposed data
-            const proposed = conflict.proposed_data;
+            const proposed = { ...(conflict.proposed_data as Record<string, unknown>) };
             
             // Inject resolution metadata
             proposed.last_editor_rank = 'MANAGER'; // Force upgrade rank so it sticks
-            proposed.updated_by_name = `${proposed.updated_by_name} (Approved by ${managerName})`;
+            const previousEditor =
+              typeof proposed.updated_by_name === 'string' ? proposed.updated_by_name : 'Unknown';
+            proposed.updated_by_name = `${previousEditor} (Approved by ${managerName})`;
 
             const { error: updateErr } = await supabase
                 .from('bookings')

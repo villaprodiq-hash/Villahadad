@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Booking, BookingCategory, CategoryLabels } from '../types';
-import { ChevronRight, ChevronLeft, Calendar, Clock, MapPin, X, Bell, User, Video, AlignLeft, Layers, Users } from 'lucide-react';
+import { ChevronRight, ChevronLeft, MapPin, X, Bell, User, Video, AlignLeft, Layers, Users } from 'lucide-react';
 
 interface ScheduleSectionProps {
   bookings: Booking[];
@@ -180,7 +180,7 @@ const NotificationCard: React.FC<NotificationCardProps> = ({ booking, onClick, o
   const timeStr = booking.details?.startTime || '12:00';
   
   const [hStr, mStr] = timeStr.split(':');
-  const h = parseInt(hStr, 10);
+  const h = parseInt(hStr ?? '12', 10);
   const suffix = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
   const formattedTime = `${h12}:${mStr} ${suffix}`;
@@ -208,7 +208,7 @@ const NotificationCard: React.FC<NotificationCardProps> = ({ booking, onClick, o
        onClick={onClick}
        className="relative group w-full bg-[#262626]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg cursor-pointer transition-all duration-300 hover:scale-[1.01] hover:bg-[#262626]/80 overflow-hidden"
     >
-       <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+       <div className="absolute inset-0 bg-linear-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
        <button 
          onClick={onDismiss}

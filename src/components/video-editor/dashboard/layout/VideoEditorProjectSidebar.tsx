@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   Search, Repeat, Folder, FileAudio, FileVideo, ChevronLeft 
 } from 'lucide-react';
@@ -34,7 +34,7 @@ interface FolderItemProps {
   name: string;
   isOpen: boolean;
   onClick: (e: React.MouseEvent) => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const FolderItem = ({ name, isOpen, onClick, children }: FolderItemProps) => (
@@ -100,8 +100,8 @@ interface VideoEditorProjectSidebarProps {
   toggleFolder: (id: string) => void;
   isConverting: boolean;
   handleTriggerConvert: () => void;
-  currentUser: any;
-  users: any[];
+  currentUser?: unknown;
+  users?: unknown[];
 }
 
 const VideoEditorProjectSidebar: React.FC<VideoEditorProjectSidebarProps> = ({
@@ -109,8 +109,8 @@ const VideoEditorProjectSidebar: React.FC<VideoEditorProjectSidebarProps> = ({
   toggleFolder,
   isConverting,
   handleTriggerConvert,
-  currentUser,
-  users
+  currentUser: _currentUser,
+  users: _users
 }) => {
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -168,12 +168,12 @@ const VideoEditorProjectSidebar: React.FC<VideoEditorProjectSidebarProps> = ({
          <div className="overflow-y-auto custom-scrollbar pl-2 flex-1 space-y-1">
             <FolderItem 
               name="زفاف_أحمد_وسارة_2024" 
-              isOpen={expandedFolders['client1']} 
+              isOpen={Boolean(expandedFolders['client1'])} 
               onClick={() => toggleFolder('client1')}
             >
               <FolderItem 
                 name="🎵 الموسيقى والصوتيات" 
-                isOpen={expandedFolders['audio']} 
+                isOpen={Boolean(expandedFolders['audio'])} 
                 onClick={(e: React.MouseEvent) => { e.stopPropagation(); toggleFolder('audio'); }}
               >
                 <FileItem name="أغنية_الدخول.mp3" type="audio" duration="04:20" tags={[]} />
@@ -182,7 +182,7 @@ const VideoEditorProjectSidebar: React.FC<VideoEditorProjectSidebarProps> = ({
 
               <FolderItem 
                 name="🎬 مقاطع الفيديو" 
-                isOpen={expandedFolders['clips']} 
+                isOpen={Boolean(expandedFolders['clips'])} 
                 onClick={(e: React.MouseEvent) => { e.stopPropagation(); toggleFolder('clips'); }}
               >
                 <FileItem name="CAM_A_Entrance.mov" type="video" duration="12:04" tags={['4K', 'Log']} />
@@ -191,7 +191,7 @@ const VideoEditorProjectSidebar: React.FC<VideoEditorProjectSidebarProps> = ({
                 <FileItem name="Cake_Cutting_Main.mp4" type="video" duration="05:10" tags={[]} />
               </FolderItem>
             </FolderItem>
-            <FolderItem name="الأصول_المشتركة (شعار)" isOpen={false} onClick={() => {}} children={null} />
+            <FolderItem name="الأصول_المشتركة (شعار)" isOpen={false} onClick={() => {}} />
          </div>
       </GlassPanel>
     </div>

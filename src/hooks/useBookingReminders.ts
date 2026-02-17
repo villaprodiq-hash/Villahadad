@@ -30,7 +30,11 @@ export function useBookingReminders(
 
       const shootTime = new Date(booking.shootDate);
       if (booking.details?.startTime) {
-        const [hours, minutes] = String(booking.details.startTime).split(':').map(Number);
+        const [hoursRaw, minutesRaw] = String(booking.details.startTime).split(':').map(Number);
+        const hours =
+          typeof hoursRaw === 'number' && Number.isFinite(hoursRaw) ? hoursRaw : 0;
+        const minutes =
+          typeof minutesRaw === 'number' && Number.isFinite(minutesRaw) ? minutesRaw : 0;
         if (!isNaN(hours) && !isNaN(minutes)) {
           shootTime.setHours(hours, minutes, 0, 0);
         }

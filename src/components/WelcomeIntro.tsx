@@ -45,7 +45,7 @@ const WelcomeIntro: React.FC<WelcomeIntroProps> = ({ onEnter }) => {
 
   return (
     <motion.div
-      className="fixed inset-0 z-[9999] bg-[#050505] flex flex-col items-center justify-center overflow-hidden font-sans"
+      className="fixed inset-0 z-9999 bg-[#050505] flex flex-col items-center justify-center overflow-hidden font-sans"
       variants={containerVariants}
       exit="exit"
     >
@@ -97,7 +97,7 @@ const WelcomeIntro: React.FC<WelcomeIntroProps> = ({ onEnter }) => {
           className="mb-8 relative"
         >
             <div className="absolute inset-0 bg-pink-500 blur-2xl opacity-20 rounded-full" />
-            <div className="relative w-24 h-24 bg-gradient-to-br from-[#21242b] to-[#000] rounded-3xl border border-white/10 shadow-2xl flex items-center justify-center">
+            <div className="relative w-24 h-24 bg-linear-to-br from-[#21242b] to-[#000] rounded-3xl border border-white/10 shadow-2xl flex items-center justify-center">
                 <Aperture size={48} className="text-white" strokeWidth={1.5} />
                 <div className="absolute top-0 right-0 p-2">
                     <Sparkles size={16} className="text-[#F7931E] animate-pulse" />
@@ -111,7 +111,7 @@ const WelcomeIntro: React.FC<WelcomeIntroProps> = ({ onEnter }) => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.8 }}
-              className="text-5xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 tracking-tighter"
+              className="text-5xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-linear-to-b from-white via-white to-white/40 tracking-tighter"
             >
               VILLA HADAD
             </motion.h1>
@@ -139,7 +139,7 @@ const WelcomeIntro: React.FC<WelcomeIntroProps> = ({ onEnter }) => {
           <ArrowRight className="relative z-10 w-4 h-4 transition-transform group-hover:translate-x-1" />
           
           {/* Shine Effect */}
-          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/80 to-transparent z-0 opacity-50" />
+          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-linear-to-r from-transparent via-white/80 to-transparent z-0 opacity-50" />
         </motion.button>
 
         {/* Footer */}

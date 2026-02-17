@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { Camera, Building2, Loader2 } from 'lucide-react';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
 import { UpdateNotification } from './components/shared/UpdateNotification';
-import { AuthService } from './services/auth/AuthService';
 
 // --- Loading Component ---
 const AppLoader = () => {
@@ -24,6 +23,94 @@ const AppLoader = () => {
         <Loader2 className="w-10 h-10 text-white animate-spin" />
         <p className="text-gray-400 text-sm font-medium animate-pulse">جارِ تحميل النظام...</p>
         <p className="text-gray-600 text-xs">⏱️ {elapsedTime} ثانية</p>
+      </div>
+    </div>
+  );
+};
+
+const PORTAL_ROUTE_PREFIXES = ['/select', '/client-portal', '/view/', '/gallery/'] as const;
+const DEFAULT_STAFF_WEB_HOST = 'staff.villahadad.org';
+const DEFAULT_PORTAL_WEB_HOST = 'select.villahadad.org';
+
+type WebHostMode = 'staff' | 'select' | 'other';
+
+const getHostFromConfiguredUrl = (configuredUrl: string | undefined, fallback: string): string => {
+  const raw = String(configuredUrl || '').trim();
+  if (!raw) return fallback;
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return fallback;
+  }
+};
+
+const getStaffWebHost = (): string =>
+  getHostFromConfiguredUrl(import.meta.env.VITE_STAFF_BASE_URL as string | undefined, DEFAULT_STAFF_WEB_HOST);
+
+const getPortalWebHost = (): string =>
+  getHostFromConfiguredUrl(
+    import.meta.env.VITE_CLIENT_PORTAL_BASE_URL as string | undefined,
+    DEFAULT_PORTAL_WEB_HOST
+  );
+
+const getWebHostMode = (): WebHostMode => {
+  if (typeof window === 'undefined') return 'other';
+  const hostname = window.location.hostname.toLowerCase();
+  if (!hostname) return 'other';
+
+  if (hostname === getPortalWebHost()) return 'select';
+  if (hostname === getStaffWebHost()) return 'staff';
+  return 'other';
+};
+
+const isClientPortalRoute = (): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  const path = window.location.pathname;
+  const hash = window.location.hash;
+  const params = new URLSearchParams(window.location.search);
+
+  const inPath = PORTAL_ROUTE_PREFIXES.some(prefix => path.startsWith(prefix));
+  const inHash = PORTAL_ROUTE_PREFIXES.some(prefix => hash.includes(prefix));
+  const hasToken = params.has('token') || params.has('t');
+
+  // Route/token signals are authoritative so portal links always open correctly
+  // even if host env values are temporarily misconfigured.
+  if (inPath || inHash || hasToken) return true;
+
+  const hostMode = getWebHostMode();
+  if (hostMode === 'select') return true;
+  if (hostMode === 'staff') return false;
+
+  return false;
+};
+
+const isElectronRuntime = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return typeof window.electronAPI !== 'undefined';
+};
+
+const WEB_ALLOWED_ROLES = new Set<UserRole>([
+  UserRole.MANAGER,
+  UserRole.ADMIN,
+  UserRole.RECEPTION,
+  UserRole.PRINTER,
+]);
+
+const WEB_BLOCKED_SECTIONS_BY_ROLE: Partial<Record<UserRole, Set<string>>> = {
+  [UserRole.MANAGER]: new Set(['section-files']),
+};
+
+const WebAccessLockedScreen: React.FC = () => {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-[#07090f] px-6">
+      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#0f1320]/90 backdrop-blur-xl p-8 text-center">
+        <p className="text-2xl font-black text-white mb-3">وصول الويب مقيّد</p>
+        <p className="text-zinc-300 leading-7 mb-6">
+          هذه نسخة ويب مخصّصة للرسبشن، الطباعة، المشرف، والمديرة فقط.
+          <br />
+          الأدوار الأخرى تعمل عبر تطبيق سطح المكتب.
+        </p>
       </div>
     </div>
   );
@@ -99,9 +186,6 @@ const PhotoEditorLayout = React.lazy(
 const PhotoEditorDashboard = React.lazy(
   () => import('./components/photo-editor/dashboard/PhotoEditorDashboard')
 );
-const PhotoEditorGalleryView = React.lazy(
-  () => import('./components/photo-editor/gallery/PhotoEditorGalleryView')
-);
 const VideoEditorLayout = React.lazy(
   () => import('./components/video-editor/layout/VideoEditorLayout')
 );
@@ -161,14 +245,13 @@ import {
 } from './types';
 
 import { electronBackend } from './services/mockBackend';
-import { presenceService } from './services/db/services/PresenceService';
-import { attendanceService } from './services/db/services/AttendanceService';
+import { callClientPortal } from './services/clientPortalService';
 import { AppNotification } from './types/notification.types';
 import ReceptionPageWrapper from './components/reception/layout/ReceptionPageWrapper';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
-import { useData } from './providers/DataProvider';
+import { useDataContextValue as useData } from './providers/data-context';
 
 import { AuthProvider } from './providers/AuthProvider';
 import { DataProvider } from './providers/DataProvider';
@@ -177,6 +260,12 @@ import { DataProvider } from './providers/DataProvider';
 // 🔐 DEVICE LOGIN STORAGE HELPERS
 // ============================================
 const DEVICE_USER_KEY = 'villahaddad_lastLoggedInUserId';
+const DEVICE_PINNED_USERS_KEY = 'villahaddad_pinnedUserIds';
+const DEVICE_LAST_ROLE_BY_USER_KEY = 'villahaddad_lastRoleByUser';
+const MAX_PINNED_USERS = 6;
+
+const isValidUserRole = (value: unknown): value is UserRole =>
+  Object.values(UserRole).includes(value as UserRole);
 
 const DeviceStorage = {
   getLastUserId: (): string | null => {
@@ -199,7 +288,88 @@ const DeviceStorage = {
     } catch (e) {
       console.warn('Failed to clear device user:', e);
     }
+  },
+  getPinnedUserIds: (): string[] => {
+    try {
+      const raw = localStorage.getItem(DEVICE_PINNED_USERS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const sanitized = parsed.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+      return Array.from(new Set(sanitized)).slice(0, MAX_PINNED_USERS);
+    } catch (e) {
+      console.warn('Failed to read pinned users:', e);
+      return [];
+    }
+  },
+  setPinnedUserIds: (userIds: string[]): string[] => {
+    const sanitized = Array.from(
+      new Set(userIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0))
+    ).slice(0, MAX_PINNED_USERS);
+    try {
+      localStorage.setItem(DEVICE_PINNED_USERS_KEY, JSON.stringify(sanitized));
+    } catch (e) {
+      console.warn('Failed to save pinned users:', e);
+    }
+    return sanitized;
+  },
+  addPinnedUserId: (userId: string): string[] => {
+    const current = DeviceStorage.getPinnedUserIds();
+    const next = [userId, ...current.filter(id => id !== userId)];
+    return DeviceStorage.setPinnedUserIds(next);
+  },
+  removePinnedUserId: (userId: string): string[] => {
+    const current = DeviceStorage.getPinnedUserIds();
+    return DeviceStorage.setPinnedUserIds(current.filter(id => id !== userId));
+  },
+  getLastRoleForUser: (userId: string): UserRole | null => {
+    try {
+      const raw = localStorage.getItem(DEVICE_LAST_ROLE_BY_USER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const role = parsed[userId];
+      return isValidUserRole(role) ? role : null;
+    } catch (e) {
+      console.warn('Failed to read last role by user:', e);
+      return null;
+    }
+  },
+  setLastRoleForUser: (userId: string, role: UserRole): void => {
+    try {
+      const raw = localStorage.getItem(DEVICE_LAST_ROLE_BY_USER_KEY);
+      const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      parsed[userId] = role;
+      localStorage.setItem(DEVICE_LAST_ROLE_BY_USER_KEY, JSON.stringify(parsed));
+    } catch (e) {
+      console.warn('Failed to save last role by user:', e);
+    }
   }
+};
+
+type InventoryRecord = {
+  id: string;
+  name: string;
+  icon?: string;
+  status?: string;
+  type?: string;
+  assignedTo?: string | null;
+  batteryPool?: { total: number; charged: number } | null;
+  memoryPool?: { total: number; free: number } | null;
+};
+
+type StaffDeployment = {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  gear: InventoryRecord[];
+};
+
+type StorageLocation = {
+  id: string;
+  name: string;
+  type: string;
+  items: InventoryRecord[];
 };
 
 export default function App() {
@@ -231,41 +401,40 @@ export default function App() {
 
   // 🔔 Bridge IPC notifications from main process → localStorage + CustomEvent
   useEffect(() => {
-    const electronAPI = (window as any).electronAPI;
-    const cleanup = electronAPI?.sessionLifecycle?.onAppNotification?.((notification: any) => {
+    const electronAPI = window.electronAPI;
+    const cleanup = electronAPI?.sessionLifecycle?.onAppNotification?.((notification: AppNotification) => {
       try {
         const stored = JSON.parse(localStorage.getItem('app_notifications') || '[]');
         stored.unshift(notification);
         if (stored.length > 50) stored.length = 50;
         localStorage.setItem('app_notifications', JSON.stringify(stored));
-      } catch {}
+      } catch {
+        // Ignore malformed cached notifications and continue dispatching live events.
+      }
       window.dispatchEvent(new CustomEvent('app:notification', { detail: notification }));
     });
     return () => { cleanup?.(); };
   }, []);
 
   // 🌟 Client Portal Route Hook (Manual Routing - Moved to Top Level)
-  const [isClientView, setIsClientView] = useState(false);
+  const [isClientView, setIsClientView] = useState(() => isClientPortalRoute());
 
   useEffect(() => {
-    const path = window.location.pathname;
-    const hash = window.location.hash;
-    const params = new URLSearchParams(window.location.search);
-    console.log('🔍 Checking Route:', { path, hash });
+    const syncPortalRoute = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      console.log('🔍 Checking Route:', { path, hash });
+      setIsClientView(isClientPortalRoute());
+    };
 
-    if (
-      path.startsWith('/select') ||
-      path.startsWith('/client-portal') ||
-      path.startsWith('/view/') ||
-      path.startsWith('/gallery/') ||
-      params.has('token') ||
-      hash.includes('/select') ||
-      hash.includes('/client-portal') ||
-      hash.includes('/view/') ||
-      hash.includes('/gallery/')
-    ) {
-      setIsClientView(true);
-    }
+    syncPortalRoute();
+    window.addEventListener('popstate', syncPortalRoute);
+    window.addEventListener('hashchange', syncPortalRoute);
+
+    return () => {
+      window.removeEventListener('popstate', syncPortalRoute);
+      window.removeEventListener('hashchange', syncPortalRoute);
+    };
   }, []);
 
 
@@ -297,6 +466,8 @@ export default function App() {
 }
 
 function AppContent() {
+  const isWebRuntime = typeof window !== 'undefined' && !isElectronRuntime();
+
   // Import hooks from providers
   const { currentUser, users, login, logout, updateUser } = useAuth();
   const {
@@ -312,7 +483,7 @@ function AppContent() {
   // --- Local UI State Only ---
   const [activeSection, setActiveSection] = useState('section-home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Settings & Lock State (still needed by UI)
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -321,6 +492,7 @@ function AppContent() {
   
   // 🔐 macOS-style Device Login State
   const [rememberedUserId, setRememberedUserId] = useState<string | null>(null);
+  const [pinnedUserIds, setPinnedUserIds] = useState<string[]>([]);
   const [showFullLogin, setShowFullLogin] = useState(false); // "Not me" was clicked
   const [dataLoadAttempts, setDataLoadAttempts] = useState(0); // Loading timeout counter
   const [usersRefreshKey, setUsersRefreshKey] = useState(0); // Force refresh users
@@ -328,11 +500,25 @@ function AppContent() {
   // 🔐 Load remembered user from device storage on mount
   useEffect(() => {
     const storedUserId = DeviceStorage.getLastUserId();
+    const storedPinnedUsers = DeviceStorage.getPinnedUserIds();
+    setPinnedUserIds(storedPinnedUsers);
+
     if (storedUserId) {
       setRememberedUserId(storedUserId);
       console.log('📱 Device remembered user:', storedUserId);
     }
   }, []);
+
+  useEffect(() => {
+    if (users.length === 0 || pinnedUserIds.length === 0) return;
+
+    const userIds = new Set(users.map(user => user.id));
+    const cleanedPinnedUsers = pinnedUserIds.filter(userId => userIds.has(userId));
+    if (cleanedPinnedUsers.length !== pinnedUserIds.length) {
+      const normalized = DeviceStorage.setPinnedUserIds(cleanedPinnedUsers);
+      setPinnedUserIds(normalized);
+    }
+  }, [users, pinnedUserIds]);
   
   // ⏱️ Loading timeout - increment counter when waiting for users
   useEffect(() => {
@@ -359,6 +545,9 @@ function AppContent() {
   const [, setNotifications] = useState<AppNotification[]>([]);
   const [isUploading] = useState(false);
   const [uploadProgress] = useState(0);
+  const selectedSyncInProgressRef = useRef<Set<string>>(new Set());
+  const selectedSyncDoneRef = useRef<Set<string>>(new Set());
+  const selectedSyncLastAttemptRef = useRef<Map<string, number>>(new Map());
 
   // App Effects
   const [isSnowing, setIsSnowing] = useState(false);
@@ -370,6 +559,11 @@ function AppContent() {
   // ... (Inventory State omitted for brevity, keeping existing) ...
 
   const handleRoleLogin = async (role: UserRole, userId?: string) => {
+    if (isWebRuntime && !WEB_ALLOWED_ROLES.has(role)) {
+      toast.error('هذا الدور غير مسموح في نسخة الويب');
+      return;
+    }
+
     // Use the AuthProvider's login method which handles all authentication logic
     await login(role, userId);
 
@@ -397,6 +591,9 @@ function AppContent() {
     // Save any valid user ID (UUID or legacy format like u_xxx)
     if (effectiveUserId && effectiveUserId !== 'bootstrap_manager') {
       DeviceStorage.setLastUserId(effectiveUserId);
+      DeviceStorage.setLastRoleForUser(effectiveUserId, role);
+      const updatedPinnedUsers = DeviceStorage.addPinnedUserId(effectiveUserId);
+      setPinnedUserIds(updatedPinnedUsers);
       setRememberedUserId(effectiveUserId);
       console.log('📱 Saved device user:', effectiveUserId);
     } else {
@@ -413,6 +610,14 @@ function AppContent() {
   };
 
   const handleNavClick = (sectionId: string) => {
+    if (isWebRuntime && currentUser) {
+      const blockedSections = WEB_BLOCKED_SECTIONS_BY_ROLE[currentUser.role];
+      if (blockedSections?.has(sectionId)) {
+        toast.error('قسم المعرض غير متاح للمديرة في نسخة الويب');
+        return;
+      }
+    }
+
     setActiveSection(sectionId);
     setSelectedBooking(null);
     setIsSidebarOpen(false);
@@ -429,7 +634,7 @@ function AppContent() {
     setActiveSection('section-home');
     setSelectedBooking(null);
     setViewingBooking(null);
-    setIsSidebarOpen(true);
+    setIsSidebarOpen(false);
     setIsLocked(false);
     
     // Force clear local storage data if needed for security
@@ -442,8 +647,18 @@ function AppContent() {
     console.log('📱 User clicked "Not me" - showing full login');
   };
 
+  const handlePinUser = (userId: string) => {
+    const updated = DeviceStorage.addPinnedUserId(userId);
+    setPinnedUserIds(updated);
+  };
+
+  const handleUnpinUser = (userId: string) => {
+    const updated = DeviceStorage.removePinnedUserId(userId);
+    setPinnedUserIds(updated);
+  };
+
   // INVENTORY STATE (Lifted for Automation)
-  const [staffDeployments, setStaffDeployments] = useState([
+  const [staffDeployments, setStaffDeployments] = useState<StaffDeployment[]>([
     {
       id: 's1',
       name: 'علي (مونتير)',
@@ -479,7 +694,7 @@ function AppContent() {
     { id: 's3', name: 'أحمد (مساعد)', role: 'Assistant', avatar: 'Ahmed', gear: [] },
   ]);
 
-  const [storageLocations, setStorageLocations] = useState([
+  const [, setStorageLocations] = useState<StorageLocation[]>([
     {
       id: 'loc1',
       name: 'الرف الرئيسي (A1)',
@@ -507,15 +722,11 @@ function AppContent() {
     },
   ]);
 
-  const [movementLogs, setMovementLogs] = useState<
-    Array<{ id: number | string; action: string; user: string; item: string; time: string }>
-  >([]);
-
   // 🌑 [BLACK'S FIX] Fetch REAL Inventory Data
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const items = await electronBackend.getInventory();
+        const items = (await electronBackend.getInventory()) as InventoryRecord[];
         if (items.length > 0) {
             // Organize items into staff and storage for the existing UI logic
             const deployed = users.map(u => ({
@@ -531,8 +742,8 @@ function AppContent() {
                 { id: 'loc2', name: 'حقيبة الدرون (D1)', type: 'bag', items: items.filter(i => i.status === 'storage' && i.type === 'drone') }
             ];
 
-            setStaffDeployments(deployed as any);
-            setStorageLocations(storage as any);
+            setStaffDeployments(deployed);
+            setStorageLocations(storage);
         }
       } catch (e) {
         console.error('Failed to load real inventory:', e);
@@ -577,11 +788,6 @@ function AppContent() {
   // Mock mutations
   const updateBookingMutation = {
     mutate: async ({ id, updates }: { id: string; updates: Partial<Booking> }) => {
-      // Get the booking before update to check status change
-      const booking = bookings.find(b => b.id === id);
-      const oldStatus = booking?.status;
-      const newStatus = updates.status;
-
       // Update the booking
       setBookings(prev => prev.map(b => (b.id === id ? { ...b, ...updates } : b)));
 
@@ -589,12 +795,6 @@ function AppContent() {
       // Folder creation now happens via Electron IPC in performStatusUpdate()
       // when status changes to SHOOTING_COMPLETED
       // See: performStatusUpdate() → electronAPI.sessionLifecycle.createSessionDirectory()
-    },
-  };
-  const addBookingMutation = {
-    mutate: (_newBooking: Booking) => {
-      // This mutation is deprecated - using DataProvider now
-      // setBookings(prev => [newBooking, ...prev]);
     },
   };
   const deleteBookingMutation = {
@@ -673,8 +873,7 @@ function AppContent() {
 
       const tasks = await electronBackend.getDashboardTasks();
       setDashboardTasks(tasks);
-      const usersData = await electronBackend.getUsers();
-      // setUsers(usersData); // Handled by AuthProvider
+      await electronBackend.getUsers(); // Warm users cache; state is managed by AuthProvider.
     } catch (e) {
       console.error('Failed to load data', e);
     } finally {
@@ -700,10 +899,150 @@ function AppContent() {
     return activeBookings.filter(booking => canUserSeeBooking(booking, currentUser));
   }, [bookings, currentUser]);
 
+  const fetchClientSelectedFileNames = useCallback(async (token: string): Promise<string[]> => {
+    const selected = await callClientPortal<{ names?: string[] }>({
+      action: 'get_selected_names',
+      token,
+    });
+    const selectedNames = Array.isArray(selected?.names)
+      ? selected.names.filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+      : [];
+    if (selectedNames.length > 0) return Array.from(new Set(selectedNames));
+
+    const data = await callClientPortal<{ downloads?: Array<Record<string, unknown>> }>({
+      action: 'get_download_urls',
+      token,
+    });
+    const downloads = Array.isArray(data?.downloads) ? data.downloads : [];
+    return Array.from(
+      new Set(
+        downloads
+          .map(item => item?.fileName || item?.file_name)
+          .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+      )
+    );
+  }, []);
+
+  const resolveSessionPathForBooking = useCallback(async (booking: Booking): Promise<string> => {
+    if (typeof booking.folderPath === 'string' && booking.folderPath.trim().length > 0) {
+      return booking.folderPath;
+    }
+
+    const electronAPI = window.electronAPI;
+    if (!electronAPI?.db?.query) return '';
+
+    const attempts: Array<{ sql: string; params: string[] }> = [
+      {
+        sql: `SELECT folderPath AS path FROM bookings WHERE id = ? AND folderPath IS NOT NULL LIMIT 1`,
+        params: [booking.id],
+      },
+      {
+        sql: `SELECT folder_path AS path FROM bookings WHERE id = ? AND folder_path IS NOT NULL LIMIT 1`,
+        params: [booking.id],
+      },
+      {
+        sql: `SELECT nasPath AS path FROM sessions WHERE bookingId = ? AND nasPath IS NOT NULL ORDER BY updatedAt DESC LIMIT 1`,
+        params: [booking.id],
+      },
+      {
+        sql: `SELECT nas_path AS path FROM sessions WHERE booking_id = ? AND nas_path IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
+        params: [booking.id],
+      },
+    ];
+
+    for (const attempt of attempts) {
+      try {
+        const rows = await electronAPI.db.query(attempt.sql, attempt.params);
+        const first = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+        if (first && typeof first === 'object' && 'path' in first) {
+          const pathValue = (first as { path?: unknown }).path;
+          if (typeof pathValue === 'string' && pathValue.trim().length > 0) {
+            return pathValue;
+          }
+        }
+      } catch {
+        // Try next schema variation
+      }
+    }
+
+    return '';
+  }, []);
+
+  const syncSelectedFolderFromClientPortal = useCallback(
+    async (booking: Booking) => {
+      const token = booking.client_token;
+      const bookingKey = booking.id;
+      const electronAPI = window.electronAPI;
+
+      if (!token || !electronAPI?.sessionLifecycle?.copyToSelected) return;
+      if (selectedSyncDoneRef.current.has(bookingKey)) return;
+      if (selectedSyncInProgressRef.current.has(bookingKey)) return;
+
+      const lastAttemptAt = selectedSyncLastAttemptRef.current.get(bookingKey) || 0;
+      if (Date.now() - lastAttemptAt < 60_000) return;
+      selectedSyncLastAttemptRef.current.set(bookingKey, Date.now());
+      selectedSyncInProgressRef.current.add(bookingKey);
+
+      try {
+        const sessionPath = await resolveSessionPathForBooking(booking);
+        if (!sessionPath) {
+          console.warn('[ClientSelectionSync] No session path found for booking:', booking.id);
+          return;
+        }
+
+        const fileNames = await fetchClientSelectedFileNames(token);
+        if (!fileNames.length) return;
+
+        const result = await electronAPI.sessionLifecycle.copyToSelected(sessionPath, fileNames);
+        const copied = Number(result?.copied || 0);
+        const failed = Number(result?.failed || 0);
+        const expected = fileNames.length;
+
+        if (copied === expected && failed === 0) {
+          selectedSyncDoneRef.current.add(bookingKey);
+          toast.success(`تم مزامنة ${copied} صورة مختارة إلى مجلد المصمم`);
+          return;
+        }
+
+        console.warn('[ClientSelectionSync] Partial/failed copy', {
+          bookingId: booking.id,
+          expected,
+          copied,
+          failed,
+          errors: result?.errors,
+        });
+
+        if (copied > 0) {
+          toast.warning(`تم نسخ ${copied}/${expected} صورة فقط. سيتم إعادة المحاولة تلقائياً.`);
+        }
+      } catch (error) {
+        console.warn('[ClientSelectionSync] Failed to sync selected images:', error);
+      } finally {
+        selectedSyncInProgressRef.current.delete(bookingKey);
+      }
+    },
+    [fetchClientSelectedFileNames, resolveSessionPathForBooking]
+  );
+
+  useEffect(() => {
+    const eligibleStatuses = new Set<BookingStatus>([
+      BookingStatus.EDITING,
+      BookingStatus.READY_TO_PRINT,
+      BookingStatus.PRINTING,
+      BookingStatus.DELIVERED,
+    ]);
+
+    bookings.forEach(booking => {
+      if (!eligibleStatuses.has(booking.status)) return;
+      if (!booking.folderPath || !booking.client_token) return;
+      void syncSelectedFolderFromClientPortal(booking);
+    });
+  }, [bookings, syncSelectedFolderFromClientPortal]);
+
   // --- Content Renderer ---
 
   // --- Content Renderer ---
-  const handleUpdateGearStaff = async (updatedStaff: any) => {
+  const handleUpdateGearStaff = async (updatedStaff: StaffDeployment[]) => {
     setStaffDeployments(updatedStaff);
     // Find the item that was changed and sync to DB
     for (const staff of updatedStaff) {
@@ -711,20 +1050,8 @@ function AppContent() {
             await electronBackend.updateInventoryItem(item.id, { 
                 assignedTo: staff.id, 
                 status: 'deployed',
-                batteryPool: item.batteryPool,
-                memoryPool: item.memoryPool
-            });
-        }
-    }
-  };
-
-  const handleUpdateGearStorage = async (updatedStorage: any) => {
-    setStorageLocations(updatedStorage);
-    for (const loc of updatedStorage) {
-        for (const item of loc.items) {
-            await electronBackend.updateInventoryItem(item.id, { 
-                assignedTo: null, 
-                status: 'storage' 
+                batteryPool: item.batteryPool ?? undefined,
+                memoryPool: item.memoryPool ?? undefined
             });
         }
     }
@@ -945,9 +1272,19 @@ function AppContent() {
 
       // --- F. Files / Gallery ---
       case 'section-files':
-        if (isManager) return <ManagerGalleryView />;
-        if (currentUser?.role === UserRole.PHOTO_EDITOR)
-          return <PhotoEditorGalleryView bookings={visibleBookings} />;
+        if (isManager) {
+          if (isWebRuntime) {
+            return (
+              <div className="h-full w-full flex items-center justify-center p-8">
+                <div className="max-w-lg w-full rounded-3xl border border-amber-500/20 bg-amber-500/10 p-8 text-center">
+                  <p className="text-xl font-black text-amber-300 mb-2">المعرض غير متاح على الويب</p>
+                  <p className="text-sm text-amber-100/80">يمكن فتح المعرض من تطبيق سطح المكتب فقط.</p>
+                </div>
+              </div>
+            );
+          }
+          return <ManagerGalleryView />;
+        }
         // Note: Video Editor uses its own tab-based layout and doesn't use section-based navigation
         return <ReceptionGalleryView bookings={visibleBookings} isReception={isReception} />;
 
@@ -995,7 +1332,7 @@ function AppContent() {
     if (status === BookingStatus.SHOOTING_COMPLETED && booking) {
       console.log('[App] 🎬 INSIDE IF BLOCK - Creating folder...');
       try {
-        const electronAPI = (window as any).electronAPI;
+        const electronAPI = window.electronAPI;
         console.log('[App] Electron API available:', !!electronAPI);
         console.log('[App] Session lifecycle available:', !!electronAPI?.sessionLifecycle?.createSessionDirectory);
         
@@ -1041,7 +1378,7 @@ function AppContent() {
             await electronBackend.addReminder(
               bookingId,
               `📁 تم إنشاء مجلد الجلسة: ${result.sessionPath}`,
-              new Date().toISOString().split('T')[0],
+              new Date().toISOString().slice(0, 10),
               'general',
               'Folder'
             );
@@ -1065,7 +1402,7 @@ function AppContent() {
       await electronBackend.addReminder(
         bookingId,
         `⚡ تنبيه شحن: ${gearList}`,
-        new Date().toISOString().split('T')[0],
+        new Date().toISOString().slice(0, 10),
         'shooting',
         'Zap'
       );
@@ -1090,8 +1427,10 @@ function AppContent() {
         const photoStaffIdx = updatedStaff.findIndex(s => s.role === 'Photo');
 
         if (photoStaffIdx !== -1) {
+          const photoStaff = updatedStaff[photoStaffIdx];
+          if (!photoStaff) return;
           let drainedCount = 0;
-          updatedStaff[photoStaffIdx].gear.forEach(g => {
+          photoStaff.gear.forEach(g => {
             if (g.batteryPool && g.batteryPool.charged > 0) {
               g.batteryPool.charged--;
               drainedCount++;
@@ -1228,11 +1567,11 @@ function AppContent() {
     };
     const updated = await electronBackend.updateBooking(id, auditUpdates);
     updateBookingMutation.mutate({ id, updates: auditUpdates });
-    if (selectedBooking?.id === id) setSelectedBooking(updated);
+    if (selectedBooking?.id === id && updated) setSelectedBooking(updated);
     SyncManager.pushChanges();
     toast.success('تم تحديث الحجز بنجاح');
   };
-  const handleDragStatusChange = async (id: string, newStatus: BookingStatus) => {
+  const handleDragStatusChange = async (id: string, newStatus: BookingStatus, statusUpdates?: Partial<Booking>) => {
     console.log('[App] handleDragStatusChange called:', id, newStatus);
     console.log('[App] 🎯 newStatus value:', JSON.stringify(newStatus));
     console.log('[App] 🎯 BookingStatus.SHOOTING_COMPLETED:', JSON.stringify(BookingStatus.SHOOTING_COMPLETED));
@@ -1277,7 +1616,7 @@ function AppContent() {
       }
     }
 
-    const updates: Partial<Booking> = { status: newStatus };
+    const updates: Partial<Booking> = { status: newStatus, ...(statusUpdates || {}) };
     if (newStatus === BookingStatus.SHOOTING) {
       updates.shootDate = new Date().toISOString();
     }
@@ -1288,7 +1627,7 @@ function AppContent() {
     
     // ✅ Then update backend
     const updated = await electronBackend.updateBooking(id, updates);
-    if (selectedBooking?.id === id) setSelectedBooking(updated);
+    if (selectedBooking?.id === id && updated) setSelectedBooking(updated);
     
     // ✅ FIX: Create updated booking object with NEW status for automated actions
     // This ensures performStatusUpdate sees the correct new status
@@ -1540,6 +1879,15 @@ function AppContent() {
   
   // Determine which login screen to show
   if (!currentUser || isLocked) {
+    const webAllowedUsers = isWebRuntime
+      ? users.filter(user => WEB_ALLOWED_ROLES.has(user.role))
+      : users;
+    const webAllowedUsersById = new Map(webAllowedUsers.map(user => [user.id, user]));
+    const pinnedUsers = pinnedUserIds
+      .map(userId => webAllowedUsersById.get(userId))
+      .filter((user): user is User => Boolean(user));
+    const rememberedAllowedOnWeb = !isWebRuntime || (rememberedUser ? WEB_ALLOWED_ROLES.has(rememberedUser.role) : false);
+
     // 🔐 Wait for users to load if we have a remembered user ID
     // This prevents showing all users briefly before switching to single-user mode
     // ⚠️ BUT: If users failed to load (still empty after data loaded), show login anyway
@@ -1557,8 +1905,9 @@ function AppContent() {
       setRememberedUserId(null);
     }
     
-    // Show SecurityAccessTerminal with remembered user (if exists and user hasn't clicked "Not me")
-    const showRememberedUser = rememberedUser && !showFullLogin;
+    // Show pinned users first. If no pinned users, fallback to remembered single-user flow.
+    const showPinnedUsers = !showFullLogin && pinnedUsers.length > 0;
+    const showRememberedUser = rememberedUser && !showFullLogin && !showPinnedUsers;
     
     
     // console.log('🔐 [Login Screen] Rendering:', {
@@ -1572,11 +1921,18 @@ function AppContent() {
           handleRoleLogin(role, userId);
           setIsLocked(false);
         }}
-        users={users}
-        rememberedUser={showRememberedUser ? rememberedUser : null}
+        users={webAllowedUsers}
+        pinnedUsers={showPinnedUsers ? pinnedUsers : []}
+        rememberedUser={showRememberedUser && rememberedAllowedOnWeb ? rememberedUser : null}
         onNotMe={handleNotMe}
+        onPinUser={handlePinUser}
+        onUnpinUser={handleUnpinUser}
       />
     );
+  }
+
+  if (isWebRuntime && !WEB_ALLOWED_ROLES.has(currentUser.role)) {
+    return <WebAccessLockedScreen />;
   }
 
   // ------------------------------------------------------------------
@@ -1732,7 +2088,7 @@ function AppContent() {
           isOpen={confirmModal.isOpen}
           onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
           onConfirm={handleConfirmDelete}
-          message={confirmModal.message}
+          message={confirmModal.message ?? ''}
           title="تأكيد العملية"
           confirmLabel="تنفيذ"
           cancelLabel="تراجع"
@@ -1887,6 +2243,7 @@ function AppContent() {
         isCollapsed={isSidebarCollapsed}
         toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         badges={notificationBadges}
+        isWebRuntime={isWebRuntime}
       >
         <AnimatePresence mode="wait">
           <motion.div
@@ -1925,9 +2282,11 @@ function AppContent() {
   }
 
   // 🌟 السيناريو السابع: باقي الموظفين (التصميم القديم - Sidebar)
+  const legacyContentMarginClass = isSidebarCollapsed ? 'lg:mr-[90px]' : 'lg:mr-[160px]';
+
   return (
     <div
-      className={`flex h-screen overflow-hidden ${currentUser?.role === UserRole.RECEPTION ? 'bg-[#0F0F0F] text-gray-100' : 'bg-[#21242b] text-gray-100'} font-sans ${isSnowing ? 'winter-mode' : ''}`}
+      className={`flex ${isWebRuntime ? 'min-h-[100dvh] overflow-x-hidden overflow-y-auto' : 'h-screen overflow-hidden'} ${currentUser?.role === UserRole.RECEPTION ? 'bg-[#0F0F0F] text-gray-100' : 'bg-[#21242b] text-gray-100'} font-sans ${isSnowing ? 'winter-mode' : ''}`}
       dir="rtl"
     >
       {isSnowing && <Snowfall />}
@@ -1953,7 +2312,7 @@ function AppContent() {
 
       {/* Main Content */}
       <div
-        className={`flex-1 flex flex-col min-w-0 relative transition-all duration-300 ${isSidebarCollapsed ? 'lg:mr-[90px]' : 'lg:mr-[160px]'}`}
+        className={`flex-1 flex flex-col min-w-0 relative transition-all duration-300 ${legacyContentMarginClass}`}
       >
         {currentUser?.role !== UserRole.RECEPTION && (
           <Header
@@ -1980,7 +2339,9 @@ function AppContent() {
             onResetLayout={handleResetLayout}
           />
         )}
-        <main className="flex-1 overflow-hidden p-4 lg:p-6 relative">
+        <main
+          className={`flex-1 min-h-0 p-4 lg:p-6 relative ${isWebRuntime ? 'overflow-x-hidden overflow-y-auto xl:overflow-hidden' : 'overflow-hidden'}`}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSection}
@@ -2049,7 +2410,7 @@ function AppContent() {
         isOpen={confirmModal.isOpen}
         onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
         onConfirm={handleConfirmDelete}
-        message={confirmModal.message}
+        message={confirmModal.message ?? ''}
         title="تأكيد"
         confirmLabel="نعم"
         cancelLabel="إلغاء"

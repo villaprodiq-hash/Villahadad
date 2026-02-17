@@ -1,7 +1,6 @@
 /**
  * Utilities for cleaning up fake/test data from the application
  */
-import { electronBackend } from '../services/mockBackend';
 
 /**
  * Clean up all fake/test data from local SQLite database
@@ -9,7 +8,7 @@ import { electronBackend } from '../services/mockBackend';
  */
 export async function cleanupLocalDatabase(): Promise<void> {
   try {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI;
     if (!api?.db) return;
 
     console.log('[Cleanup] 🧹 Starting local database cleanup...');

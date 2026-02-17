@@ -98,7 +98,7 @@ const DeletedBookingsView: React.FC<DeletedBookingsViewProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" dir="rtl">
       <div className="w-full max-w-4xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-l from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-linear-to-l from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
               <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />

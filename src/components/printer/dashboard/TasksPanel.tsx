@@ -5,7 +5,8 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, AlertCircle, Maximize2, Minimize2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertCircle, Maximize2, Minimize2 } from 'lucide-react';
+import { Booking, BookingStatus } from '../../../types';
 
 interface Album {
   id: string;
@@ -15,13 +16,13 @@ interface Album {
 
 interface TasksPanelProps {
   isManager?: boolean;
-  bookings?: any[]; // Real bookings from database
+  bookings?: Booking[]; // Real bookings from database
 }
 
-const TasksPanel: React.FC<TasksPanelProps> = ({ isManager = false, bookings = [] }) => {
+const TasksPanel: React.FC<TasksPanelProps> = ({ isManager: _isManager = false, bookings = [] }) => {
   // ✅ Generate albums from REAL bookings only
   const albums: Album[] = bookings
-    .filter(b => b.status === 'completed' || b.status === 'in_progress')
+    .filter(b => b.status === BookingStatus.READY_TO_PRINT || b.status === BookingStatus.PRINTING)
     .slice(0, 10)
     .map(b => ({
       id: b.id,

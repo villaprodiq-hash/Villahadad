@@ -1,6 +1,5 @@
 import React from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
-import { motion } from 'framer-motion';
 import { Booking, DashboardTask } from '../../../types';
 import PulseMonitor from './widgets/PulseMonitor';
 

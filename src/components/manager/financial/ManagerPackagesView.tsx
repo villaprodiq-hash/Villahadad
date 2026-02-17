@@ -40,6 +40,8 @@ interface PriceState {
   };
 }
 
+type PriceStateEntry = PriceState[string];
+
 interface NewPackageState {
   categoryId: string;
   name: string;
@@ -97,6 +99,16 @@ const ManagerPackagesView: React.FC = () => {
       console.error('Failed to load packages:', error);
     }
   };
+
+  const getDefaultPriceState = (selectedPackage = ''): PriceStateEntry => ({
+    selectedPackage,
+    newPrice: '',
+    discountType: 'percentage',
+    discountValue: '',
+    discountStartDate: '',
+    discountEndDate: '',
+    newCurrency: 'IQD',
+  });
 
   // Helper: Convert Arabic numerals to English
   const toEnglishNumerals = (str: string): string => {
@@ -291,26 +303,32 @@ const ManagerPackagesView: React.FC = () => {
   };
 
   const handleCurrencyChange = (categoryId: string, currency: 'IQD' | 'USD') => {
-    setPriceStates(prev => ({
-      ...prev,
-      [categoryId]: {
-        ...prev[categoryId],
-        newCurrency: currency,
-      },
-    }));
+    setPriceStates(prev => {
+      const current = prev[categoryId] ?? getDefaultPriceState();
+      return {
+        ...prev,
+        [categoryId]: {
+          ...current,
+          newCurrency: currency,
+        },
+      };
+    });
   };
 
   const handleNewPriceChange = (categoryId: string, value: string) => {
     // Force English numerals and remove commas
     const englishValue = toEnglishNumerals(value);
     const numericValue = englishValue.replace(/,/g, '');
-    setPriceStates(prev => ({
-      ...prev,
-      [categoryId]: {
-        ...prev[categoryId],
-        newPrice: numericValue,
-      },
-    }));
+    setPriceStates(prev => {
+      const current = prev[categoryId] ?? getDefaultPriceState();
+      return {
+        ...prev,
+        [categoryId]: {
+          ...current,
+          newPrice: numericValue,
+        },
+      };
+    });
   };
 
   const handleDiscountChange = (
@@ -323,13 +341,26 @@ const ManagerPackagesView: React.FC = () => {
       processedValue = toEnglishNumerals(value).replace(/,/g, '');
     }
 
-    setPriceStates(prev => ({
-      ...prev,
-      [categoryId]: {
-        ...prev[categoryId],
-        [field]: processedValue,
-      },
-    }));
+    setPriceStates(prev => {
+      const current = prev[categoryId] ?? getDefaultPriceState();
+      if (field === 'discountType') {
+        return {
+          ...prev,
+          [categoryId]: {
+            ...current,
+            discountType: processedValue === 'fixed' ? 'fixed' : 'percentage',
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        [categoryId]: {
+          ...current,
+          [field]: processedValue,
+        },
+      };
+    });
   };
 
   // Format number with commas

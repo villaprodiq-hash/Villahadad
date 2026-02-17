@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { User, UserRole } from '../../types';
 import { 
   MessageSquare, CheckSquare, Send, User as UserIcon, 
   MoreVertical, CheckCircle2, Plus, Hash, Sparkles, Smile,
-  Mic, FileText, Download, Play, Music, Paperclip, Users, Trash2, Edit2, X, Check
+  Mic, FileText, Download, Play, Pause, Paperclip, Users, Trash2, Edit2, X, Check, Wifi, Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import ReceptionPageWrapper from '../reception/layout/ReceptionPageWrapper';
 import ReceptionWidgetCard from '../reception/dashboard/ReceptionWidgetCard';
 import { taskService, ChatTask } from '../../services/db/services/TaskService';
@@ -25,6 +26,7 @@ const AVAILABLE_ROLES = [
   { label: 'مدير', value: UserRole.MANAGER },
   { label: 'أدمن', value: UserRole.ADMIN },
   { label: 'استقبال', value: UserRole.RECEPTION },
+  { label: 'اختيار', value: UserRole.SELECTOR },
   { label: 'مصور', value: UserRole.PHOTO_EDITOR },
   { label: 'مونتير', value: UserRole.VIDEO_EDITOR },
   { label: 'طابعة', value: UserRole.PRINTER },
@@ -45,6 +47,152 @@ const EMOJI_LIST = [
   "👍", "👎", "👏", "🙌", "🤝", "💪", "🙏", "👋",
   "🎉", "🔥", "❤️", "✅", "❌", "📷", "🎥", "💻"
 ];
+
+const SECOND_MS = 1000;
+const MINUTE_MS = 60 * SECOND_MS;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+const CHAT_RETENTION_OPTIONS = [
+  { label: '5 ثواني (تجربة)', value: 5 * SECOND_MS },
+  { label: 'دقيقة (تجربة)', value: MINUTE_MS },
+  { label: 'ساعة (تجربة)', value: HOUR_MS },
+  { label: '24 ساعة', value: DAY_MS },
+  { label: '3 أيام', value: 3 * DAY_MS },
+  { label: '7 أيام', value: 7 * DAY_MS },
+  { label: '14 يوم', value: 14 * DAY_MS },
+  { label: '30 يوم', value: 30 * DAY_MS },
+  { label: '60 يوم', value: 60 * DAY_MS },
+  { label: '90 يوم', value: 90 * DAY_MS }
+];
+
+const ATTACHMENT_PREFIX = '__vh_attachment__:';
+
+interface ChatAttachmentPayload {
+  kind: 'attachment';
+  transport: 'lan' | 'internet';
+  fileName: string;
+  mimeType: string;
+  size: number;
+  previewUrl?: string;
+  fileUrl?: string;
+  path?: string;
+}
+
+interface ProcessedAttachment {
+  messageContent: string;
+  messageType: 'image' | 'file' | 'audio';
+  skipRemote: boolean;
+}
+
+type ChatTransportMode = 'lan' | 'internet';
+
+interface AudioPlaybackState {
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
+}
+
+const serializeAttachment = (payload: ChatAttachmentPayload): string =>
+  `${ATTACHMENT_PREFIX}${JSON.stringify(payload)}`;
+
+const parseAttachment = (content: string): ChatAttachmentPayload | null => {
+  if (!content || typeof content !== 'string' || !content.startsWith(ATTACHMENT_PREFIX)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(content.slice(ATTACHMENT_PREFIX.length)) as ChatAttachmentPayload;
+    if (
+      parsed &&
+      parsed.kind === 'attachment' &&
+      typeof parsed.fileName === 'string' &&
+      typeof parsed.mimeType === 'string'
+    ) {
+      return parsed;
+    }
+  } catch (error) {
+    console.error('[UnifiedTeamChat] Failed to parse attachment:', error);
+  }
+
+  return null;
+};
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIdx = 0;
+  while (size >= 1024 && unitIdx < units.length - 1) {
+    size /= 1024;
+    unitIdx += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIdx === 0 ? 0 : 1)} ${units[unitIdx]}`;
+};
+
+const getAttachmentUrl = (attachment: ChatAttachmentPayload | null): string | null => {
+  if (!attachment) return null;
+  if (typeof attachment.previewUrl === 'string' && attachment.previewUrl.length > 0) return attachment.previewUrl;
+  if (typeof attachment.fileUrl === 'string' && attachment.fileUrl.length > 0) return attachment.fileUrl;
+  if (typeof attachment.path === 'string' && attachment.path.length > 0) {
+    return `file://${encodeURI(attachment.path)}`;
+  }
+  return null;
+};
+
+const normalizeFilePath = (urlOrPath?: string): string | null => {
+  if (!urlOrPath) return null;
+  if (urlOrPath.startsWith('file://')) {
+    try {
+      return decodeURIComponent(urlOrPath.replace('file://', ''));
+    } catch {
+      return urlOrPath.replace('file://', '');
+    }
+  }
+  return urlOrPath;
+};
+
+const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
+  const response = await fetch(dataUrl);
+  return response.blob();
+};
+
+const compressImageToDataUrl = (file: File, maxDimension = 1600, quality = 0.72): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      const width = img.width;
+      const height = img.height;
+      const scale = Math.min(1, maxDimension / Math.max(width, height));
+      const targetW = Math.max(1, Math.round(width * scale));
+      const targetH = Math.max(1, Math.round(height * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Canvas context unavailable'));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      URL.revokeObjectURL(objectUrl);
+      resolve(compressed);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to decode image'));
+    };
+
+    img.src = objectUrl;
+  });
 
 const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = [] }) => {
   // Role Detection
@@ -77,13 +225,31 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
   const [tasks, setTasks] = useState<ChatTask[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [retentionDurationMs, setRetentionDurationMs] = useState<number>(() => chatService.getRetentionDurationMs());
+  const [audioPlaybackMap, setAudioPlaybackMap] = useState<Record<string, AudioPlaybackState>>({});
+  const [transportMode, setTransportMode] = useState<ChatTransportMode>('lan');
 
   // -- REFS --
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const shouldAutoScrollRef = useRef(true);
+  const audioElementsRef = useRef<Record<string, HTMLAudioElement | null>>({});
+  const activeAudioMessageIdRef = useRef<string | null>(null);
 
   // -- EFFECTS --
   useEffect(() => {
+    if (currentUser) {
+      void presenceService.join(currentUser).catch((error: unknown) => {
+        console.error('[UnifiedTeamChat] Presence join failed:', error);
+      });
+    }
+
     // 1. Subscribe to Offline Presence
     const unsubPresence = presenceService.subscribe((users) => {
         setOnlineUsers(users);
@@ -91,35 +257,53 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
 
     // 2. Subscribe to Realtime Chat
     const unsubChat = chatService.subscribe((msg) => {
-        // DEDUPLICATION LOGIC:
-        // Ensure we don't already have a message with this content + sender recently (e.g. from optimistic update)
-        // Or if we do, update the temp ID with the real ID.
         setMessages(prev => {
-            // Check if this message ID already exists
-            if (prev.some(m => m.id === msg.id)) return prev;
+            // If message exists by ID, update in-place (supports edits/read updates).
+            const sameIdIndex = prev.findIndex(m => m.id === msg.id);
+            if (sameIdIndex !== -1) {
+                const existing = prev[sameIdIndex];
+                if (!existing) return prev;
+                const isUnchanged =
+                  existing.content === msg.content &&
+                  existing.isRead === msg.isRead &&
+                  existing.type === msg.type &&
+                  existing.recipientId === msg.recipientId &&
+                  existing.createdAt === msg.createdAt;
 
-            // Check if we have an OPTIMISTIC message (temp ID) that matches this content/sender/recipient
-            // If so, replace it.
-            const optimisticIndex = prev.findIndex(m => 
-                m.senderId === msg.senderId && 
-                m.content === msg.content && 
+                if (isUnchanged) return prev;
+
+                const next = [...prev];
+                next[sameIdIndex] = { ...existing, ...msg };
+                return next;
+            }
+
+            // Replace optimistic temp message by matching content/sender/thread within small window.
+            const optimisticIndex = prev.findIndex(m =>
+                m.senderId === msg.senderId &&
+                m.content === msg.content &&
                 m.recipientId === msg.recipientId &&
-                (Math.abs(new Date(m.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 5000) // Within 5s window
+                (Math.abs(new Date(m.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 5000)
             );
 
             if (optimisticIndex !== -1) {
-                const newMessages = [...prev];
-                newMessages[optimisticIndex] = msg; // Replace optimistic with real
-                return newMessages;
+                const next = [...prev];
+                next[optimisticIndex] = msg;
+                return next;
             }
 
             return [...prev, msg];
         });
+    }, (deletedMessageId) => {
+        setMessages(prev => prev.filter(message => message.id !== deletedMessageId));
+    });
+
+    const unsubRetention = chatService.subscribeRetention((durationMs) => {
+      setRetentionDurationMs(durationMs);
     });
 
     // 3. Load initial history
     chatService.getRecentMessages().then(data => {
-        setMessages(data);
+      setMessages(data);
     });
 
     // 4. Tasks Subscription & Fetch
@@ -132,14 +316,17 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
     return () => {
         unsubPresence();
         unsubChat();
+        unsubRetention();
         unsubTasks();
     };
-  }, []);
+  }, [currentUser]);
 
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskRole, setNewTaskRole] = useState<string>('all');
   const [sidebarTab, setSidebarTab] = useState<'tasks' | 'members'>('tasks');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState('');
   
   // Editing State
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -206,13 +393,354 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
 
   const activeUser = users.find(u => u.id === selectedUserId);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (shouldAutoScrollRef.current) {
+      scrollToBottom('smooth');
+    }
   }, [messages, selectedUserId]);
+
+  const handleMessageScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom < 80;
+  }, []);
+
+  const formatAudioTime = useCallback((seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
+    const wholeSeconds = Math.floor(seconds);
+    const minutes = Math.floor(wholeSeconds / 60);
+    const remainder = wholeSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+  }, []);
+
+  const setAudioPlaybackState = useCallback((messageId: string, nextState: Partial<AudioPlaybackState>) => {
+    setAudioPlaybackMap(prev => {
+      const current = prev[messageId] ?? { currentTime: 0, duration: 0, isPlaying: false };
+      return {
+        ...prev,
+        [messageId]: {
+          ...current,
+          ...nextState
+        }
+      };
+    });
+  }, []);
+
+  const registerAudioElement = useCallback((messageId: string, element: HTMLAudioElement | null) => {
+    audioElementsRef.current[messageId] = element;
+  }, []);
+
+  const pauseAllAudio = useCallback((exceptId?: string) => {
+    Object.entries(audioElementsRef.current).forEach(([messageId, player]) => {
+      if (!player || (exceptId && messageId === exceptId)) return;
+      if (!player.paused) {
+        player.pause();
+      }
+      setAudioPlaybackState(messageId, { isPlaying: false });
+    });
+  }, [setAudioPlaybackState]);
+
+  const toggleAudioPlayback = useCallback(async (messageId: string) => {
+    const player = audioElementsRef.current[messageId];
+    if (!player) return;
+
+    if (!player.paused) {
+      player.pause();
+      setAudioPlaybackState(messageId, { isPlaying: false });
+      if (activeAudioMessageIdRef.current === messageId) {
+        activeAudioMessageIdRef.current = null;
+      }
+      return;
+    }
+
+    pauseAllAudio(messageId);
+
+    try {
+      await player.play();
+      activeAudioMessageIdRef.current = messageId;
+      setAudioPlaybackState(messageId, { isPlaying: true });
+    } catch (error) {
+      console.error('[UnifiedTeamChat] Audio playback failed:', error);
+      toast.error('تعذر تشغيل الرسالة الصوتية');
+    }
+  }, [pauseAllAudio, setAudioPlaybackState]);
+
+  const seekAudio = useCallback((messageId: string, newTime: number) => {
+    const player = audioElementsRef.current[messageId];
+    if (!player || !Number.isFinite(newTime)) return;
+    player.currentTime = Math.max(0, newTime);
+    setAudioPlaybackState(messageId, { currentTime: player.currentTime });
+  }, [setAudioPlaybackState]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    requestAnimationFrame(() => {
+      scrollToBottom('auto');
+    });
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    void chatService.markAllAsRead(currentUser.id).catch((error: unknown) => {
+      console.error('[UnifiedTeamChat] Failed to mark chat as read:', error);
+    });
+  }, [currentUser?.id, selectedUserId, messages.length]);
+
+  useEffect(() => {
+    return () => {
+      pauseAllAudio();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+    };
+  }, [pauseAllAudio]);
+
+  const processAttachment = useCallback(
+    async (
+      file: File | Blob,
+      fileName: string,
+      mimeType: string,
+      sourcePath?: string,
+      mode: ChatTransportMode = 'lan'
+    ): Promise<ProcessedAttachment> => {
+      const chatBridge = window.electronAPI?.chat;
+
+      if (mode === 'lan') {
+        if (!chatBridge?.storeAttachment) {
+          throw new Error('وضع الشبكة غير متاح الآن. اختر وضع الإنترنت.');
+        }
+
+        const payload: {
+          fileName: string;
+          mimeType?: string;
+          sourcePath?: string;
+          buffer?: ArrayBuffer;
+        } = { fileName, mimeType };
+
+        if (sourcePath) {
+          payload.sourcePath = sourcePath;
+        } else {
+          payload.buffer = await file.arrayBuffer();
+        }
+
+        const stored = await chatBridge.storeAttachment(payload);
+        if (!stored?.success) {
+          throw new Error(stored?.error || 'Failed to store attachment');
+        }
+
+        const attachmentPayload: ChatAttachmentPayload = {
+          kind: 'attachment',
+          transport: 'lan',
+          fileName,
+          mimeType,
+          size: stored.size ?? file.size ?? 0,
+          fileUrl: stored.fileUrl,
+          previewUrl: mimeType.startsWith('image/') ? stored.fileUrl : undefined,
+          path: stored.path
+        };
+
+        return {
+          messageContent: serializeAttachment(attachmentPayload),
+          messageType: mimeType.startsWith('audio/')
+            ? 'audio'
+            : mimeType.startsWith('image/')
+              ? 'image'
+              : 'file',
+          skipRemote: true
+        };
+      }
+
+      // Internet mode: images only + compression
+      if (!(file instanceof File) || !mimeType.startsWith('image/')) {
+        throw new Error('وضع الإنترنت يدعم الصور فقط');
+      }
+
+      const compressedDataUrl = await compressImageToDataUrl(file);
+      const compressedBlob = await dataUrlToBlob(compressedDataUrl);
+      const attachmentPayload: ChatAttachmentPayload = {
+        kind: 'attachment',
+        transport: 'internet',
+        fileName,
+        mimeType: compressedBlob.type || 'image/jpeg',
+        size: compressedBlob.size,
+        previewUrl: compressedDataUrl
+      };
+
+      return {
+        messageContent: serializeAttachment(attachmentPayload),
+        messageType: 'image',
+        skipRemote: false
+      };
+    },
+    []
+  );
+
+  const sendAttachmentMessage = useCallback(
+    async ({
+      file,
+      fileName,
+      mimeType,
+      sourcePath
+    }: {
+      file: File | Blob;
+      fileName: string;
+      mimeType: string;
+      sourcePath?: string;
+    }) => {
+      if (!currentUser) return;
+      setIsUploadingAttachment(true);
+
+      try {
+        const prepared = await processAttachment(file, fileName, mimeType, sourcePath, transportMode);
+        const tempId = `tmp_${Date.now()}`;
+        const optimisticMsg: ChatMessage = {
+          id: tempId,
+          content: prepared.messageContent,
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderRole: currentUser.role,
+          recipientId: selectedUserId || null,
+          type: prepared.messageType,
+          createdAt: new Date().toISOString(),
+          isRead: false
+        };
+
+        setMessages(prev => [...prev, optimisticMsg]);
+
+        await chatService.sendMessage(
+          optimisticMsg.content,
+          currentUser,
+          selectedUserId,
+          optimisticMsg.type,
+          { skipRemote: prepared.skipRemote }
+        );
+      } catch (error) {
+        console.error('[UnifiedTeamChat] Failed to send attachment:', error);
+        const message = error instanceof Error ? error.message : 'فشل إرسال الملف';
+        toast.error(message);
+      } finally {
+        setIsUploadingAttachment(false);
+      }
+    },
+    [currentUser, processAttachment, selectedUserId, transportMode]
+  );
+
+  const stopVoiceRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  }, []);
+
+  const startVoiceRecording = useCallback(async () => {
+    if (!currentUser) return;
+
+    if (transportMode === 'internet') {
+      toast.error('وضع الإنترنت يدعم الصور فقط');
+      return;
+    }
+
+    if (isRecording) {
+      stopVoiceRecording();
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error('هذا الجهاز لا يدعم التسجيل الصوتي');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+      const supportedType = preferredTypes.find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = supportedType ? new MediaRecorder(stream, { mimeType: supportedType }) : new MediaRecorder(stream);
+
+      recordedChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = event => {
+        console.error('[UnifiedTeamChat] Voice recorder error:', event);
+        toast.error('حدث خطأ أثناء تسجيل الصوت');
+      };
+
+      recorder.onstop = () => {
+        const chunks = [...recordedChunksRef.current];
+        recordedChunksRef.current = [];
+
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach(track => track.stop());
+          mediaStreamRef.current = null;
+        }
+
+        setIsRecording(false);
+
+        if (chunks.length === 0) return;
+        const blobType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: blobType });
+        if (blob.size === 0) return;
+
+        const extension = blobType.includes('ogg') ? 'ogg' : 'webm';
+        const fileName = `voice_${Date.now()}.${extension}`;
+        void sendAttachmentMessage({ file: blob, fileName, mimeType: blobType });
+      };
+
+      recorder.start();
+      toast.success('بدأ التسجيل الصوتي');
+    } catch (error) {
+      console.error('[UnifiedTeamChat] Failed to start voice recording:', error);
+      toast.error('تعذر بدء التسجيل الصوتي');
+      setIsRecording(false);
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+    }
+  }, [currentUser, isRecording, sendAttachmentMessage, stopVoiceRecording, transportMode]);
+
+  const handleOpenAttachment = useCallback((attachment: ChatAttachmentPayload | null) => {
+    if (!attachment) return;
+    const targetPath = normalizeFilePath(attachment.path || attachment.fileUrl);
+
+    if (targetPath && window.electronAPI?.fileSystem?.openPath) {
+      void window.electronAPI.fileSystem.openPath(targetPath);
+      return;
+    }
+
+    const url = getAttachmentUrl(attachment);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handleDownloadAttachment = useCallback((attachment: ChatAttachmentPayload | null) => {
+    const url = getAttachmentUrl(attachment);
+    if (!url || !attachment) return;
+
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = attachment.fileName || `attachment_${Date.now()}`;
+    anchor.rel = 'noopener noreferrer';
+    anchor.target = '_blank';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }, []);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,7 +761,7 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
         isRead: false
       };
       
-      setMessages([...messages, optimisticMsg]);
+      setMessages(prev => [...prev, optimisticMsg]);
       setNewMessage('');
       setShowEmojiPicker(false);
 
@@ -244,6 +772,99 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
       // TODO: Handle error (remove optimistic message or show error)
     }
   };
+
+  const canManageRetention = currentUser?.role === UserRole.MANAGER;
+
+  const handleDeleteOwnMessage = useCallback(async (message: ChatMessage) => {
+    if (!currentUser?.id) return;
+    if (message.senderId !== currentUser.id) {
+      toast.error('تقدر تحذف رسائلك فقط');
+      return;
+    }
+
+    if (!window.confirm('حذف هذه الرسالة؟')) return;
+
+    try {
+      await chatService.deleteMessage(message.id, currentUser.id);
+      setMessages(prev => prev.filter(entry => entry.id !== message.id));
+      toast.success('تم حذف الرسالة');
+    } catch (error) {
+      console.error('[UnifiedTeamChat] Failed to delete own message:', error);
+      toast.error('فشل حذف الرسالة');
+    }
+  }, [currentUser?.id]);
+
+  const canEditMessage = useCallback((message: ChatMessage): boolean => {
+    if (!currentUser?.id) return false;
+    if (message.senderId !== currentUser.id) return false;
+    if (message.type !== 'text') return false;
+    if (parseAttachment(message.content)) return false;
+    return true;
+  }, [currentUser?.id]);
+
+  const handleStartEditMessage = useCallback((message: ChatMessage) => {
+    if (!canEditMessage(message)) return;
+    setEditingMessageId(message.id);
+    setEditingMessageText(message.content);
+  }, [canEditMessage]);
+
+  const handleCancelEditMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingMessageText('');
+  }, []);
+
+  const handleSaveEditMessage = useCallback(async (message: ChatMessage) => {
+    if (!currentUser?.id) return;
+    const trimmed = editingMessageText.trim();
+    if (!trimmed) {
+      toast.error('محتوى الرسالة فارغ');
+      return;
+    }
+
+    if (trimmed === message.content) {
+      handleCancelEditMessage();
+      return;
+    }
+
+    if (!canEditMessage(message)) {
+      toast.error('تقدر تعدل رسائلك النصية فقط');
+      return;
+    }
+
+    setMessages(prev =>
+      prev.map(entry => (entry.id === message.id ? { ...entry, content: trimmed } : entry))
+    );
+    handleCancelEditMessage();
+
+    try {
+      await chatService.updateMessage(message.id, trimmed, currentUser.id);
+      toast.success('تم تعديل الرسالة');
+    } catch (error) {
+      console.error('[UnifiedTeamChat] Failed to edit message:', error);
+      toast.error('فشل تعديل الرسالة');
+      setMessages(prev =>
+        prev.map(entry => (entry.id === message.id ? { ...entry, content: message.content } : entry))
+      );
+    }
+  }, [canEditMessage, currentUser?.id, editingMessageText, handleCancelEditMessage]);
+
+  const handleRetentionDurationChange = useCallback(async (value: number) => {
+    if (!canManageRetention) return;
+
+    try {
+      if (!currentUser) return;
+      const normalized = await chatService.setRetentionDurationMs(value, currentUser);
+      setRetentionDurationMs(normalized);
+      const refreshed = await chatService.getRecentMessages();
+      setMessages(refreshed);
+      shouldAutoScrollRef.current = true;
+      const selectedLabel = CHAT_RETENTION_OPTIONS.find(option => option.value === normalized)?.label;
+      toast.success(`تم ضبط اختفاء الرسائل بعد ${selectedLabel ?? 'المدة المحددة'}`);
+    } catch (error) {
+      console.error('[UnifiedTeamChat] Failed to update retention duration:', error);
+      toast.error('فشل تحديث مدة اختفاء الرسائل');
+    }
+  }, [canManageRetention, currentUser]);
 
   const toggleTask = async (id: string) => {
     const task = tasks.find(t => t.id === id);
@@ -262,6 +883,7 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
   // For mock simulation, we'll just check if it belongs to the current "thread"
   // Filter messages: either group (recipientId is null) or private (match selectedUserId)
   const filteredMessages = messages.filter(msg => {
+    if (typeof msg.content === 'string' && msg.content.startsWith('__vh_chat_control__:')) return false;
     if (!selectedUserId) return !msg.recipientId; // Group chat
     // Private chat: Strict check for (Me -> Them) OR (Them -> Me)
     return (msg.senderId === currentUser?.id && msg.recipientId === selectedUserId) || 
@@ -269,7 +891,7 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
   });
 
   return (
-    <ReceptionPageWrapper isReception={isReception} allowOverflow hideBackground={isManager || isSelection} noPadding={true}>
+    <ReceptionPageWrapper isReception={isReception} hideBackground={isManager || isSelection} noPadding={true}>
         <div className="flex flex-col h-full animate-in fade-in duration-300">
           <input 
             type="file" 
@@ -277,27 +899,23 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
             className="hidden" 
             onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (file && currentUser) {
-                // TODO: Implement actual file upload via separate service if needed
-                // For now, handling as text message with file name
-                const tempId = Date.now().toString();
-                 const optimisticMsg: ChatMessage = {
-                  id: tempId,
-                  content: `📎 ${file.name}`, // Placeholder for file content
-                  senderId: currentUser.id,
-                  senderName: currentUser.name,
-                  senderRole: currentUser.role,
-                  recipientId: selectedUserId || null,
-                  type: file.type.startsWith('image/') ? 'image' : 'file',
-                  createdAt: new Date().toISOString(),
-                  isRead: false
-                };
-                setMessages([...messages, optimisticMsg]);
-                await chatService.sendMessage(optimisticMsg.content, currentUser, selectedUserId, optimisticMsg.type);
+              if (!file || !currentUser) {
+                e.target.value = '';
+                return;
               }
+
+              const sourcePath = (file as File & { path?: string }).path;
+              await sendAttachmentMessage({
+                file,
+                fileName: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                sourcePath
+              });
+
+              e.target.value = '';
             }}
           />
-      <div className={`flex-1 flex flex-col lg:flex-row min-h-0 overflow-visible ${isSelection ? 'gap-6' : 'gap-4'}`}>
+      <div className={`flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden ${isSelection ? 'gap-6' : 'gap-4'}`}>
          
          {/* Main Content Area (Chat) */}
          <ReceptionWidgetCard 
@@ -392,6 +1010,38 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                    </div>
                    
                    <div className="flex items-center gap-3">
+                      {canManageRetention && (
+                          <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border ${
+                            isManager
+                              ? 'bg-white/70 dark:bg-black/20 border-gray-200 dark:border-white/10'
+                              : isAdmin
+                                ? 'bg-white/5 border-white/10'
+                                : 'bg-black/20 border-white/10'
+                          }`}>
+                            <span className={`text-[10px] font-bold ${isManager ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'}`}>
+                              اختفاء:
+                            </span>
+                            <select
+                              value={retentionDurationMs}
+                              onChange={(e) => {
+                                void handleRetentionDurationChange(Number(e.target.value));
+                              }}
+                              className={`text-[10px] font-bold rounded-md border px-2 py-1 outline-none ${
+                                isManager
+                                  ? 'bg-white dark:bg-black/20 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200'
+                                  : isAdmin
+                                    ? 'bg-[#1f222b] border-white/10 text-gray-200'
+                                    : 'bg-black/30 border-white/10 text-gray-200'
+                              }`}
+                            >
+                              {CHAT_RETENTION_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                      )}
                       {selectedUserId && (
                           <button 
                             onClick={() => setSelectedUserId(null)}
@@ -407,7 +1057,10 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                 </div>
             </div>
 
-            <div className={`flex-1 overflow-y-auto ${isDesigner ? 'p-2 space-y-2' : 'p-4 space-y-4'} ${isSelection ? '[&::-webkit-scrollbar]:hidden -ms-overflow-style-none scrollbar-width-none' : 'custom-scrollbar'} ${
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleMessageScroll}
+              className={`flex-1 overflow-y-auto ${isDesigner ? 'p-2 space-y-2' : 'p-4 space-y-4'} custom-scrollbar ${
               isManager 
                 ? 'bg-white/30 dark:bg-black/20' 
                 : isAdmin
@@ -421,6 +1074,17 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                 {filteredMessages.map((msg) => {
                   const isMe = msg.senderId === currentUser?.id;
                   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const attachment = parseAttachment(msg.content);
+                  const attachmentUrl = getAttachmentUrl(attachment);
+                  const attachmentName = attachment?.fileName || msg.content;
+                  const legacyAudioUrl = !attachment && msg.type === 'audio' ? msg.content : null;
+                  const audioPlayback = audioPlaybackMap[msg.id] ?? { currentTime: 0, duration: 0, isPlaying: false };
+                  const audioProgressPercent =
+                    audioPlayback.duration > 0
+                      ? Math.min(100, (audioPlayback.currentTime / audioPlayback.duration) * 100)
+                      : 0;
+                  const waveformBars = 22;
+                  const activeBars = Math.round((audioProgressPercent / 100) * waveformBars);
                   
                   return (
                     <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group animate-in slide-in-from-bottom-2 duration-300`}>
@@ -470,58 +1134,367 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                                                 ? 'bg-[#2a2d36] text-white rounded-4xl rounded-tl-none'
                                               : 'bg-[#18181b] text-gray-200 rounded-[20px] rounded-tl-none border border-white/5 hover:border-white/10')
                                 }`}>
-                                    {msg.type === 'image' ? (
-                                        <div className="space-y-2 max-w-[280px]">
-                                            <div className="rounded-xl overflow-hidden border border-white/10 shadow-2xl group/img relative">
-                                                <img src={msg.content || "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&q=80&w=400"} alt="Media" className="w-full object-cover group-hover/img:scale-105 transition-transform duration-500" />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <Download size={20} className="text-white" />
-                                                </div>
-                                            </div>
-                                            {msg.content && !msg.content.startsWith('http') && <p className="text-sm font-medium">{msg.content}</p>}
-                                        </div>
-                                    ) : msg.type === 'audio' ? (
-                                        <div className="flex items-center gap-3 min-w-[220px] py-1">
-                                            <button className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${isMe ? 'bg-white/20 hover:bg-white/30' : 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400'}`}>
-                                                <Play size={18} fill="currentColor" />
-                                            </button>
-                                            <div className="flex-1 space-y-1.5">
-                                                <div className="flex gap-0.5 h-7 items-center">
-                                                    {[...Array(18)].map((_, i) => (
-                                                        <div key={i} className={`flex-1 rounded-full ${isMe ? 'bg-white/40' : 'bg-blue-500/40'}`} style={{ height: `${20 + Math.random() * 80}%` }} />
-                                                    ))}
-                                                </div>
-                                                <div className="flex justify-between items-center text-[10px] font-bold opacity-70 italic">
-                                                    <span>0:14</span>
-                                                    <Music size={12} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : msg.type === 'file' ? (
-                                        <div className={`flex items-center gap-4 p-3 rounded-xl border min-w-[240px] ${isMe ? 'bg-black/20 border-white/10' : 'bg-blue-500/5 border-blue-500/10'}`}>
-                                            <div className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${isMe ? 'bg-white/10 text-white' : 'bg-blue-500/20 text-blue-400'}`}>
-                                                <FileText size={24} />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-black truncate">{msg.content}</p>
-                                                <p className="text-[10px] opacity-60 font-mono">2.4 MB • PDF</p>
-                                            </div>
-                                            <a 
-                                                href="#" 
-                                                className={`p-2 rounded-lg transition-all ${isMe ? 'hover:bg-white/10 text-white' : 'hover:bg-blue-500/20 text-blue-400'}`}
-                                                onClick={(e) => {
-                                                  e.preventDefault();
-                                                  alert('جاري التحميل...');
-                                                }}
+                                    {attachment ? (
+                                      attachment.mimeType.startsWith('image/') ? (
+                                        <div className="space-y-2 max-w-[320px]">
+                                          {attachmentUrl ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenAttachment(attachment)}
+                                              className="rounded-xl overflow-hidden border border-white/10 shadow-2xl group/img relative block w-full text-left"
                                             >
-                                                <Download size={18} />
-                                            </a>
+                                              <img
+                                                src={attachmentUrl}
+                                                alt={attachmentName}
+                                                className="w-full max-h-[280px] object-cover group-hover/img:scale-[1.02] transition-transform duration-300"
+                                              />
+                                              <div className="absolute inset-0 bg-black/45 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                <Download size={18} className="text-white" />
+                                                <span className="text-[11px] font-bold text-white">فتح</span>
+                                              </div>
+                                            </button>
+                                          ) : (
+                                            <div className="text-xs opacity-80">الصورة غير متاحة الآن</div>
+                                          )}
+                                          <div className="flex items-center justify-between gap-2 text-[10px] opacity-80">
+                                            <span className="truncate">{attachmentName}</span>
+                                            <span>{formatBytes(attachment.size)}</span>
+                                          </div>
                                         </div>
+                                      ) : attachment.mimeType.startsWith('audio/') ? (
+                                        <div className={`space-y-2 min-w-[250px] max-w-[340px] rounded-2xl p-3 border ${isMe ? 'bg-black/15 border-white/15' : 'bg-blue-500/5 border-blue-500/15'}`}>
+                                          {attachmentUrl ? (
+                                            <audio
+                                              ref={(element) => {
+                                                registerAudioElement(msg.id, element);
+                                              }}
+                                              src={attachmentUrl}
+                                              preload="metadata"
+                                              className="hidden"
+                                              onLoadedMetadata={(event) => {
+                                                const player = event.currentTarget;
+                                                setAudioPlaybackState(msg.id, {
+                                                  duration: Number.isFinite(player.duration) ? player.duration : 0
+                                                });
+                                              }}
+                                              onTimeUpdate={(event) => {
+                                                const player = event.currentTarget;
+                                                setAudioPlaybackState(msg.id, {
+                                                  currentTime: player.currentTime,
+                                                  duration: Number.isFinite(player.duration) ? player.duration : 0
+                                                });
+                                              }}
+                                              onPlay={() => {
+                                                setAudioPlaybackState(msg.id, { isPlaying: true });
+                                              }}
+                                              onPause={() => {
+                                                setAudioPlaybackState(msg.id, { isPlaying: false });
+                                              }}
+                                              onEnded={() => {
+                                                setAudioPlaybackState(msg.id, { isPlaying: false, currentTime: 0 });
+                                                if (activeAudioMessageIdRef.current === msg.id) {
+                                                  activeAudioMessageIdRef.current = null;
+                                                }
+                                              }}
+                                            />
+                                          ) : null}
+
+                                          <div className="flex items-center gap-3">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                void toggleAudioPlayback(msg.id);
+                                              }}
+                                              disabled={!attachmentUrl}
+                                              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                                                attachmentUrl
+                                                  ? isMe
+                                                    ? 'bg-white/15 border-white/25 hover:bg-white/25 text-white'
+                                                    : 'bg-blue-500/15 border-blue-500/30 hover:bg-blue-500/25 text-blue-400'
+                                                  : 'bg-gray-500/20 border-gray-500/20 text-gray-500 cursor-not-allowed'
+                                              }`}
+                                              title={audioPlayback.isPlaying ? 'إيقاف' : 'تشغيل'}
+                                            >
+                                              {audioPlayback.isPlaying ? <Pause size={16} /> : <Play size={16} className="mr-[1px]" />}
+                                            </button>
+
+                                            <div className="flex-1 min-w-0">
+                                              <div className="h-6 flex items-end gap-[2px]">
+                                                {Array.from({ length: waveformBars }).map((_, barIndex) => {
+                                                  const isActive = barIndex <= activeBars;
+                                                  const heights = [6, 12, 8, 15, 10, 7, 13];
+                                                  const height = heights[barIndex % heights.length];
+                                                  return (
+                                                    <span
+                                                      key={`${msg.id}-wave-${barIndex}`}
+                                                      style={{ height }}
+                                                      className={`w-[3px] rounded-full transition-all ${
+                                                        isActive
+                                                          ? isMe
+                                                            ? 'bg-white'
+                                                            : 'bg-cyan-400'
+                                                          : 'bg-white/25'
+                                                      }`}
+                                                    />
+                                                  );
+                                                })}
+                                              </div>
+                                              <input
+                                                type="range"
+                                                min={0}
+                                                max={Math.max(audioPlayback.duration, 0.01)}
+                                                step={0.1}
+                                                value={Math.min(audioPlayback.currentTime, audioPlayback.duration || 0)}
+                                                onChange={(event) => {
+                                                  seekAudio(msg.id, Number(event.target.value));
+                                                }}
+                                                className="w-full mt-1 accent-cyan-400 cursor-pointer"
+                                              />
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDownloadAttachment(attachment)}
+                                              className={`p-2 rounded-lg transition-all ${isMe ? 'hover:bg-white/10 text-white' : 'hover:bg-blue-500/20 text-blue-400'}`}
+                                              title="تحميل"
+                                            >
+                                              <Download size={14} />
+                                            </button>
+                                          </div>
+
+                                          <div className="flex items-center justify-between text-[10px] opacity-80">
+                                            <span className="font-mono">
+                                              {formatAudioTime(audioPlayback.currentTime)} / {formatAudioTime(audioPlayback.duration)}
+                                            </span>
+                                            <span className="truncate max-w-[160px]">{attachmentName}</span>
+                                          </div>
+
+                                          {!attachmentUrl && (
+                                            <div className="text-xs opacity-70">الملف الصوتي غير متاح الآن</div>
+                                          )}
+
+                                          <div className="text-[10px] opacity-70">{formatBytes(attachment.size)}</div>
+                                        </div>
+                                      ) : (
+                                        <div className={`flex items-center gap-3 p-3 rounded-xl border min-w-[250px] ${isMe ? 'bg-black/20 border-white/10' : 'bg-blue-500/5 border-blue-500/10'}`}>
+                                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isMe ? 'bg-white/10 text-white' : 'bg-blue-500/20 text-blue-400'}`}>
+                                            <FileText size={20} />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-black truncate">{attachmentName}</p>
+                                            <p className="text-[10px] opacity-70">{formatBytes(attachment.size)}</p>
+                                          </div>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenAttachment(attachment)}
+                                              className={`p-2 rounded-lg transition-all ${isMe ? 'hover:bg-white/10 text-white' : 'hover:bg-blue-500/20 text-blue-400'}`}
+                                              title="فتح"
+                                            >
+                                              <Play size={14} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDownloadAttachment(attachment)}
+                                              className={`p-2 rounded-lg transition-all ${isMe ? 'hover:bg-white/10 text-white' : 'hover:bg-blue-500/20 text-blue-400'}`}
+                                              title="تحميل"
+                                            >
+                                              <Download size={14} />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )
+                                    ) : msg.type === 'image' ? (
+                                      <div className="space-y-2 max-w-[280px]">
+                                        <div className="rounded-xl overflow-hidden border border-white/10 shadow-2xl group/img relative">
+                                          <img src={msg.content} alt="Media" className="w-full object-cover group-hover/img:scale-105 transition-transform duration-500" />
+                                        </div>
+                                      </div>
+                                    ) : msg.type === 'audio' ? (
+                                      <div className={`space-y-2 min-w-[250px] max-w-[340px] rounded-2xl p-3 border ${isMe ? 'bg-black/15 border-white/15' : 'bg-blue-500/5 border-blue-500/15'}`}>
+                                        {legacyAudioUrl ? (
+                                          <audio
+                                            ref={(element) => {
+                                              registerAudioElement(msg.id, element);
+                                            }}
+                                            src={legacyAudioUrl}
+                                            preload="metadata"
+                                            className="hidden"
+                                            onLoadedMetadata={(event) => {
+                                              const player = event.currentTarget;
+                                              setAudioPlaybackState(msg.id, {
+                                                duration: Number.isFinite(player.duration) ? player.duration : 0
+                                              });
+                                            }}
+                                            onTimeUpdate={(event) => {
+                                              const player = event.currentTarget;
+                                              setAudioPlaybackState(msg.id, {
+                                                currentTime: player.currentTime,
+                                                duration: Number.isFinite(player.duration) ? player.duration : 0
+                                              });
+                                            }}
+                                            onPlay={() => {
+                                              setAudioPlaybackState(msg.id, { isPlaying: true });
+                                            }}
+                                            onPause={() => {
+                                              setAudioPlaybackState(msg.id, { isPlaying: false });
+                                            }}
+                                            onEnded={() => {
+                                              setAudioPlaybackState(msg.id, { isPlaying: false, currentTime: 0 });
+                                              if (activeAudioMessageIdRef.current === msg.id) {
+                                                activeAudioMessageIdRef.current = null;
+                                              }
+                                            }}
+                                          />
+                                        ) : null}
+
+                                        <div className="flex items-center gap-3">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              void toggleAudioPlayback(msg.id);
+                                            }}
+                                            disabled={!legacyAudioUrl}
+                                            className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                                              legacyAudioUrl
+                                                ? isMe
+                                                  ? 'bg-white/15 border-white/25 hover:bg-white/25 text-white'
+                                                  : 'bg-blue-500/15 border-blue-500/30 hover:bg-blue-500/25 text-blue-400'
+                                                : 'bg-gray-500/20 border-gray-500/20 text-gray-500 cursor-not-allowed'
+                                            }`}
+                                            title={audioPlayback.isPlaying ? 'إيقاف' : 'تشغيل'}
+                                          >
+                                            {audioPlayback.isPlaying ? <Pause size={16} /> : <Play size={16} className="mr-[1px]" />}
+                                          </button>
+
+                                          <div className="flex-1 min-w-0">
+                                            <div className="h-6 flex items-end gap-[2px]">
+                                              {Array.from({ length: waveformBars }).map((_, barIndex) => {
+                                                const isActive = barIndex <= activeBars;
+                                                const heights = [6, 12, 8, 15, 10, 7, 13];
+                                                const height = heights[barIndex % heights.length];
+                                                return (
+                                                  <span
+                                                    key={`${msg.id}-legacy-wave-${barIndex}`}
+                                                    style={{ height }}
+                                                    className={`w-[3px] rounded-full transition-all ${
+                                                      isActive
+                                                        ? isMe
+                                                          ? 'bg-white'
+                                                          : 'bg-cyan-400'
+                                                        : 'bg-white/25'
+                                                    }`}
+                                                  />
+                                                );
+                                              })}
+                                            </div>
+                                            <input
+                                              type="range"
+                                              min={0}
+                                              max={Math.max(audioPlayback.duration, 0.01)}
+                                              step={0.1}
+                                              value={Math.min(audioPlayback.currentTime, audioPlayback.duration || 0)}
+                                              onChange={(event) => {
+                                                seekAudio(msg.id, Number(event.target.value));
+                                              }}
+                                              className="w-full mt-1 accent-cyan-400 cursor-pointer"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-[10px] opacity-80">
+                                          <span className="font-mono">
+                                            {formatAudioTime(audioPlayback.currentTime)} / {formatAudioTime(audioPlayback.duration)}
+                                          </span>
+                                          <span className="truncate max-w-[160px]">رسالة صوتية</span>
+                                        </div>
+
+                                        {!legacyAudioUrl && (
+                                          <div className="text-xs opacity-70">الملف الصوتي غير متاح الآن</div>
+                                        )}
+                                      </div>
+                                    ) : msg.type === 'file' ? (
+                                      <div className="flex items-center gap-2">
+                                        <FileText size={16} />
+                                        <span className="text-xs">{msg.content}</span>
+                                      </div>
                                     ) : (
-                                      msg.content
+                                      isMe && editingMessageId === msg.id && canEditMessage(msg) ? (
+                                        <div
+                                          className="flex items-center gap-2 min-w-[220px]"
+                                          onClick={event => event.stopPropagation()}
+                                        >
+                                          <input
+                                            autoFocus
+                                            value={editingMessageText}
+                                            onChange={event => setEditingMessageText(event.target.value)}
+                                            onKeyDown={event => {
+                                              if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                void handleSaveEditMessage(msg);
+                                              }
+                                              if (event.key === 'Escape') {
+                                                event.preventDefault();
+                                                handleCancelEditMessage();
+                                              }
+                                            }}
+                                            className={`flex-1 px-2 py-1 rounded-lg text-xs border outline-none ${
+                                              isMe
+                                                ? 'bg-white/15 border-white/30 text-white placeholder:text-white/50'
+                                                : 'bg-black/10 border-white/10 text-gray-100'
+                                            }`}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              void handleSaveEditMessage(msg);
+                                            }}
+                                            className="p-1 rounded-md text-emerald-300 hover:bg-emerald-500/15"
+                                            title="حفظ"
+                                          >
+                                            <Check size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={handleCancelEditMessage}
+                                            className="p-1 rounded-md text-rose-300 hover:bg-rose-500/15"
+                                            title="إلغاء"
+                                          >
+                                            <X size={12} />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        msg.content
+                                      )
                                     )}
                                 </div>
-                                <span className={`text-[9px] text-gray-600 font-mono mt-0.5 ${isMe ? 'text-left ml-1' : 'text-right mr-1'}`}>{time}</span>
+                                <div className={`flex items-center gap-1 ${isMe ? 'text-left ml-1' : 'text-right mr-1'}`}>
+                                  {isMe && (
+                                    <>
+                                    {canEditMessage(msg) && editingMessageId !== msg.id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditMessage(msg)}
+                                        className="p-1 rounded-md text-[9px] text-amber-300 hover:bg-amber-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                                        title="تعديل رسالتي"
+                                      >
+                                        <Edit2 size={12} />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void handleDeleteOwnMessage(msg);
+                                      }}
+                                      className="p-1 rounded-md text-[9px] text-rose-400 hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                                      title="حذف رسالتي"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                    </>
+                                  )}
+                                  <span className="text-[9px] text-gray-600 font-mono mt-0.5">{time}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -580,6 +1553,38 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                       : 'border-white/5 bg-[#1a1c22]'
                 } ${isDesigner ? 'rounded-none' : isSelection ? 'rounded-b-[30px]' : 'rounded-b-4xl'}`}>
                 <form onSubmit={handleSendMessage} className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] text-gray-400 font-bold">وضع الإرسال:</span>
+                      <div className="inline-flex items-center p-1 rounded-xl bg-black/20 border border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setTransportMode('lan')}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                            transportMode === 'lan'
+                              ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                              : 'text-gray-300 hover:text-white'
+                          }`}
+                          title="إرسال داخل الشبكة المحلية"
+                        >
+                          <Wifi size={13} />
+                          شبكة LAN
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTransportMode('internet')}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                            transportMode === 'internet'
+                              ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                              : 'text-gray-300 hover:text-white'
+                          }`}
+                          title="إرسال عبر الإنترنت (صور فقط)"
+                        >
+                          <Globe size={13} />
+                          إنترنت
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="relative">
                     <textarea 
                       data-testid="chat-input"
@@ -648,25 +1653,15 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
 
                       <button 
                         type="button"
-                        onClick={async () => {
-                          if (!currentUser) return;
-                          const tempId = Date.now().toString();
-                          const optimisticMsg: ChatMessage = {
-                            id: tempId,
-                            content: '🎤 رسالة صوتية', // Placeholder
-                            senderId: currentUser.id,
-                            senderName: currentUser.name,
-                            senderRole: currentUser.role,
-                            recipientId: selectedUserId || null,
-                            type: 'text', // treating audio as text for now or 'file' if supported
-                            createdAt: new Date().toISOString(),
-                            isRead: false
-                          };
-                          setMessages([...messages, optimisticMsg]);
-                          await chatService.sendMessage(optimisticMsg.content, currentUser, selectedUserId, 'text');
+                        onClick={() => {
+                          void startVoiceRecording();
                         }}
-                        className="p-2.5 text-gray-400 hover:text-pink-500 hover:bg-pink-500/5 rounded-xl transition-all"
-                        title="بصمة صوتية"
+                        className={`p-2.5 rounded-xl transition-all ${
+                          isRecording
+                            ? 'text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/25'
+                            : 'text-gray-400 hover:text-pink-500 hover:bg-pink-500/5'
+                        }`}
+                        title={isRecording ? 'إيقاف التسجيل وإرسال' : 'تسجيل رسالة صوتية'}
                       >
                         <Mic size={22} />
                       </button>
@@ -684,10 +1679,10 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                     <button 
                       type="submit" 
                       data-testid="chat-send-btn"
-                      disabled={!newMessage.trim()}
-                      className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${newMessage.trim() ? (isManager ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20 active:scale-95' : isDesigner ? 'bg-[#3577EF] text-white rounded-sm shadow-none' : isSelection ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20 active:scale-95' : 'bg-pink-600 text-white shadow-lg active:scale-95') : (isManager ? 'bg-gray-100 text-gray-400' : isDesigner ? 'bg-[#3E3E42] text-[#666666] rounded-sm' : isSelection ? 'bg-gray-100 text-gray-300' : 'bg-white/5 text-gray-600')}`}
+                      disabled={!newMessage.trim() || isUploadingAttachment}
+                      className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${newMessage.trim() && !isUploadingAttachment ? (isManager ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20 active:scale-95' : isDesigner ? 'bg-[#3577EF] text-white rounded-sm shadow-none' : isSelection ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20 active:scale-95' : 'bg-pink-600 text-white shadow-lg active:scale-95') : (isManager ? 'bg-gray-100 text-gray-400' : isDesigner ? 'bg-[#3E3E42] text-[#666666] rounded-sm' : isSelection ? 'bg-gray-100 text-gray-300' : 'bg-white/5 text-gray-600')}`}
                     >
-                      <span>إرسال</span>
+                      <span>{isUploadingAttachment ? 'يرسل...' : 'إرسال'}</span>
                       <Send size={16} />
                     </button>
                   </div>
@@ -699,7 +1694,7 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
           <div className={`w-full lg:w-80 ${isDesigner ? 'border-l border-[#3E3E42]' : ''}`}>
                <ReceptionWidgetCard 
                  rounded={isManager ? 'rounded-[2.5rem]' : isDesigner ? 'rounded-none' : isSelection ? 'rounded-[30px]' : isReception ? 'rounded-[2.5rem]' : 'rounded-xl'}
-                 className={`flex flex-col h-full overflow-visible! ${
+                 className={`flex flex-col h-full overflow-hidden ${
                     isManager 
                       ? 'bg-white dark:bg-[#1a1c22] shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-gray-100 dark:border-white/5' 
                       : isAdmin
@@ -766,8 +1761,8 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                       </button>
                   </div>
 
-                  {/* Content Area - overflow-visible to allow popup */}
-                  <div className="flex-1 flex flex-col min-h-0 overflow-visible">
+                  {/* Content Area */}
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                       <AnimatePresence mode="wait">
                           {sidebarTab === 'tasks' ? (
                               <motion.div
@@ -894,7 +1889,7 @@ const UnifiedTeamChat: React.FC<UnifiedTeamChatProps> = ({ currentUser, users = 
                                   </div>
 
                                   {/* Tasks List */}
-                                  <div className={`flex-1 space-y-3 p-4 overflow-y-auto ${isSelection || isManager ? '[&::-webkit-scrollbar]:hidden -ms-overflow-style-none scrollbar-width-none' : 'custom-scrollbar'}`}>
+                                  <div className="flex-1 space-y-3 p-4 overflow-y-auto custom-scrollbar">
                                       {tasks
                                           .filter(task => {
                                               // Unified Visibility Logic:

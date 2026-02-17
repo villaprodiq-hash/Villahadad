@@ -14,7 +14,7 @@ const ConnectivityIndicator: React.FC = () => {
     setStatus(offlineManager.getStatus());
 
     // Subscribe to updates
-    const unsubscribe = offlineManager.subscribe((event) => {
+    const unsubscribe = offlineManager.subscribe((_event) => {
       setStatus(offlineManager.getStatus());
     });
 
@@ -160,7 +160,7 @@ const ConnectivityIndicator: React.FC = () => {
                     <div className="space-y-4">
                         <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl">
                             <p className="text-xs text-amber-200 font-bold mb-1">شبكة غير مطابقة!</p>
-                            <p className="text-[10px] text-amber-500/70">أنت متصل بـ "{networkName}". يجب الاتصال بـ "Studio_5G" للتسجيل التلقائي.</p>
+                            <p className="text-[10px] text-amber-500/70">أنت متصل بـ &quot;{networkName}&quot;. يجب الاتصال بـ &quot;Studio_5G&quot; للتسجيل التلقائي.</p>
                         </div>
 
                         <div>

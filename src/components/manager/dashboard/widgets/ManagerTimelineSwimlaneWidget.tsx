@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Clock } from 'lucide-react';
-import { format, addDays, startOfToday, isSameDay, isSameWeek } from 'date-fns';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { format, addDays, startOfToday, isSameDay } from 'date-fns';
+import { Booking } from '../../../../types';
 import ManagerDashboardCard from './ManagerDashboardCard';
 
 /**
@@ -13,8 +14,8 @@ const ManagerTimelineSwimlaneWidget = ({
   bookings = [],
   onBookingDoubleClick,
 }: {
-  bookings: any[];
-  onBookingDoubleClick?: (booking: any) => void;
+  bookings: Booking[];
+  onBookingDoubleClick?: (booking: Booking) => void;
 }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,19 @@ const ManagerTimelineSwimlaneWidget = ({
   // Generate days for the current week (starting today)
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(startOfToday(), i)), []);
 
+  interface TimelineEvent {
+    id?: string;
+    title: string;
+    start: number;
+    duration: number;
+    category: 'normal' | 'vip' | 'private';
+    emoji: string;
+    paid: number;
+    remaining: number;
+    allowPublish: boolean;
+    laneIndex: number;
+  }
+
   // Process bookings into timeline events with safety checks
   const processedEvents = useMemo(() => {
     try {
@@ -39,14 +53,16 @@ const ManagerTimelineSwimlaneWidget = ({
         b?.shootDate && isSameDay(new Date(b.shootDate), selectedDate)
       );
 
-      const mappedEvents = dayBookings.map((b) => {
+      const mappedEvents: TimelineEvent[] = dayBookings.map((b) => {
         let startHour = START_HOUR;
         if (b?.details?.startTime) {
           const [h, m] = String(b.details.startTime).split(':').map(Number);
-          startHour = h + (m / 60);
+          const safeH = typeof h === 'number' && Number.isFinite(h) ? h : START_HOUR;
+          const safeM = typeof m === 'number' && Number.isFinite(m) ? m : 0;
+          startHour = safeH + safeM / 60;
         }
         // Determine category/priority safely
-        let cat = 'normal';
+        let cat: TimelineEvent['category'] = 'normal';
         if (b?.isVIP) cat = 'vip';
         else if (b?.details?.isPrivate) cat = 'private';
 
@@ -66,13 +82,16 @@ const ManagerTimelineSwimlaneWidget = ({
 
       // Sort and assign lanes
       const sorted = [...mappedEvents].sort((a, b) => a.start - b.start);
-      const lanes: any[][] = [];
+      const lanes: TimelineEvent[][] = [];
       sorted.forEach((event) => {
         let placed = false;
         for (let i = 0; i < lanes.length; i++) {
-          const lastInLane = lanes[i][lanes[i].length - 1];
+          const lane = lanes[i];
+          if (!lane || lane.length === 0) continue;
+          const lastInLane = lane[lane.length - 1];
+          if (!lastInLane) continue;
           if (event.start >= (lastInLane.start + lastInLane.duration)) {
-            lanes[i].push(event);
+            lane.push(event);
             placed = true;
             break;
           }
@@ -157,15 +176,18 @@ const ManagerTimelineSwimlaneWidget = ({
             };
             const timeString = `${compactTime(event.start)}-${compactTime(event.start + event.duration)}`;
             const getCardColor = () => {
-              if (event.allowPublish) return 'bg-gradient-to-r from-emerald-500/30 to-emerald-700/40 border-emerald-500/40 text-emerald-50';
-              if (event.category === 'private') return 'bg-gradient-to-r from-rose-500/30 to-rose-700/40 border-rose-500/40 text-rose-50';
-              if (event.category === 'vip') return 'bg-gradient-to-r from-amber-400/30 to-amber-600/40 border-amber-500/40 text-amber-50';
-              return 'bg-gradient-to-r from-blue-500/30 to-blue-700/40 border-blue-500/40 text-blue-50';
+              if (event.allowPublish) return 'bg-linear-to-r from-emerald-500/30 to-emerald-700/40 border-emerald-500/40 text-emerald-50';
+              if (event.category === 'private') return 'bg-linear-to-r from-rose-500/30 to-rose-700/40 border-rose-500/40 text-rose-50';
+              if (event.category === 'vip') return 'bg-linear-to-r from-amber-400/30 to-amber-600/40 border-amber-500/40 text-amber-50';
+              return 'bg-linear-to-r from-blue-500/30 to-blue-700/40 border-blue-500/40 text-blue-50';
             };
             return (
               <motion.div
                 key={event.id}
-                onDoubleClick={() => onBookingDoubleClick && onBookingDoubleClick(bookings.find((b) => b.id === event.id))}
+                onDoubleClick={() => {
+                  const selectedBooking = bookings.find((b) => b.id === event.id);
+                  if (selectedBooking && onBookingDoubleClick) onBookingDoubleClick(selectedBooking);
+                }}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.1 }}

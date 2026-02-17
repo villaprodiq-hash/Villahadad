@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DollarSign, Users, Briefcase, RefreshCw, Bookmark, CheckCircle2, Pause, Play } from 'lucide-react';
 import ManagerDashboardCard from './ManagerDashboardCard';

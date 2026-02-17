@@ -43,7 +43,6 @@ const ROW_GAP = 24;
 const GalleryGridWidget: React.FC<GalleryGridWidgetProps> = ({
   items,
   onItemClick,
-  onRate,
   isSelecting = false,
   selectedIds = new Set(),
   onToggleSelect,

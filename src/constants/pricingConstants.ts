@@ -134,7 +134,9 @@ export function getPackageById(id: string): PricingPackage | undefined {
  * Calculate end time based on start time and duration
  */
 export function calculateEndTime(startTime: string, durationHours: number): string {
-  const [hours, minutes] = startTime.split(':').map(Number);
+  const [hoursRaw, minutesRaw] = startTime.split(':').map(Number);
+  const hours = typeof hoursRaw === 'number' && Number.isFinite(hoursRaw) ? hoursRaw : 0;
+  const minutes = typeof minutesRaw === 'number' && Number.isFinite(minutesRaw) ? minutesRaw : 0;
   const startDate = new Date();
   startDate.setHours(hours, minutes, 0, 0);
   

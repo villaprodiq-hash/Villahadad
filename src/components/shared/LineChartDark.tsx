@@ -9,7 +9,7 @@ import {
   ReferenceLine,
   ResponsiveContainer
 } from 'recharts';
-import { TrendingUp, Calendar } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 
 type RangeType = 'daily' | 'weekly' | 'monthly';
 
@@ -54,7 +54,7 @@ const LineChartDark = () => {
   const maxValue = Math.max(...currentData.map(d => d.value));
 
   return (
-    <div className="bg-[#1E1E1E] rounded-[2rem] p-5 h-full border border-white/5 shadow-xl flex flex-col relative overflow-hidden group">
+    <div className="bg-[#1E1E1E] rounded-4xl p-5 h-full border border-white/5 shadow-xl flex flex-col relative overflow-hidden group">
       
       {/* Header with Tabs */}
       <div className="flex justify-between items-start mb-4 relative z-10">

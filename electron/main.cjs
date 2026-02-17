@@ -371,8 +371,8 @@ function createWindow() {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           isDev 
-            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; img-src 'self' data: blob: https: file:; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:*; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://unpkg.com; font-src 'self' https://fonts.gstatic.com"
-            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https: file:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' https://fonts.gstatic.com"
+            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; img-src 'self' data: blob: https: file:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.workers.dev https://*.villahadad.org http://localhost:* ws://localhost:*; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://unpkg.com; font-src 'self' https://fonts.gstatic.com"
+            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https: file:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.workers.dev https://*.villahadad.org; font-src 'self' https://fonts.gstatic.com"
         ]
       }
     });

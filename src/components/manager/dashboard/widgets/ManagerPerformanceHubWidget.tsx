@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { DollarSign, Wallet, TrendingUp, TrendingDown, Eye, EyeOff, Calendar, Users, CheckCircle2 } from 'lucide-react';
 import ManagerDashboardCard from './ManagerDashboardCard';
 
-const ManagerPerformanceHubWidget: React.FC<{ bookings?: any[] }> = ({ bookings = [] }) => {
+interface ManagerPerformanceBooking {
+  deletedAt?: number | string | null;
+  shootDate?: string;
+  currency?: string;
+  totalAmount?: number;
+  paidAmount?: number;
+  status?: string;
+  addOnTotal?: number;
+}
+
+const ManagerPerformanceHubWidget: React.FC<{ bookings?: ManagerPerformanceBooking[] }> = ({ bookings = [] }) => {
   const [showRevenue, setShowRevenue] = useState(true);
 
   const currentYear = new Date().getFullYear();

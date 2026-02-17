@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { 
   LayoutGrid, CalendarCheck, Users, DollarSign, Image, 
-  Settings, LogOut, X, ChevronRight, ChevronLeft, User as UserIcon,
-  MessageCircle, MapPin, Camera, SquareKanban, Siren 
+  X, ChevronRight, ChevronLeft,
+  MessageCircle, Camera, SquareKanban, Siren 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, UserRole } from '../../../types';
@@ -32,8 +32,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   toggleCollapse,
   currentUser,
-  allUsers,
-  onSwitchUser,
+  allUsers: _allUsers,
+  onSwitchUser: _onSwitchUser,
   onLogout,
   badges
 }) => {
@@ -46,9 +46,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const sidebarBg = isManager ? 'bg-[#1a1c22]' : (isReception ? 'bg-[#1A1A1A]' : 'bg-[#21242b]');
   const accentColor = isManager ? 'text-amber-500' : (isReception ? 'text-[#C94557]' : 'text-pink-500');
-  const accentBg = isManager ? 'bg-amber-500' : (isReception ? 'bg-[#C94557]' : 'bg-pink-500');
-  const textAccent = isManager ? 'text-amber-500' : (isReception ? 'text-[#C94557]' : 'text-pink-500');
-  const borderAccent = isManager ? 'border-amber-500/30' : (isReception ? 'border-gray-700/50' : 'border-pink-500/30');
   
   // تعريف العناصر مع الصلاحيات (allowedRoles)
   // إذا كانت القائمة فارغة [] تعني متاحة للكل
@@ -211,7 +208,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             if (!hasPermission(item.allowedRoles)) return null;
 
             const isActive = activeSection === item.id;
-            const badgeCount = badges ? badges[item.id] : 0;
+            const badgeCount = badges?.[item.id] ?? 0;
 
             return (
               <div key={item.id} className="relative flex justify-center w-full">

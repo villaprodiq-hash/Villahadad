@@ -156,7 +156,6 @@ test.describe('VillaApps Deep Features Audit', () => {
     // Go to Trash (Deleted Bookings)
     // Usually in Header -> "سلة المحذوفات" or Settings
     // Let's check ManagerHeader for Trash icon
-    const trashBtn = page.getByRole('button').filter({ has: page.locator('svg.lucide-trash') }); // Might match delete buttons too?
     // Better: Look for specific button in header
     // Or in Sidebar if it exists
     

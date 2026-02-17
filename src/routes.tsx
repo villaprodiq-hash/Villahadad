@@ -27,7 +27,7 @@ const SelectionDashboard = React.lazy(() => import('./components/selection/Selec
 export interface RouteConfig {
   id: string;
   label: string;
-  component: React.LazyExoticComponent<any>;
+  component: React.LazyExoticComponent<React.ComponentType<unknown>>;
 }
 
 /**
@@ -88,5 +88,6 @@ export const getRoutesForRole = (role: UserRole): RouteConfig[] => {
  */
 export const getDefaultSection = (role: UserRole): string => {
   const routes = getRoutesForRole(role);
-  return routes.length > 0 ? routes[0].id : 'section-home';
+  const firstRoute = routes[0];
+  return firstRoute?.id ?? 'section-home';
 };

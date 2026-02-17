@@ -1,5 +1,5 @@
 import React from 'react';
-import { MoreHorizontal, Image as ImageIcon, Clock, CheckCircle2, TrendingUp, AlertCircle, FolderOpen, Upload, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, FolderOpen, Upload, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export interface GalleryFolder {

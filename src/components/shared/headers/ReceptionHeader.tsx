@@ -11,7 +11,11 @@ interface ReceptionHeaderProps {
   onLogout: () => void;
 }
 
-const ReceptionHeader: React.FC<ReceptionHeaderProps> = ({ title = 'الاستقبال', currentUser, onLogout }) => {
+const ReceptionHeader: React.FC<ReceptionHeaderProps> = ({
+  title = 'الاستقبال',
+  currentUser: _currentUser,
+  onLogout: _onLogout,
+}) => {
   return (
     <header className="h-16 flex items-center justify-between px-6 bg-[#121212]/80 backdrop-blur-md border-b border-white/5 sticky top-0 z-30">
         

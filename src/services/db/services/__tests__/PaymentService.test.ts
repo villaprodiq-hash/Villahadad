@@ -25,7 +25,7 @@ describe('PaymentService Critical Path', () => {
 
   it('should add a payment and update booking paidAmount', async () => {
     const bookingId = 'bk_123';
-    const paymentData = {
+    const paymentData: { amount: number; method: 'Cash'; collectedBy: string } = {
       amount: 500,
       method: 'Cash',
       collectedBy: 'Receptionist A',
@@ -37,7 +37,9 @@ describe('PaymentService Critical Path', () => {
       paidAmount: 200,
     };
 
-    vi.mocked(BookingRepository.getById).mockResolvedValue(mockBooking as any);
+    vi.mocked(BookingRepository.getById).mockResolvedValue(
+      mockBooking as unknown as Awaited<ReturnType<typeof BookingRepository.getById>>
+    );
 
     await paymentService.addPayment(bookingId, paymentData);
 
@@ -49,7 +51,7 @@ describe('PaymentService Critical Path', () => {
 
   it('should fail if payment amount is zero or negative', async () => {
     const bookingId = 'bk_123';
-    const invalidPayment = {
+    const invalidPayment: { amount: number; method: 'Cash'; collectedBy: string } = {
       amount: 0,
       method: 'Cash',
       collectedBy: 'Receptionist A',
@@ -66,7 +68,9 @@ describe('PaymentService Critical Path', () => {
       paidAmount: 600,
     };
 
-    vi.mocked(BookingRepository.getById).mockResolvedValue(mockBooking as any);
+    vi.mocked(BookingRepository.getById).mockResolvedValue(
+      mockBooking as unknown as Awaited<ReturnType<typeof BookingRepository.getById>>
+    );
 
     await paymentService.settlePayment(bookingId, 'Admin');
 

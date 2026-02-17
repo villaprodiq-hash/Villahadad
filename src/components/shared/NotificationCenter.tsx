@@ -57,7 +57,9 @@ const NotificationCenter: React.FC = () => {
         .map(n => updatedMap.get(n.id) || n);
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    } catch {}
+    } catch {
+      // Ignore corrupted local cache; next writes will normalize it.
+    }
   };
 
   const handleMarkAsRead = (id: string) => {

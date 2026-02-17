@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { 
   LayoutGrid, CalendarCheck, Users, DollarSign, Image, 
-  Settings, SquareKanban, MessageCircle, ChevronRight, ChevronLeft, BookOpen
+  SquareKanban, MessageCircle, ChevronRight, ChevronLeft, BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, UserRole } from '../../../types';
+import { User } from '../../../types';
 import ProfileDropdown from '../../shared/ProfileDropdown';
 
 interface ManagerSidebarProps {
@@ -29,7 +29,7 @@ const ManagerSidebar: React.FC<ManagerSidebarProps> = ({
   toggleCollapse,
   currentUser,
   onLogout,
-  onOpenSettings,
+  onOpenSettings: _onOpenSettings,
   badges
 }) => {
   const [hoveredItem, setHoveredItem] = useState<{ id: string, label: string, top: number } | null>(null);
@@ -118,7 +118,7 @@ const ManagerSidebar: React.FC<ManagerSidebarProps> = ({
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-2 relative px-4 no-scrollbar">
           {menuItems.filter(item => !(currentUser?.preferences?.hiddenSections || []).includes(item.id)).map((item) => {
             const isActive = activeSection === item.id;
-            const badgeCount = badges ? badges[item.id] : 0;
+            const badgeCount = badges?.[item.id] ?? 0;
 
             return (
               <button

@@ -75,6 +75,10 @@ export type VillaSubFilter =
   | 'venue_session'   // جلسات
   | 'venue_commercial'; // إعلاني
 
+export type BookingSubCategory =
+  | Exclude<SuraSubFilter, 'all_sura'>
+  | Exclude<VillaSubFilter, 'all_villa'>;
+
 // حالة الفلتر الكاملة
 export interface FilterState {
   mainFilter: MainFilterType;
@@ -131,7 +135,7 @@ export function isVillaBooking(booking: Booking): boolean {
 /**
  * الحصول على الفئة الفرعية للحجز
  */
-export function getBookingSubCategory(booking: Booking): string {
+export function getBookingSubCategory(booking: Booking): BookingSubCategory {
   // للفيلا: نستخدم servicePackage لتحديد النوع
   if (isVillaBooking(booking)) {
     const pkg = booking.servicePackage || '';
@@ -198,10 +202,10 @@ export function filterBookings(
  * فلترة العملاء حسب نوع حجوزاتهم
  */
 export function filterClientsByBookingType(
-  clients: any[],
+  clients: Array<{ id: string } & Record<string, unknown>>,
   bookings: Booking[],
   filter: FilterState
-): any[] {
+): Array<{ id: string } & Record<string, unknown>> {
   return clients.filter(client => {
     const clientBookings = bookings.filter(b => b.clientId === client.id);
     
@@ -246,7 +250,9 @@ export function filterClientsByBookingType(
  * الحصول على الإحصائيات للفلاتر
  */
 export function getFilterStats(bookings: Booking[]) {
-  const stats = {
+  type FilterStats = Record<BookingSubCategory | MainFilterType, number>;
+
+  const stats: FilterStats = {
     all: bookings.length,
     sura: bookings.filter(isSuraBooking).length,
     villa: bookings.filter(isVillaBooking).length,
@@ -266,9 +272,7 @@ export function getFilterStats(bookings: Booking[]) {
 
   bookings.forEach(booking => {
     const subCat = getBookingSubCategory(booking);
-    if (subCat in stats) {
-      (stats as any)[subCat]++;
-    }
+    stats[subCat] = (stats[subCat] ?? 0) + 1;
   });
 
   return stats;

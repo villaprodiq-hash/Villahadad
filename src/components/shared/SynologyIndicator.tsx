@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Server, Wifi, WifiOff, HardDrive, Globe, RefreshCcw } from 'lucide-react';
+import { Server, WifiOff, HardDrive, Globe, RefreshCcw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export type ConnectivityStatus = 'online' | 'syncing' | 'offline' | 'nas_offline';

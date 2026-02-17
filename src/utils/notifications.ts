@@ -30,7 +30,7 @@ export const calculateNotifications = (
   const counts: NotificationCounts = {};
 
   switch (currentUser.role) {
-    case UserRole.RECEPTION:
+    case UserRole.RECEPTION: {
       // New bookings (Inquiries and Confirmed)
       const newBookings = bookings.filter(b => 
         b.status === BookingStatus.INQUIRY || 
@@ -39,7 +39,7 @@ export const calculateNotifications = (
       counts['section-bookings'] = newBookings;
 
       // Today's appointments
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().slice(0, 10);
       const todayAppointments = bookings.filter(b => 
         b.shootDate?.startsWith(today)
       ).length;
@@ -47,8 +47,9 @@ export const calculateNotifications = (
         counts['section-calendar'] = todayAppointments;
       }
       break;
+    }
 
-    case UserRole.MANAGER:
+    case UserRole.MANAGER: {
       // Team chat - mock for now (would need real message count)
       counts['section-team-chat'] = 0;
       
@@ -60,8 +61,9 @@ export const calculateNotifications = (
         counts['section-financial'] = financialAlerts;
       }
       break;
+    }
 
-    case UserRole.PRINTER:
+    case UserRole.PRINTER: {
       // Print jobs in queue
       const queueJobs = bookings.filter(b => 
         b.status === BookingStatus.READY_TO_PRINT
@@ -73,8 +75,9 @@ export const calculateNotifications = (
       // Low inventory alert (mock - would need real inventory data)
       // counts['section-inventory'] = 0;
       break;
+    }
 
-    case UserRole.PHOTO_EDITOR:
+    case UserRole.PHOTO_EDITOR: {
       // Photos assigned to THIS photo editor AND in relevant status
       const readyForPhotoWork = bookings.filter(b =>
         (b.status === BookingStatus.SELECTION ||
@@ -85,8 +88,9 @@ export const calculateNotifications = (
         counts['section-gallery'] = readyForPhotoWork;
       }
       break;
+    }
 
-    case UserRole.VIDEO_EDITOR:
+    case UserRole.VIDEO_EDITOR: {
       // Videos assigned to THIS video editor AND in relevant status
       const readyForVideoWork = bookings.filter(b =>
         (b.status === BookingStatus.SHOOTING ||
@@ -97,8 +101,9 @@ export const calculateNotifications = (
         counts['section-projects'] = readyForVideoWork;
       }
       break;
+    }
 
-    case UserRole.SELECTOR:
+    case UserRole.SELECTOR: {
       // Albums ready for selection
       const albumsReady = bookings.filter(b => 
         b.status === BookingStatus.SELECTION
@@ -107,6 +112,7 @@ export const calculateNotifications = (
         counts['section-home'] = albumsReady;
       }
       break;
+    }
 
     case UserRole.ADMIN:
       // System alerts (mock - would need real system data)

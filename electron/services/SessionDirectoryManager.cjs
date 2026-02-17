@@ -503,6 +503,93 @@ class SessionDirectoryManager {
   }
 
   /**
+   * Move edited files from 03_EDITED to 04_FINAL (MOVE, not copy)
+   * @param {string} sessionPath - Base session path
+   * @param {string[]} fileNames - Optional list of file names to move
+   * @returns {Promise<{success:boolean,moved:number,failed:number,skipped:number,errors:string[],movedPaths:string[],movedFileNames:string[]}>}
+   */
+  async moveEditedToFinalBatch(sessionPath, fileNames = []) {
+    const editedDir = path.join(sessionPath, '03_EDITED');
+    const finalDir = path.join(sessionPath, '04_FINAL');
+    const imagePattern = /\.(jpg|jpeg|png|webp|heic|tiff?|raw|cr2|cr3|nef|arw|dng|orf|rw2|psd)$/i;
+    const strictMode = Array.isArray(fileNames) && fileNames.length > 0;
+
+    await fs.ensureDir(finalDir);
+
+    if (!(await fs.pathExists(editedDir))) {
+      return {
+        success: false,
+        moved: 0,
+        failed: strictMode ? fileNames.length : 0,
+        skipped: 0,
+        errors: [`Edited folder not found: ${editedDir}`],
+        movedPaths: [],
+        movedFileNames: [],
+      };
+    }
+
+    let candidates = [];
+    if (strictMode) {
+      candidates = fileNames
+        .map(name => (typeof name === 'string' ? path.basename(name) : ''))
+        .filter(Boolean);
+    } else {
+      const dirEntries = await fs.readdir(editedDir);
+      candidates = dirEntries.filter(entry => imagePattern.test(entry));
+    }
+
+    const uniqueCandidates = [...new Set(candidates)];
+    const result = {
+      success: true,
+      moved: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+      movedPaths: [],
+      movedFileNames: [],
+    };
+
+    for (const fileName of uniqueCandidates) {
+      if (!imagePattern.test(fileName)) {
+        result.skipped += 1;
+        continue;
+      }
+
+      const sourcePath = path.join(editedDir, fileName);
+      const destinationPath = path.join(finalDir, fileName);
+
+      if (!(await fs.pathExists(sourcePath))) {
+        // If already moved previously, treat as skipped-success in strict mode.
+        if (await fs.pathExists(destinationPath)) {
+          result.skipped += 1;
+          continue;
+        }
+
+        if (strictMode) {
+          result.failed += 1;
+          result.errors.push(`File not found in 03_EDITED: ${fileName}`);
+        } else {
+          result.skipped += 1;
+        }
+        continue;
+      }
+
+      try {
+        await fs.move(sourcePath, destinationPath, { overwrite: true });
+        result.moved += 1;
+        result.movedPaths.push(destinationPath);
+        result.movedFileNames.push(fileName);
+      } catch (error) {
+        result.failed += 1;
+        result.errors.push(`${fileName}: ${error.message || 'move failed'}`);
+      }
+    }
+
+    result.success = result.failed === 0;
+    return result;
+  }
+
+  /**
    * Generate README content for the session
    */
   generateReadme(clientName, sessionId, dateStr) {
@@ -753,15 +840,91 @@ ${booking.details?.notes || 'لا توجد ملاحظات'}
     // Copy selected files from 01_RAW to 02_SELECTED
     ipcMain.handle('session:copyToSelected', async (_event, { sessionPath, fileNames }) => {
       const results = { copied: 0, failed: 0, errors: [] };
+      const rawDir = path.join(sessionPath, '01_RAW');
       const selectedDir = path.join(sessionPath, '02_SELECTED');
       await fs.ensureDir(selectedDir);
 
-      for (const fileName of fileNames) {
+      const normalizeStem = (value) =>
+        path
+          .parse(String(value || '').trim())
+          .name.toLowerCase()
+          .replace(/\s+/g, ' ')
+          .replace(/^[0-9]{10,13}_[0-9]+_/, '');
+
+      const normalizeFileName = (value) =>
+        path
+          .basename(String(value || '').trim())
+          .toLowerCase()
+          .replace(/\s+/g, ' ');
+
+      let rawFiles = [];
+      try {
+        rawFiles = await fs.readdir(rawDir);
+      } catch {
+        rawFiles = [];
+      }
+
+      const rawByBaseName = new Map();
+      const rawByFileName = new Map();
+      for (const rawFile of rawFiles) {
+        const base = normalizeStem(rawFile);
+        if (!rawByBaseName.has(base)) rawByBaseName.set(base, rawFile);
+        rawByFileName.set(normalizeFileName(rawFile), rawFile);
+      }
+
+      const requestedFiles = Array.isArray(fileNames) ? fileNames : [];
+      for (const fileName of requestedFiles) {
         try {
-          const src = path.join(sessionPath, '01_RAW', fileName);
-          const dest = path.join(selectedDir, fileName);
+          let sourceFileName = path.basename(String(fileName || '').trim());
+          if (!sourceFileName) {
+            results.failed++;
+            results.errors.push('Empty file name');
+            continue;
+          }
+
+          let src = path.join(rawDir, sourceFileName);
+
+          if (!(await fs.pathExists(src))) {
+            // Fallback 1: exact file-name match (case-insensitive)
+            const exactByFileName = rawByFileName.get(normalizeFileName(sourceFileName));
+            if (exactByFileName) {
+              sourceFileName = exactByFileName;
+              src = path.join(rawDir, exactByFileName);
+            }
+          }
+
+          if (!(await fs.pathExists(src))) {
+            // Fallback 2: same stem with different extension
+            const base = normalizeStem(sourceFileName);
+            const matched = rawByBaseName.get(base);
+            if (matched) {
+              sourceFileName = matched;
+              src = path.join(rawDir, matched);
+            }
+          }
+
+          if (!(await fs.pathExists(src))) {
+            // Fallback 3: suffix/base fuzzy match (handles prefixed cloud names)
+            const requestedBase = normalizeStem(sourceFileName);
+            const fuzzyMatch = rawFiles.find((rawFile) => {
+              const rawBase = normalizeStem(rawFile);
+              if (!rawBase || !requestedBase) return false;
+              return (
+                rawBase.endsWith(requestedBase) ||
+                requestedBase.endsWith(rawBase) ||
+                rawBase.includes(requestedBase) ||
+                requestedBase.includes(rawBase)
+              );
+            });
+            if (fuzzyMatch) {
+              sourceFileName = fuzzyMatch;
+              src = path.join(rawDir, fuzzyMatch);
+            }
+          }
+
           if (await fs.pathExists(src)) {
-            await fs.copy(src, dest);
+            const dest = path.join(selectedDir, sourceFileName);
+            await fs.copy(src, dest, { overwrite: true });
             results.copied++;
           } else {
             results.failed++;
@@ -774,6 +937,57 @@ ${booking.details?.notes || 'لا توجد ملاحظات'}
       }
 
       return { success: true, ...results };
+    });
+
+    // Copy a file into 03_EDITED when editor marks image as completed
+    ipcMain.handle('session:copyToEdited', async (_event, { sourcePath, sessionPath, newFileName }) => {
+      try {
+        if (!sourcePath || !sessionPath) {
+          return { success: false, error: 'Missing sourcePath or sessionPath' };
+        }
+
+        const sourceExists = await fs.pathExists(sourcePath);
+        if (!sourceExists) {
+          return { success: false, error: `Source file not found: ${sourcePath}` };
+        }
+
+        const editedDir = path.join(sessionPath, '03_EDITED');
+        await fs.ensureDir(editedDir);
+
+        const destPath = await this.moveToEdited(sourcePath, sessionPath, newFileName || null);
+        return { success: true, destPath };
+      } catch (error) {
+        return { success: false, error: error.message || 'Failed to copy to 03_EDITED' };
+      }
+    });
+
+    // Move edited files to 04_FINAL after album is fully completed
+    ipcMain.handle('session:moveEditedToFinal', async (_event, { sessionPath, fileNames = [] }) => {
+      try {
+        if (!sessionPath) {
+          return {
+            success: false,
+            moved: 0,
+            failed: 0,
+            skipped: 0,
+            errors: ['Missing sessionPath'],
+            movedPaths: [],
+            movedFileNames: [],
+          };
+        }
+
+        return await this.moveEditedToFinalBatch(sessionPath, Array.isArray(fileNames) ? fileNames : []);
+      } catch (error) {
+        return {
+          success: false,
+          moved: 0,
+          failed: 0,
+          skipped: 0,
+          errors: [error.message || 'Failed to move files to 04_FINAL'],
+          movedPaths: [],
+          movedFileNames: [],
+        };
+      }
     });
 
     // Editor: Get original image path (from NAS, not R2)

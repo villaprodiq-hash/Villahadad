@@ -77,6 +77,9 @@ const electronAPI = {
     cacheMultipleImages: paths => ipcRenderer.invoke('file:cache-multiple-images', paths),
     clearCache: () => ipcRenderer.invoke('file:clear-cache'),
     openDirectory: () => ipcRenderer.invoke('file:open-directory'),
+    openPath: path => ipcRenderer.invoke('file:open-path', path),
+    showInFolder: path => ipcRenderer.invoke('file:show-in-folder', path),
+    openInPhotoshop: path => ipcRenderer.invoke('file:open-in-photoshop', path),
     listDirectory: path => ipcRenderer.invoke('file:list-directory', path),
     getDiskStats: () => ipcRenderer.invoke('file:get-disk-stats'),
     checkNasStatus: () => ipcRenderer.invoke('nas:check-status'),
@@ -99,6 +102,10 @@ const electronAPI = {
     // Copy selected files from 01_RAW to 02_SELECTED
     copyToSelected: (sessionPath, fileNames) =>
       ipcRenderer.invoke('session:copyToSelected', { sessionPath, fileNames }),
+    copyToEdited: (sourcePath, sessionPath, newFileName) =>
+      ipcRenderer.invoke('session:copyToEdited', { sourcePath, sessionPath, newFileName }),
+    moveEditedToFinal: (sessionPath, fileNames = []) =>
+      ipcRenderer.invoke('session:moveEditedToFinal', { sessionPath, fileNames }),
 
     // File Ingestion (Dual-Path: NAS + R2 + Thumbnails)
     processFiles: (filePaths, sessionInfo) =>
@@ -222,6 +229,24 @@ const electronAPI = {
 
   // ⚡️ System Info API (for Performance Mode detection)
   getSystemInfo: () => ipcRenderer.invoke('system:get-info'),
+
+  // Window Controls
+  setAlwaysOnTop: enabled => ipcRenderer.invoke('window:set-always-on-top', { enabled }),
+
+  // LAN Sync (cross-device on same network without internet)
+  lanSync: {
+    publish: (channel, payload) => ipcRenderer.invoke('lan:publish', { channel, payload }),
+    onEvent: callback => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('lan:sync-event', handler);
+      return () => ipcRenderer.removeListener('lan:sync-event', handler);
+    },
+  },
+
+  // Chat attachment bridge
+  chat: {
+    storeAttachment: payload => ipcRenderer.invoke('chat:store-attachment', payload),
+  },
 };
 
 // Expose the API to the renderer process

@@ -1,16 +1,15 @@
 
 import React, { useState } from 'react';
 import { 
-  Activity, X, ShieldAlert, Cpu, Terminal as TerminalIcon, 
-  MapPin, Clock, DollarSign, Users, Package, Save,
-  Zap, Info, CornerDownLeft, Target, Calendar
+  X, Cpu, Terminal as TerminalIcon,
+  DollarSign, Package, Zap, Target, Calendar
 } from 'lucide-react';
 import { Booking, BookingStatus, StatusLabels, CategoryLabels } from '../../../types';
 
 interface AdminOperationsDetailsViewProps {
   booking: Booking;
   onClose: () => void;
-  onUpdate: (id: string, updates: any) => void;
+  onUpdate: (id: string, updates: Partial<Booking>) => void;
 }
 
 const AdminOperationsDetailsView: React.FC<AdminOperationsDetailsViewProps> = ({ 
@@ -24,7 +23,7 @@ const AdminOperationsDetailsView: React.FC<AdminOperationsDetailsViewProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-12 overflow-hidden bg-[#0B0E14]/90 backdrop-blur-2xl font-mono" dir="rtl">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 lg:p-12 overflow-hidden bg-[#0B0E14]/90 backdrop-blur-2xl font-mono" dir="rtl">
             <div className="w-full h-full max-w-7xl bg-[#0B0E14] border border-cyan-500/30 rounded-[3rem] shadow-[0_0_100px_rgba(0,242,255,0.1)] flex flex-col relative overflow-hidden">
                 
                 {/* HUD Header */}
@@ -86,7 +85,7 @@ const AdminOperationsDetailsView: React.FC<AdminOperationsDetailsViewProps> = ({
 
                         {/* Financial Ledger HUD */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-[2.5rem] p-8 relative overflow-hidden group">
+                            <div className="bg-linear-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-[2.5rem] p-8 relative overflow-hidden group">
                                 <DollarSign size={80} className="absolute -bottom-4 -left-4 text-cyan-400/5 opacity-20" />
                                 <h3 className="text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-4">عائد العقد</h3>
                                 <div className="flex items-baseline gap-2">
@@ -134,7 +133,7 @@ const AdminOperationsDetailsView: React.FC<AdminOperationsDetailsViewProps> = ({
                                 ].map((log, i) => (
                                     <div key={i} className="relative pr-6 before:absolute before:right-0 before:top-1 before:bottom-0 before:w-px before:bg-cyan-500/20">
                                         <div className="absolute right-[-3px] top-1 w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_5px_#00F2FF]"></div>
-                                        <p className="text-cyan-400/40 mb-1">{log.time} // {log.user}</p>
+                                        <p className="text-cyan-400/40 mb-1">{log.time} • {log.user}</p>
                                         <p className="text-gray-300 leading-relaxed font-bold">{log.msg}</p>
                                     </div>
                                 ))}
@@ -150,7 +149,7 @@ const AdminOperationsDetailsView: React.FC<AdminOperationsDetailsViewProps> = ({
                 </div>
 
                 {/* HUD Footer Background Decoration */}
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+                <div className="absolute bottom-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-cyan-500/50 to-transparent"></div>
             </div>
         </div>
     );

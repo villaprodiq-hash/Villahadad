@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { DollarSign, Wallet, TrendingUp, AlertCircle } from 'lucide-react';
+import { DollarSign, Wallet, TrendingUp } from 'lucide-react';
 import { Booking } from '../../../../types';
 import { GlowCard } from '../../../shared/GlowCard';
 
@@ -79,7 +79,7 @@ const FinancialUnifiedStatsWidget: React.FC<FinancialUnifiedStatsWidgetProps> = 
           </div>
 
           {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent w-full" />
+          <div className="h-px bg-linear-to-r from-transparent via-gray-200 to-transparent w-full" />
 
           {/* IQD Section */}
           <div className="flex items-center justify-between group">

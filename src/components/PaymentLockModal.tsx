@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { AlertTriangle, Lock, X, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, X, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import Draggable from 'react-draggable';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -76,7 +76,7 @@ const PaymentLockModal: React.FC<PaymentLockModalProps> = ({ isOpen, onClose, ou
                 <div className="p-8 space-y-6 relative z-10">
                   
                   {/* Amount Input Card */}
-                  <div className="bg-gradient-to-b from-black/60 to-black/30 p-8 rounded-2xl border border-emerald-500/30 flex flex-col items-center justify-center gap-3 shadow-[inset_0_0_30px_rgba(16,185,129,0.1)] relative overflow-hidden group">
+                  <div className="bg-linear-to-b from-black/60 to-black/30 p-8 rounded-2xl border border-emerald-500/30 flex flex-col items-center justify-center gap-3 shadow-[inset_0_0_30px_rgba(16,185,129,0.1)] relative overflow-hidden group">
                     <div className="absolute inset-0 opacity-10 mix-blend-overlay pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
                     
                     <span className="text-emerald-400/80 text-xs font-bold uppercase tracking-[0.2em] relative z-10">المبلغ المراد قبضه</span>
@@ -85,7 +85,7 @@ const PaymentLockModal: React.FC<PaymentLockModalProps> = ({ isOpen, onClose, ou
                         type="number"
                         value={paymentAmount}
                         onChange={(e) => setPaymentAmount(e.target.value)}
-                        className="w-full bg-transparent text-center text-5xl sm:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-emerald-600 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] outline-none"
+                        className="w-full bg-transparent text-center text-5xl sm:text-6xl font-extrabold text-transparent bg-clip-text bg-linear-to-b from-emerald-400 to-emerald-600 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] outline-none"
                         autoFocus
                        />
                     </div>
@@ -93,7 +93,7 @@ const PaymentLockModal: React.FC<PaymentLockModalProps> = ({ isOpen, onClose, ou
                   </div>
                   
                   <p className="text-gray-400 text-sm leading-relaxed text-center font-medium">
-                    تم تثبيت المبلغ المتبقي افتراضياً. يرجى التأكد من استلام المبلغ قبل الضغط على "تأكيد واستمرار".
+                    تم تثبيت المبلغ المتبقي افتراضياً. يرجى التأكد من استلام المبلغ قبل الضغط على &quot;تأكيد واستمرار&quot;.
                   </p>
                 </div>
 
@@ -110,7 +110,7 @@ const PaymentLockModal: React.FC<PaymentLockModalProps> = ({ isOpen, onClose, ou
                   <button 
                     onClick={handleSettleSubmit}
                     disabled={isSettling}
-                    className="relative flex-1 group overflow-hidden px-8 py-3.5 text-sm font-bold bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-xl shadow-[0_4px_20px_rgba(16,185,129,0.4)] hover:shadow-[0_6px_30px_rgba(16,185,129,0.6)] transition-all duration-300 transform hover:scale-[1.02] active:scale-95 ring-1 ring-white/20 disabled:opacity-70"
+                    className="relative flex-1 group overflow-hidden px-8 py-3.5 text-sm font-bold bg-linear-to-r from-emerald-600 to-teal-700 text-white rounded-xl shadow-[0_4px_20px_rgba(16,185,129,0.4)] hover:shadow-[0_6px_30px_rgba(16,185,129,0.6)] transition-all duration-300 transform hover:scale-[1.02] active:scale-95 ring-1 ring-white/20 disabled:opacity-70"
                   >
                     <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12" />
                     

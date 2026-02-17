@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, UserRole, RoleLabels, ROLE_PERMISSIONS, RolePermissions } from '../types';
+import { User, UserRole } from '../types';
 import {
   Shield,
   Plus,
@@ -13,7 +13,6 @@ import {
   Landmark,
   Wallet,
   Crown,
-  Settings,
 } from 'lucide-react';
 import ReceptionPageWrapper from './reception/layout/ReceptionPageWrapper';
 
@@ -79,7 +78,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     switch (role) {
       case UserRole.MANAGER:
         return (
-          <span className="bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+          <span className="bg-linear-to-r from-pink-500/20 to-rose-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
             <Crown size={10} /> 👑 المديرة
           </span>
         );
@@ -343,7 +342,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                       >
                         <div className="flex items-center gap-4">
                           <div
-                            className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${method.enabled ? 'bg-gradient-to-br from-[#F7931E]/20 to-[#F9BE70]/20 text-[#F7931E]' : 'bg-white/5 text-gray-500'}`}
+                            className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${method.enabled ? 'bg-linear-to-br from-[#F7931E]/20 to-[#F9BE70]/20 text-[#F7931E]' : 'bg-white/5 text-gray-500'}`}
                           >
                             {getMethodIcon(method.type)}
                           </div>

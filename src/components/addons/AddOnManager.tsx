@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, CheckCircle, XCircle, Clock, FileText, Trash2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, CheckCircle, XCircle, FileText, Trash2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoney } from '../../utils/formatMoney';
-import { AddOnService, addOnService } from '../../services/db/services/AddOnService';
+import { addOnService } from '../../services/db/services/AddOnService';
 import {
   AddOnItem,
   AddOnSummary,
@@ -11,16 +11,16 @@ import {
   AddOnCategoryLabels,
   AddOnStatusLabels,
   CreateAddOnData,
+  InvoiceEntry,
 } from '../../types/addon.types';
 import { Booking, User, UserRole, Currency } from '../../../types';
-import { ROLE_PERMISSIONS } from '../../../types';
 
 interface AddOnManagerProps {
   booking: Booking;
   currentUser: User;
   onAddOnCreated?: (addOn: AddOnItem) => void;
   onAddOnApproved?: (addOn: AddOnItem) => void;
-  onInvoiceGenerated?: (invoice: any) => void;
+  onInvoiceGenerated?: (invoice: InvoiceEntry) => void;
 }
 
 export const AddOnManager: React.FC<AddOnManagerProps> = ({
@@ -37,13 +37,8 @@ export const AddOnManager: React.FC<AddOnManagerProps> = ({
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
 
   const canApprove = currentUser.role === UserRole.MANAGER || currentUser.role === UserRole.ADMIN;
-  const canCreate = true; // All roles can create add-on requests
 
-  useEffect(() => {
-    loadAddOns();
-  }, [booking.id]);
-
-  const loadAddOns = async () => {
+  const loadAddOns = useCallback(async () => {
     setLoading(true);
     try {
       const addOnSummary = await addOnService.getAddOnSummary(booking.id);
@@ -55,7 +50,11 @@ export const AddOnManager: React.FC<AddOnManagerProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [booking.id]);
+
+  useEffect(() => {
+    void loadAddOns();
+  }, [loadAddOns]);
 
   const handleCreateAddOn = async (data: CreateAddOnData) => {
     try {
@@ -159,22 +158,6 @@ export const AddOnManager: React.FC<AddOnManagerProps> = ({
     );
   };
 
-  const getStatusIcon = (status: AddOnStatus) => {
-    switch (status) {
-      case 'approved':
-      case 'paid':
-        return <CheckCircle className="w-5 h-5 text-emerald-500" />;
-      case 'rejected':
-        return <XCircle className="w-5 h-5 text-rose-500" />;
-      case 'pending':
-        return <Clock className="w-5 h-5 text-amber-500" />;
-      case 'invoiced':
-        return <FileText className="w-5 h-5 text-blue-500" />;
-      default:
-        return null;
-    }
-  };
-
   const getStatusColor = (status: AddOnStatus) => {
     switch (status) {
       case 'approved':
@@ -203,7 +186,7 @@ export const AddOnManager: React.FC<AddOnManagerProps> = ({
   return (
     <div className="space-y-6" dir="rtl">
       {/* Original Package Price Display */}
-      <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
+      <div className="bg-linear-to-r from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
         <div className="flex justify-between items-center">
           <div>
             <span className="text-sm text-gray-600">سعر الباقة الأصلي</span>

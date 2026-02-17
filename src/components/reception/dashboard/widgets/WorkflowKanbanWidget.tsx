@@ -1,14 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Camera, User, CheckCircle, GripVertical, TrendingUp, TrendingDown, Gift } from 'lucide-react';
+import { Camera, User, GripVertical, Gift } from 'lucide-react';
 import { Booking, BookingStatus, BookingCategory } from '../../../../types';
 
 type TimeRange = 'daily' | 'weekly' | 'monthly';
-
-interface ColumnStats {
-  daily: { count: number; trend: 'up' | 'down'; change: number };
-  weekly: { count: number; trend: 'up' | 'down'; change: number };
-  monthly: { count: number; trend: 'up' | 'down'; change: number };
-}
 
 interface WorkflowKanbanWidgetProps {
   bookings?: Booking[];
@@ -19,7 +13,7 @@ interface WorkflowKanbanWidgetProps {
 const WorkflowKanbanWidget: React.FC<WorkflowKanbanWidgetProps> = ({ 
   bookings = [], 
   onStatusUpdate,
-  isManager = false 
+  isManager: _isManager = false 
 }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('daily');
   const [draggedBookingId, setDraggedBookingId] = useState<string | null>(null);
@@ -62,10 +56,6 @@ const WorkflowKanbanWidget: React.FC<WorkflowKanbanWidgetProps> = ({
       { id: 'done', title: 'تم التصوير', cards: selection, status: BookingStatus.SHOOTING_COMPLETED }
     ];
   }, [bookings, timeRange]);
-
-  // Keep mock stats for visual appeal as they require complex calculation logic not fully available yet
-  // Removed fake stats
-  const columnStats = {};
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData('bookingId', id);

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Shield, Lock, Unlock, Users, AlertTriangle, 
-  CheckCircle2, XCircle, Power, UserCog
+  Power
 } from 'lucide-react';
 import { UserRole } from '../../../types';
 

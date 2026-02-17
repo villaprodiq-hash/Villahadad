@@ -57,14 +57,14 @@ const AdminFinancialView: React.FC = () => {
       // Get today's date
 
       
-      interface BookingRow {
+        interface BookingRow {
         id: string;
         client_name: string;
         total_amount: number;
         paid_amount: number;
-        shoot_date: string;
+        shoot_date: string | null;
         status: string;
-        details: string | any;
+        details: string | Record<string, unknown> | null;
         paymentReceivedBy?: string;
         paymentReceivedAt?: string;
       }
@@ -113,7 +113,7 @@ const AdminFinancialView: React.FC = () => {
         const paid = booking.paid_amount || 0;
         const remaining = total - paid;
         
-        const shootDate = new Date(booking.shoot_date);
+        const shootDate = new Date(booking.shoot_date ?? new Date().toISOString());
         shootDate.setHours(0, 0, 0, 0);
         
         const daysUntil = Math.floor((shootDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -130,7 +130,7 @@ const AdminFinancialView: React.FC = () => {
         const session: ClientSession = {
           id: booking.id,
           clientName: booking.client_name || 'عميل غير معروف',
-          sessionDate: booking.shoot_date,
+          sessionDate: booking.shoot_date ?? '',
           sessionTime: startTime,
           totalAmount: total,
           paidAmount: paid,
@@ -164,7 +164,7 @@ const AdminFinancialView: React.FC = () => {
               clientName: booking.client_name || 'عميل غير معروف',
               bookingId: booking.id,
               amountDue: remaining,
-              dueDate: booking.shoot_date,
+              dueDate: booking.shoot_date ?? '',
               daysOverdue: Math.abs(daysUntil),
             });
           }

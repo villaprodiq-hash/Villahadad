@@ -4,7 +4,7 @@ import { GlowCard } from '../../../shared/GlowCard';
 
 const TeamActiveStatusWidget: React.FC = () => {
   return (
-    <GlowCard className="p-6 flex flex-col justify-between bg-gradient-to-br from-emerald-900/10 to-transparent border-emerald-500/20">
+    <GlowCard className="p-6 flex flex-col justify-between bg-linear-to-br from-emerald-900/10 to-transparent border-emerald-500/20">
       <div className="flex justify-between items-start">
          <div>
             <h4 className="text-emerald-400 font-bold text-lg mb-1 flex items-center gap-2">

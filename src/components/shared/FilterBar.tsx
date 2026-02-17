@@ -1,11 +1,9 @@
 import React from 'react';
-import { Filter, ChevronDown } from 'lucide-react';
 import {
   MainFilterType,
   SuraSubFilter,
   VillaSubFilter,
   FilterState,
-  mainFilterLabels,
   suraSubFilterLabels,
   villaSubFilterLabels,
   defaultFilterState,

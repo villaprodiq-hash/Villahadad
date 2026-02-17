@@ -1,11 +1,10 @@
 
 import React, { useMemo, useState } from 'react';
 import { 
-  Users, Search, Crown, Star, Heart, TrendingUp, 
-  Download, MessageCircle, Wallet, Calendar, Clock,
-  Globe, Link, Share2, Smartphone, QrCode, X, Check, Lock, ChevronRight
+  Users, Search, Crown, Star, Wallet, Calendar, Clock,
+  Globe, Share2, Smartphone, QrCode, X
 } from 'lucide-react';
-import { Booking, BookingCategory, BookingStatus, StatusLabels } from '../../../types';
+import { Booking, StatusLabels } from '../../../types';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -13,9 +12,25 @@ interface AdminClientsListViewProps {
   bookings: Booking[];
 }
 
+interface PortalClient {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  bookingsCount: number;
+  totalSpent: number;
+  lastVisit: string;
+  nextVisit: string | null;
+  isVIP?: boolean;
+  isFamous?: boolean;
+  tier: 'bronze' | 'silver' | 'gold';
+  token: string;
+  bookings: Booking[];
+}
+
 const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [portalModalClient, setPortalModalClient] = useState<any | null>(null);
+  const [portalModalClient, setPortalModalClient] = useState<PortalClient | null>(null);
 
   const clients = useMemo(() => {
     const today = new Date();
@@ -23,7 +38,7 @@ const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings })
     nextWeek.setDate(today.getDate() + 7);
     
     // Initial map
-    const clientMap = new Map();
+    const clientMap = new Map<string, PortalClient>();
 
     bookings.forEach(b => {
         if (!clientMap.has(b.clientId)) {
@@ -44,6 +59,7 @@ const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings })
             });
         }
         const c = clientMap.get(b.clientId);
+        if (!c) return;
         c.bookingsCount++;
         c.totalSpent += b.totalAmount;
         c.bookings.push(b);
@@ -60,14 +76,14 @@ const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings })
     });
 
     return Array.from(clientMap.values())
-        .map((c: any) => {
+        .map((c: PortalClient) => {
             // Calculate Tier logic
             if (c.totalSpent > 3000000) c.tier = 'gold'; 
             else if (c.totalSpent > 1000000) c.tier = 'silver'; 
             else c.tier = 'bronze';
             return c;
         })
-        .filter((c: any) => 
+        .filter((c: PortalClient) => 
             c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
             (c.phone && c.phone.includes(searchTerm))
         )
@@ -76,7 +92,7 @@ const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings })
 
   // Extract Upcoming VIPs
   const upcomingVIPs = useMemo(() => {
-      return clients.filter((c: any) => c.nextVisit && (c.tier === 'gold' || c.isVIP || c.isFamous));
+      return clients.filter((c: PortalClient) => c.nextVisit && (c.tier === 'gold' || c.isVIP || c.isFamous));
   }, [clients]);
 
   return (
@@ -127,7 +143,7 @@ const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings })
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {upcomingVIPs.map((client: any) => (
+                        {upcomingVIPs.map((client: PortalClient) => (
                             <div key={client.id} className="flex items-center gap-4 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 hover:bg-amber-500/10 transition-colors">
                                 <div className="p-2 rounded-lg bg-amber-500/20 text-amber-500">
                                     <Star size={16} fill="currentColor" />
@@ -145,7 +161,7 @@ const AdminClientsListView: React.FC<AdminClientsListViewProps> = ({ bookings })
 
         {/* Client Grid Terminal */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-12 no-scrollbar">
-            {clients.map((client, i) => (
+            {clients.map(client => (
                 <div key={client.id} className={`bg-[#0B0E14]/60 backdrop-blur-md border rounded-3xl p-5 hover:shadow-[0_0_30px_rgba(0,242,255,0.05)] transition-all group relative overflow-hidden ${
                     client.tier === 'gold' ? 'border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.1)]' : 
                     client.tier === 'silver' ? 'border-gray-400/30' : 

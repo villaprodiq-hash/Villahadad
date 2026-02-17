@@ -13,7 +13,7 @@ interface PhotoEditorLayoutProps {
   onOpenSettings?: () => void;
   isCollapsed: boolean;
   toggleCollapse: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 

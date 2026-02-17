@@ -1,4 +1,4 @@
-import { Booking, BookingStatus } from '../../types';
+import { BookingStatus } from '../../types';
 import { electronBackend } from '../mockBackend';
 import { toast } from 'sonner';
 
@@ -7,7 +7,7 @@ import { toast } from 'sonner';
  * Periodically scans NAS folders to automatically advance booking statuses.
  */
 export class NasVisionService {
-  private static intervalId: any = null;
+  private static intervalId: ReturnType<typeof setInterval> | null = null;
   private static isScanning = false;
 
   static start(onUpdate?: () => void) {
@@ -31,7 +31,7 @@ export class NasVisionService {
           if (!booking.folderPath) continue;
 
           // 🔍 Call Electron API to check files
-          const stats = await (window as any).electronAPI.sessionLifecycle.getStats(booking.folderPath);
+          const stats = await window.electronAPI?.sessionLifecycle?.getStats?.(booking.folderPath);
           
           if (!stats) continue;
 
@@ -43,7 +43,7 @@ export class NasVisionService {
                 notes: (booking.notes || '') + `\n[NAS Vision] Auto-detected ${stats.raw} raw files.`
             });
             toast.success(`✨ تم رصد صور لـ ${booking.clientName} - اكتمل التصوير تلقائياً`);
-            if (onUpdate) onUpdate();
+            onUpdate?.();
           }
 
           // LOGIC 2: Selection -> Editing (Selected files found)
@@ -54,7 +54,7 @@ export class NasVisionService {
                 notes: (booking.notes || '') + `\n[NAS Vision] Auto-detected ${stats.selected} selections.`
             });
             toast.success(`✨ تم رصد اختيارات لـ ${booking.clientName} - بانتظار التعديل`);
-            if (onUpdate) onUpdate();
+            onUpdate?.();
           }
         }
       } catch (e) {

@@ -12,7 +12,8 @@ interface PrinterLayoutProps {
   onOpenSettings?: () => void;
   isCollapsed: boolean;
   toggleCollapse: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
+  isWebRuntime?: boolean;
 
 }
 
@@ -25,10 +26,16 @@ const PrinterLayout: React.FC<PrinterLayoutProps> = ({
   onOpenSettings,
   isCollapsed,
   toggleCollapse,
-  badges
+  badges,
+  isWebRuntime = false,
 }) => {
+  const contentMarginClass = isCollapsed ? 'lg:mr-[90px]' : 'lg:mr-[200px]';
+
   return (
-    <div className="flex h-screen bg-[#0a0f0d] overflow-hidden" dir="rtl">
+    <div
+      className={`flex bg-[#0a0f0d] ${isWebRuntime ? 'min-h-[100dvh] overflow-x-hidden overflow-y-auto' : 'h-screen overflow-hidden'}`}
+      dir="rtl"
+    >
       {/* Sidebar */}
       <PrinterSidebar
         activeSection={activeSection}
@@ -43,10 +50,9 @@ const PrinterLayout: React.FC<PrinterLayoutProps> = ({
 
       {/* Main Content */}
       <div 
-        className="flex-1 transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)]"
-        style={{ marginRight: isCollapsed ? '90px' : '200px' }}
+        className={`flex-1 transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] mr-0 ${contentMarginClass}`}
       >
-        <div className="h-full w-full flex flex-col">
+        <div className={`w-full flex flex-col ${isWebRuntime ? 'min-h-[100dvh]' : 'h-full'}`}>
           <ProductionHeader 
               title="محطة الطباعة" 
               role={UserRole.PRINTER}
@@ -54,7 +60,9 @@ const PrinterLayout: React.FC<PrinterLayoutProps> = ({
               onLogout={onLogout}
               onOpenSettings={onOpenSettings}
           />
-          <div className="flex-1 overflow-hidden relative">
+          <div
+            className={`flex-1 relative ${isWebRuntime ? 'overflow-x-hidden overflow-y-auto xl:overflow-hidden' : 'overflow-hidden'}`}
+          >
               {children}
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minimize2, Maximize2, FileImage, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 
@@ -18,11 +18,9 @@ interface UploadProgressWidgetProps {
 
 const UploadProgressWidget: React.FC<UploadProgressWidgetProps> = ({ files, onClose }) => {
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   const completedCount = files.filter(f => f.status === 'completed').length;
   const totalCount = files.length;
-  const initialProgress = files.length > 0 ? (completedCount / totalCount) * 100 : 0;
   
   // Calculate average progress for the summarized view
   const avgProgress = files.reduce((acc, curr) => acc + curr.progress, 0) / (files.length || 1);

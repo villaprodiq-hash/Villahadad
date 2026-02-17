@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   BookingStatus,
   BookingCategory,
@@ -182,8 +182,8 @@ describe('Types & RBAC System', () => {
   // ============ maskSensitiveData ============
   describe('maskSensitiveData()', () => {
     it('should mask phone for users without permission', () => {
-      const printer: User = { id: 'p-1', name: 'Printer', role: UserRole.PRINTER };
-      const masked = maskSensitiveData('07801234567', printer, 'phone');
+      const selector: User = { id: 's-1', name: 'Selector', role: UserRole.SELECTOR };
+      const masked = maskSensitiveData('07801234567', selector, 'phone');
       expect(masked).toBe('***-****');
     });
 

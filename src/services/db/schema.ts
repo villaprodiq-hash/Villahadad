@@ -224,6 +224,74 @@ export async function initDB() {
       .addColumn('deletedAt', 'integer')
       .execute();
 
+    // Discount Codes Table (manager-controlled campaign codes)
+    await db.schema
+      .createTable('discount_codes')
+      .ifNotExists()
+      .addColumn('id', 'text', col => col.primaryKey())
+      .addColumn('code', 'text', col => col.notNull())
+      .addColumn('type', 'text', col => col.notNull()) // 'percentage' | 'fixed'
+      .addColumn('value', 'real', col => col.notNull())
+      .addColumn('startAt', 'text', col => col.notNull()) // ISO datetime
+      .addColumn('endAt', 'text') // null = no expiry
+      .addColumn('isActive', 'integer', col => col.notNull().defaultTo(1))
+      .addColumn('isPublished', 'integer', col => col.notNull().defaultTo(0))
+      .addColumn('createdBy', 'text', col => col.notNull())
+      .addColumn('createdByName', 'text', col => col.notNull())
+      .addColumn('notes', 'text')
+      .addColumn('usageCount', 'integer', col => col.notNull().defaultTo(0))
+      .addColumn('createdAt', 'text', col => col.notNull())
+      .addColumn('updatedAt', 'text', col => col.notNull())
+      .addColumn('deletedAt', 'integer')
+      .execute();
+
+    await db.schema
+      .createIndex('idx_discount_codes_code')
+      .ifNotExists()
+      .on('discount_codes')
+      .column('code')
+      .execute();
+
+    await db.schema
+      .createIndex('idx_discount_codes_active')
+      .ifNotExists()
+      .on('discount_codes')
+      .column('isActive')
+      .execute();
+
+    // Discount redemptions audit table
+    await db.schema
+      .createTable('discount_redemptions')
+      .ifNotExists()
+      .addColumn('id', 'text', col => col.primaryKey())
+      .addColumn('discountCodeId', 'text', col => col.notNull())
+      .addColumn('bookingId', 'text', col => col.notNull())
+      .addColumn('code', 'text', col => col.notNull())
+      .addColumn('type', 'text', col => col.notNull()) // 'percentage' | 'fixed'
+      .addColumn('value', 'real', col => col.notNull())
+      .addColumn('discountAmount', 'real', col => col.notNull())
+      .addColumn('subtotalAmount', 'real', col => col.notNull())
+      .addColumn('finalAmount', 'real', col => col.notNull())
+      .addColumn('reason', 'text')
+      .addColumn('appliedBy', 'text', col => col.notNull())
+      .addColumn('appliedByName', 'text', col => col.notNull())
+      .addColumn('appliedAt', 'text', col => col.notNull())
+      .execute();
+
+    await db.schema
+      .createIndex('idx_discount_redemptions_booking')
+      .ifNotExists()
+      .on('discount_redemptions')
+      .column('bookingId')
+      .execute();
+
+    await db.schema
+      .createIndex('idx_discount_redemptions_code')
+      .ifNotExists()
+      .on('discount_redemptions')
+      .column('discountCodeId')
+      .execute();
+
     // Add-Ons Table
     await db.schema
       .createTable('add_ons')
@@ -503,7 +571,7 @@ async function runMigrations() {
     console.log('🔄 [Migration] Running database migrations...');
 
     // Use direct IPC API for raw SQL (Kysely's executeQuery needs CompiledQuery shape)
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI;
     if (!api?.db) {
       console.log('⚠️ [Migration] No Electron API available, skipping migrations');
       return;
@@ -514,7 +582,18 @@ async function runMigrations() {
       const result = await api.db.query(
         `SELECT COUNT(*) as count FROM pragma_table_info('bookings') WHERE name = 'exchangeRate'`
       );
-      const hasColumn = result?.[0]?.count > 0;
+      const firstRow = result[0];
+      const rawCount =
+        typeof firstRow === 'object' && firstRow !== null && 'count' in firstRow
+          ? (firstRow as { count?: unknown }).count
+          : 0;
+      const count =
+        typeof rawCount === 'number'
+          ? rawCount
+          : typeof rawCount === 'string'
+            ? Number(rawCount)
+            : 0;
+      const hasColumn = count > 0;
 
       if (!hasColumn) {
         console.log('🔄 [Migration] Adding exchangeRate column to bookings table...');
@@ -527,7 +606,35 @@ async function runMigrations() {
       console.warn('⚠️ [Migration] exchangeRate migration failed:', e);
     }
 
-    // Migration 2: Disable FOREIGN KEY enforcement
+    // Migration 2: session_images compatibility for fileName/file_name naming
+    try {
+      const columnsResult = await api.db.query(`PRAGMA table_info('session_images')`);
+      const columnNames = new Set(
+        (Array.isArray(columnsResult) ? columnsResult : [])
+          .map((row) => (typeof row === 'object' && row !== null && 'name' in row ? String((row as { name?: unknown }).name || '').trim() : ''))
+          .filter((name) => name.length > 0)
+      );
+
+      const hasCamel = columnNames.has('fileName');
+      const hasSnake = columnNames.has('file_name');
+
+      if (hasCamel && !hasSnake) {
+        await api.db.run('ALTER TABLE session_images ADD COLUMN file_name TEXT');
+        await api.db.run("UPDATE session_images SET file_name = fileName WHERE file_name IS NULL OR TRIM(file_name) = ''");
+        console.log('✅ [Migration] Added session_images.file_name compatibility column');
+      } else if (!hasCamel && hasSnake) {
+        await api.db.run('ALTER TABLE session_images ADD COLUMN fileName TEXT');
+        await api.db.run("UPDATE session_images SET fileName = file_name WHERE fileName IS NULL OR TRIM(fileName) = ''");
+        console.log('✅ [Migration] Added session_images.fileName compatibility column');
+      } else if (hasCamel && hasSnake) {
+        await api.db.run("UPDATE session_images SET file_name = COALESCE(NULLIF(file_name, ''), fileName)");
+        await api.db.run("UPDATE session_images SET fileName = COALESCE(NULLIF(fileName, ''), file_name)");
+      }
+    } catch (e) {
+      console.warn('⚠️ [Migration] session_images file name compatibility migration failed:', e);
+    }
+
+    // Migration 3: Disable FOREIGN KEY enforcement
     // The FK on dashboard_tasks.relatedBookingId causes failures because bookings
     // often only exist in Supabase, not local SQLite. Disable FK enforcement globally.
     try {

@@ -1,22 +1,18 @@
 import { AddOnRepository as addOnRepo } from '../repositories/AddOnRepository';
 import { BookingRepository as bookingRepo } from '../repositories/BookingRepository';
-import { PaymentRepository as paymentRepo } from '../repositories/PaymentRepository';
 import { SyncQueueService } from '../../sync/SyncQueue';
 import { getWhatsAppUrl } from '../../../utils/whatsapp';
 import { formatMoney } from '../../../utils/formatMoney';
 import { v4 as uuidv4 } from 'uuid';
 import {
   AddOnItem,
-  AddOnStatus,
   AddOnSummary,
   AddOnAuditEntry,
   CreateAddOnData,
   InvoiceEntry,
-  PaymentHistoryEntry,
   AddOnNotification,
 } from '../../../types/addon.types';
-import { Booking, UserRole, Currency } from '../../../../types';
-import { ROLE_PERMISSIONS } from '../../../../types';
+import { Booking, UserRole } from '../../../../types';
 
 /**
  * Add-On Service
@@ -363,6 +359,7 @@ export class AddOnService {
 
     // Return the WhatsApp URL for the UI to use
     const whatsappUrl = getWhatsAppUrl(booking.clientPhone, message);
+    console.log(`WhatsApp URL: ${whatsappUrl}`);
     
     // Store notification record (could be expanded to a separate table)
     const notification: AddOnNotification = {

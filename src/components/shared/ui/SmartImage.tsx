@@ -29,10 +29,8 @@ const SmartImage: React.FC<SmartImageProps> = ({
       if (!src) return;
       
       try {
-        // @ts-ignore
         if (window.electronAPI?.fileSystem) {
-           // @ts-ignore
-           const cachedPath = await window.electronAPI.fileSystem.checkCache(src);
+           const cachedPath = await window.electronAPI.fileSystem.checkCache?.(src);
            if (mounted) {
              if (cachedPath) {
                setDisplaySrc(cachedPath);
@@ -64,10 +62,8 @@ const SmartImage: React.FC<SmartImageProps> = ({
     setStatus('downloading');
     
     try {
-      // @ts-ignore
       if (window.electronAPI?.fileSystem) {
-        // @ts-ignore
-        const localPath = await window.electronAPI.fileSystem.cacheImage(src);
+        const localPath = await window.electronAPI.fileSystem.cacheImage?.(src);
         if (localPath) {
           setDisplaySrc(localPath);
           setStatus('cached');

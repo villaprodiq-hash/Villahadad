@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { AlertTriangle, Check, X, Server, HardDrive, ArrowRight, Calendar, User } from 'lucide-react';
+import { AlertTriangle, Check, Server, HardDrive, Calendar } from 'lucide-react';
 import { conflictManager } from '../../../services/offline/ConflictManager';
 import { ConflictRecord } from '../../../services/db/schema';
 import { toast } from 'sonner';
@@ -59,6 +58,9 @@ const ConflictResolutionView: React.FC<{ onBack: () => void }> = ({ onBack }) =>
             {/* Sidebar List */}
             <div className="w-80 border-l border-gray-100 flex flex-col gap-2 overflow-y-auto pr-2">
                 {conflicts.map(conflict => (
+                    (() => {
+                      const localData = parseComparisonData(conflict.localData);
+                      return (
                     <button
                         key={conflict.id}
                         onClick={() => setActiveId(conflict.id)}
@@ -66,18 +68,20 @@ const ConflictResolutionView: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                     >
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-bold px-2 py-0.5 bg-gray-100 rounded text-gray-600">
-                                {conflict.localData.title || 'حجز بدون عنوان'}
+                                {localData.title || 'حجز بدون عنوان'}
                             </span>
                             <span className="text-[10px] text-gray-400 font-mono">
                                 {new Date(conflict.timestamp).toLocaleTimeString()}
                             </span>
                         </div>
-                        <p className="text-sm text-gray-800 font-bold mb-1">{conflict.localData.clientName}</p>
+                        <p className="text-sm text-gray-800 font-bold mb-1">{localData.clientName || 'عميل غير معروف'}</p>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                             <AlertTriangle size={12} className="text-amber-500" />
                             <span>تضارب في البيانات</span>
                         </div>
                     </button>
+                      );
+                    })()
                 ))}
             </div>
 
@@ -100,7 +104,7 @@ const ConflictResolutionView: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                 </div>
                             </div>
                             
-                            <ComparisonCard data={activeConflict.serverData} type="server" />
+                            <ComparisonCard data={parseComparisonData(activeConflict.serverData)} type="server" />
 
                             <button 
                                 onClick={() => handleResolve(activeConflict.id, 'server')}
@@ -124,7 +128,7 @@ const ConflictResolutionView: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                 </div>
                             </div>
 
-                            <ComparisonCard data={activeConflict.localData} type="local" />
+                            <ComparisonCard data={parseComparisonData(activeConflict.localData)} type="local" />
 
                             <button 
                                 onClick={() => handleResolve(activeConflict.id, 'local')}
@@ -142,7 +146,7 @@ const ConflictResolutionView: React.FC<{ onBack: () => void }> = ({ onBack }) =>
   );
 };
 
-const ComparisonCard: React.FC<{ data: any, type: 'server' | 'local' }> = ({ data, type }) => {
+const ComparisonCard: React.FC<{ data: { clientName?: string; title?: string; shootDate?: string; status?: string }, type: 'server' | 'local' }> = ({ data, type }) => {
   const isLocal = type === 'local';
   
   return (
@@ -164,7 +168,7 @@ const ComparisonCard: React.FC<{ data: any, type: 'server' | 'local' }> = ({ dat
             </div>
             <div className="space-y-1">
                 <label className="text-xs text-gray-400">الحالة</label>
-                <Badge status={data.status} />
+                <Badge status={data.status ?? ''} />
             </div>
         </div>
 
@@ -190,3 +194,20 @@ const Badge: React.FC<{ status: string }> = ({ status }) => {
 }
 
 export default ConflictResolutionView;
+  interface ComparisonData {
+    clientName?: string;
+    title?: string;
+    shootDate?: string;
+    status?: string;
+  }
+
+  const parseComparisonData = (value: unknown): ComparisonData => {
+    if (typeof value !== 'object' || value === null) return {};
+    const record = value as Record<string, unknown>;
+    return {
+      clientName: typeof record.clientName === 'string' ? record.clientName : undefined,
+      title: typeof record.title === 'string' ? record.title : undefined,
+      shootDate: typeof record.shootDate === 'string' ? record.shootDate : undefined,
+      status: typeof record.status === 'string' ? record.status : undefined,
+    };
+  };

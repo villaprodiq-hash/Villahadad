@@ -13,8 +13,6 @@ const sanitize = (val: string) => {
     .replace(/javascript:[^"]*/gim, "");
 };
 
-const sanitizedString = z.string().transform(sanitize);
-
 export const UserSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Name is required").transform(sanitize),

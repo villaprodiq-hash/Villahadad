@@ -1,6 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
-import { toast } from 'sonner';
 
 // --- Interface for Conversion Service ---
 export interface IMediaConverter {
@@ -52,27 +51,6 @@ class WebMediaConverter implements IMediaConverter {
     // 3. Read result
     const data = await this.ffmpeg.readFile(outputName);
     return new Blob([data], { type: 'audio/mp3' });
-  }
-}
-
-// --- 2. Native Implementation (Electron/M1) - FUTURE ---
-// This will be enabled when we migrate to Electron
-class NativeMediaConverter implements IMediaConverter {
-  public isLoaded: boolean = true; // Native binary is always "there"
-
-  async load(): Promise<void> {
-    // Check connection to Electron backend
-    return Promise.resolve();
-  }
-
-  async convertVideoToAudio(file: File): Promise<Blob> {
-    console.log("🚀 Using Native M1 Acceleration...");
-    
-    // In the future, this calls the main process:
-    // return window.electronAPI.convertMedia(file.path, 'mp3');
-    
-    // For now, allow fallback or throw error if accidentally used in web
-    throw new Error("Native mode not yet available in Browser environment");
   }
 }
 

@@ -46,7 +46,7 @@ const ClientsTableWidget: React.FC<ClientsTableWidgetProps> = ({ clients }) => {
                 <td className="p-4">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white
-                      ${client.type === 'VIP' ? 'bg-gradient-to-br from-amber-600 to-orange-700 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-[#1a1c22] border border-white/10'}
+                      ${client.type === 'VIP' ? 'bg-linear-to-br from-amber-600 to-orange-700 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-[#1a1c22] border border-white/10'}
                     `}>
                       {client.avatar}
                     </div>

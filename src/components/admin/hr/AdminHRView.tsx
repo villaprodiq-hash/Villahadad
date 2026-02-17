@@ -26,7 +26,7 @@ const AdminHRView = () => {
                  </div>
 
                  {/* Tab Switcher */}
-                 <div className="bg-zinc-900/60 p-1.5 border border-white/[0.06] flex items-center gap-2">
+                 <div className="bg-zinc-900/60 p-1.5 border border-white/6 flex items-center gap-2">
                     <button
                         onClick={() => setActiveTab('roster')}
                         className={`flex items-center gap-3 px-6 py-3 transition-all duration-200 relative group ${

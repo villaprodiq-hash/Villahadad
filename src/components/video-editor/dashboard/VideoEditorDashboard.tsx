@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Booking, BookingStatus, User } from '../../../types';
-import { Video, Clock, CheckCircle, FolderOpen, Play, Film, Calendar } from 'lucide-react';
+import { Video, CheckCircle, FolderOpen, Play, Film, Calendar } from 'lucide-react';
 import TasksPanel from './TasksPanel';
 
 interface VideoEditorDashboardProps {
@@ -9,14 +9,24 @@ interface VideoEditorDashboardProps {
   onStatusUpdate?: (id: string, status: BookingStatus) => Promise<void>;
 }
 
+type VideoEditorBooking = Booking & {
+  assignedVideoEditor?: string;
+  assignedShooter?: string;
+  videoEditStartedAt?: string;
+  updatedAt?: string;
+};
+
 const VideoEditorDashboard: React.FC<VideoEditorDashboardProps> = ({ currentUser, bookings = [], onStatusUpdate }) => {
 
   // Filter bookings assigned to this video editor
   const myBookings = useMemo(() => {
-    return bookings.filter(b =>
-      (b as any).assignedVideoEditor === currentUser.id ||
-      (b as any).assignedShooter === currentUser.id
-    );
+    return bookings.filter(b => {
+      const booking = b as VideoEditorBooking;
+      return (
+        booking.assignedVideoEditor === currentUser.id ||
+        booking.assignedShooter === currentUser.id
+      );
+    });
   }, [bookings, currentUser.id]);
 
   // Categorize projects
@@ -60,9 +70,10 @@ const VideoEditorDashboard: React.FC<VideoEditorDashboardProps> = ({ currentUser
           progress = 10;
           statusLabel = 'بانتظار البدء';
           break;
-        case BookingStatus.EDITING:
+        case BookingStatus.EDITING: {
           // Estimate progress based on time
-          const editStart = (b as any).videoEditStartedAt || (b as any).updatedAt;
+          const booking = b as VideoEditorBooking;
+          const editStart = booking.videoEditStartedAt || booking.updatedAt;
           if (editStart) {
             const daysSinceStart = Math.floor((Date.now() - new Date(editStart).getTime()) / (1000 * 60 * 60 * 24));
             progress = Math.min(90, 20 + daysSinceStart * 10);
@@ -71,6 +82,7 @@ const VideoEditorDashboard: React.FC<VideoEditorDashboardProps> = ({ currentUser
           }
           statusLabel = 'قيد التحرير';
           break;
+        }
         default:
           progress = 50;
           statusLabel = b.status;

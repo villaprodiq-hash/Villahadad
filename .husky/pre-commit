@@ -1,1 +1,4 @@
-npx lint-staged
+#!/usr/bin/env sh
+
+echo "Running lint on changed lines..."
+npm run -s lint:changed

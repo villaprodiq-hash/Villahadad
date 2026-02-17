@@ -2,7 +2,7 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface VolumeChartProps {
-    data: any[];
+    data: Array<{ date: string; volume: number }>;
 }
 
 const VolumeChart: React.FC<VolumeChartProps> = ({ data }) => {

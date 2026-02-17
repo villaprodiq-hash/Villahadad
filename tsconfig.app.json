@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "types.ts",
+    "vite-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-*",
+    "release",
+    "public",
+    "supabase",
+    "src/app/**",
+    "src/tests/**",
+    "tests/**",
+    "playwright.config.ts",
+    "vite.config.ts"
+  ]
+}

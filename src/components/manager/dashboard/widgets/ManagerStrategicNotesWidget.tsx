@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, Zap, Search, Sparkles, Trash2, Share2 } from 'lucide-react';
+import { Sparkles, Trash2, Share2 } from 'lucide-react';
 import ManagerDashboardCard from './ManagerDashboardCard';
 
 const ManagerStrategicNotesWidget = () => {

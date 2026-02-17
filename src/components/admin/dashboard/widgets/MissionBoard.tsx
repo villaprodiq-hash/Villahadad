@@ -2,7 +2,15 @@
 import React from 'react';
 import { Target, CheckCircle2 } from 'lucide-react';
 
-const MissionBoard: React.FC<{ tasks: any[], onToggle: (id: string) => void }> = ({ tasks, onToggle }) => {
+interface MissionTask {
+  id: string;
+  completed: boolean;
+  title?: string;
+  text?: string;
+  priority?: 'high' | 'normal' | 'low' | string;
+}
+
+const MissionBoard: React.FC<{ tasks: MissionTask[]; onToggle: (id: string) => void }> = ({ tasks, onToggle }) => {
     return (
         <div className="h-full w-full bg-[#0B0E14]/60 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-5 flex flex-col relative overflow-hidden group">
             <div className="flex justify-between items-center mb-6">

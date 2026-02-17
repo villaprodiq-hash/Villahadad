@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, AlertCircle, Maximize2, Minimize2, CheckCircle2, Circle } from 'lucide-react';
+import { Booking, BookingStatus } from '../../../types';
 
 interface Album {
   id: string;
@@ -16,13 +17,17 @@ interface Album {
 
 interface TasksPanelProps {
   isManager?: boolean;
-  bookings?: any[];
+  bookings?: Booking[];
 }
 
-const TasksPanel: React.FC<TasksPanelProps> = ({ isManager = false, bookings = [] }) => {
+const TasksPanel: React.FC<TasksPanelProps> = ({ isManager: _isManager = false, bookings = [] }) => {
   // ✅ Generate albums from REAL bookings only
   const initialAlbums: Album[] = bookings
-    .filter(b => b.status === 'completed' || b.status === 'confirmed')
+    .filter(b =>
+      b.status === BookingStatus.SHOOTING_COMPLETED ||
+      b.status === BookingStatus.SELECTION ||
+      b.status === BookingStatus.EDITING
+    )
     .slice(0, 10)
     .map(b => ({
       id: b.id,

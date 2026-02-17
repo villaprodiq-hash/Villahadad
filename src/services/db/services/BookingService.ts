@@ -1,11 +1,14 @@
 import { BookingRepository as bookingRepo } from '../repositories/BookingRepository';
 import { BookingSchema } from '../validation';
-import { Booking } from '../../../types';
+import { Booking, BookingCategory, BookingStatus } from '../../../types';
 import { SyncQueueService } from '../../sync/SyncQueue';
 import { supabase } from '../../supabase';
 import { activityLogService } from './ActivityLogService';
 import { ReminderService } from './ReminderService';
 import { db } from '../index';
+
+type DbRow = Record<string, unknown>;
+type BookingInput = Partial<Booking> & Record<string, unknown>;
 
 /**
  * Vibe Engineering: Booking Service
@@ -13,6 +16,61 @@ import { db } from '../index';
  * Implements "Cloud First, Local Fallback" strategy.
  */
 export class BookingService {
+  private readonly knownMissingCloudColumns = new Set<string>();
+
+  private extractMissingSchemaColumn(error: unknown): string | null {
+    if (!error || typeof error !== 'object') return null;
+
+    const maybeError = error as { message?: unknown };
+    if (typeof maybeError.message !== 'string') return null;
+
+    const match = maybeError.message.match(/Could not find the '([^']+)' column/i);
+    return match?.[1] ?? null;
+  }
+
+  private async insertBookingToCloudWithSchemaFallback(
+    payload: Record<string, unknown>
+  ): Promise<{ success: true; payload: Record<string, unknown> } | { success: false; error: unknown }> {
+    const attemptPayload: Record<string, unknown> = { ...payload };
+    for (const missingColumn of this.knownMissingCloudColumns) {
+      delete attemptPayload[missingColumn];
+    }
+
+    const maxAttempts = Object.keys(payload).length + 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { error } = await supabase.from('bookings').insert(attemptPayload).select();
+      if (!error) {
+        if (attempt > 1) {
+          console.warn(
+            `⚠️ Supabase schema fallback succeeded after ${attempt} attempts. Final columns: ${Object.keys(attemptPayload).join(', ')}`
+          );
+        }
+        return { success: true, payload: attemptPayload };
+      }
+
+      const missingColumn = this.extractMissingSchemaColumn(error);
+      if (missingColumn && Object.prototype.hasOwnProperty.call(attemptPayload, missingColumn)) {
+        this.knownMissingCloudColumns.add(missingColumn);
+        console.warn(`⚠️ Supabase schema cache missing column "${missingColumn}". Retrying without it...`);
+        delete attemptPayload[missingColumn];
+        continue;
+      }
+
+      return { success: false, error };
+    }
+
+    return {
+      success: false,
+      error: new Error('Exceeded max Supabase insert fallback attempts'),
+    };
+  }
+
+  private getElectronApi() {
+    if (typeof window === 'undefined') return undefined;
+    return window.electronAPI;
+  }
+
   async checkAvailability(
     shootDate: string,
     startTime: string,
@@ -28,7 +86,7 @@ export class BookingService {
     const newStart = this.timeToMinutes(startTime);
     const newEnd = this.timeToMinutes(endTime);
 
-    if (newStart >= newEnd) {
+    if (newStart === null || newEnd === null || newStart >= newEnd) {
       return {
         available: false,
         hasConflict: false,
@@ -80,8 +138,8 @@ export class BookingService {
     approverRole: string
   ): Promise<void> {
     const updates = {
-      status: 'Confirmed',
-      approvalStatus: 'approved',
+      status: BookingStatus.CONFIRMED,
+      approvalStatus: 'approved' as const,
       approvedBy: approverName,
       approvedByRole: approverRole,
       approvedAt: new Date().toISOString(),
@@ -104,8 +162,8 @@ export class BookingService {
     rejecterRole: string
   ): Promise<void> {
     const updates = {
-      status: 'Archived',
-      approvalStatus: 'rejected',
+      status: BookingStatus.ARCHIVED,
+      approvalStatus: 'rejected' as const,
       rejectedBy: rejecterName,
       rejectedByRole: rejecterRole,
       rejectedAt: new Date().toISOString(),
@@ -126,8 +184,8 @@ export class BookingService {
     if (!time || typeof time !== 'string') return null;
     const parts = time.split(':');
     if (parts.length !== 2) return null;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1], 10);
+    const hours = parseInt(parts[0] ?? '', 10);
+    const minutes = parseInt(parts[1] ?? '', 10);
     if (isNaN(hours) || isNaN(minutes)) return null;
     return hours * 60 + minutes;
   }
@@ -172,13 +230,13 @@ export class BookingService {
   }
 
   // Helper: Fetch from Local SQLite
-  private async fetchLocalBookings(role?: string): Promise<any[]> {
+  private async fetchLocalBookings(role?: string): Promise<DbRow[]> {
     try {
-      const api = (window as any).electronAPI;
+      const api = this.getElectronApi();
       if (api && api.db) {
-        return await api.db.query('SELECT * FROM bookings WHERE deletedAt IS NULL');
+        return (await api.db.query('SELECT * FROM bookings WHERE deletedAt IS NULL')) as DbRow[];
       } else {
-        return await bookingRepo.getAll(role);
+        return (await bookingRepo.getAll(role)) as unknown as DbRow[];
       }
     } catch (e) {
       console.error('Local DB Logic Failed:', e);
@@ -187,8 +245,8 @@ export class BookingService {
   }
 
   // Helper: Sync Cloud Data to Local SQLite
-  private async syncLocalDatabase(cloudBookings: any[]) {
-    const api = (window as any).electronAPI;
+  private async syncLocalDatabase(cloudBookings: DbRow[]) {
+    const api = this.getElectronApi();
     if (!api || !api.db) return;
 
     try {
@@ -197,13 +255,14 @@ export class BookingService {
       // but since the user just RESET the cloud, we should reflect deletions too.
 
       // Strategy: Get all local IDs. If a local ID is NOT in cloudBookings, delete it locally.
-      const localItems = await api.db.query('SELECT id FROM bookings');
-      const cloudIds = new Set(cloudBookings.map(b => b.id));
+      const localItems = (await api.db.query('SELECT id FROM bookings')) as DbRow[];
+      const cloudIds = new Set(cloudBookings.map(b => String(b.id || '')));
 
       // Delete Stale items that don't exist in cloud anymore
       for (const item of localItems) {
-        if (!cloudIds.has(item.id)) {
-          await api.db.query('DELETE FROM bookings WHERE id = ?', [item.id]);
+        const localId = String(item.id || '');
+        if (!cloudIds.has(localId)) {
+          await api.db.query('DELETE FROM bookings WHERE id = ?', [localId]);
         }
       }
 
@@ -221,7 +280,7 @@ export class BookingService {
             : JSON.stringify(booking.status_history || []);
 
         // Check existence
-        const exists = await api.db.query('SELECT 1 FROM bookings WHERE id = ?', [booking.id]);
+        const exists = (await api.db.query('SELECT 1 FROM bookings WHERE id = ?', [booking.id])) as DbRow[];
 
         if (exists && exists.length > 0) {
           // Update
@@ -274,49 +333,88 @@ export class BookingService {
     }
   }
 
-  private mapBookingData(raw: any): Booking {
-    const safeParse = (val: any) => {
+  private mapBookingData(raw: DbRow): Booking {
+    const safeParse = <T>(val: unknown): T | undefined => {
       if (!val) return undefined;
-      if (typeof val === 'object') return val;
-      try {
-        return JSON.parse(val);
-      } catch (e) {
-        return undefined;
+      if (typeof val === 'object') return val as T;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val) as T;
+        } catch {
+          return undefined;
+        }
       }
+      return undefined;
     };
 
+    const pickFirst = (...values: unknown[]): unknown =>
+      values.find(v => v !== undefined && v !== null && v !== '');
+
+    const asString = (value: unknown, fallback = ''): string => {
+      if (typeof value === 'string') return value;
+      if (value === null || value === undefined) return fallback;
+      return String(value);
+    };
+
+    const asOptionalString = (value: unknown): string | undefined => {
+      if (value === null || value === undefined || value === '') return undefined;
+      return asString(value);
+    };
+
+    const asCurrency = (value: unknown): Booking['currency'] => {
+      if (value === 'USD' || value === 'IQD') return value;
+      return 'IQD';
+    };
+
+    const asCategory = (value: unknown): Booking['category'] => {
+      if (Object.values(BookingCategory).includes(value as BookingCategory)) {
+        return value as BookingCategory;
+      }
+      return BookingCategory.WEDDING;
+    };
+
+    const asStatus = (value: unknown): Booking['status'] => {
+      if (Object.values(BookingStatus).includes(value as BookingStatus)) {
+        return value as BookingStatus;
+      }
+      return BookingStatus.INQUIRY;
+    };
+
+    const shootDateRaw = pickFirst(raw.shootDate, raw.shoot_date, raw.date, raw.shootdate, '');
+    const shootDate = asString(shootDateRaw).trim();
+
     return {
-      id: String(raw.id || raw._id || raw.ID),
-      clientName: raw.clientName || raw.client_name || raw.clientname || 'Unknown',
-      shootDate: (raw.shootDate || raw.shoot_date || raw.date || raw.shootdate || '').trim(),
-      title: raw.title || raw.event_title || raw.eventTitle || raw.title,
-      status: raw.status || 'PENDING',
-      totalAmount: Number(raw.totalAmount || raw.total_amount || 0),
-      paidAmount: Number(raw.paidAmount || raw.paid_amount || 0),
-      currency: raw.currency || 'IQD',
-      servicePackage: raw.servicePackage || raw.service_package || '',
+      id: asString(pickFirst(raw.id, raw._id, raw.ID)),
+      clientName: asString(pickFirst(raw.clientName, raw.client_name, raw.clientname, 'Unknown')),
+      shootDate,
+      title: asString(pickFirst(raw.title, raw.event_title, raw.eventTitle, 'Untitled')),
+      status: asStatus(raw.status),
+      totalAmount: Number(pickFirst(raw.totalAmount, raw.total_amount, 0)),
+      paidAmount: Number(pickFirst(raw.paidAmount, raw.paid_amount, 0)),
+      currency: asCurrency(raw.currency),
+      servicePackage: asString(pickFirst(raw.servicePackage, raw.service_package, '')),
 
       // Missing Required Fields Defaults
-      location: raw.location || '',
-      clientId: raw.clientId || raw.client_id || '',
-      clientPhone: raw.clientPhone || raw.client_phone || '',
-      category: raw.category || 'Wedding', // Default to Wedding if missing
+      location: asString(raw.location),
+      clientId: asString(pickFirst(raw.clientId, raw.client_id, '')),
+      clientPhone: asString(pickFirst(raw.clientPhone, raw.client_phone, '')),
+      category: asCategory(raw.category),
 
-      details: safeParse(raw.details || raw.json_details) || {},
+      details: safeParse<Booking['details']>(pickFirst(raw.details, raw.json_details)) || {},
       statusHistory:
-        safeParse(raw.statusHistory || raw.status_history || raw.json_statusHistory) || [],
+        safeParse<Booking['statusHistory']>(pickFirst(raw.statusHistory, raw.status_history, raw.json_statusHistory)) || [],
 
       // Deadline & Performance
-      actualSelectionDate: raw.actualSelectionDate || raw.actual_selection_date,
-      deliveryDeadline: raw.deliveryDeadline || raw.delivery_deadline,
-      photoEditCompletedAt: raw.photoEditCompletedAt || raw.photo_edit_completed_at,
-      videoEditCompletedAt: raw.videoEditCompletedAt || raw.video_edit_completed_at,
-      printCompletedAt: raw.printCompletedAt || raw.print_completed_at,
-      client_token: raw.client_token || raw.clientToken,
+      actualSelectionDate: asOptionalString(pickFirst(raw.actualSelectionDate, raw.actual_selection_date)),
+      deliveryDeadline: asOptionalString(pickFirst(raw.deliveryDeadline, raw.delivery_deadline)),
+      photoEditCompletedAt: asOptionalString(pickFirst(raw.photoEditCompletedAt, raw.photo_edit_completed_at)),
+      videoEditCompletedAt: asOptionalString(pickFirst(raw.videoEditCompletedAt, raw.video_edit_completed_at)),
+      printCompletedAt: asOptionalString(pickFirst(raw.printCompletedAt, raw.print_completed_at)),
+      client_token: asOptionalString(pickFirst(raw.client_token, raw.clientToken)),
     };
   }
 
-  async addBooking(data: any): Promise<Booking> {
+  async addBooking(data: BookingInput): Promise<Booking> {
     console.log('🚀 Adding new booking:', data);
 
     const validated = BookingSchema.parse({
@@ -334,8 +432,6 @@ export class BookingService {
     const { CurrentUserService } = await import('../../CurrentUserService');
     const currentUser = CurrentUserService.getCurrentUser();
     const userName = currentUser?.name || 'Unknown';
-    const userRole = currentUser?.roleLabel || 'غير محدد';
-    const fullName = CurrentUserService.getFullName(); // "رسبشن مريم"
 
     // CRITICAL: Map to actual Supabase column names
     const dbObject = {
@@ -374,7 +470,7 @@ export class BookingService {
       console.log('📦 Prepared dbObject for Supabase:', dbObject);
     }
 
-    // 2. Save Locally - Use exact schema field names
+    // 2. Save locally once (source of truth for offline-first flow)
     await bookingRepo.create({
       id: validated.id,
       location: validated.location || '',
@@ -399,53 +495,17 @@ export class BookingService {
       updated_at: new Date().toISOString(),
       client_token: clientToken,
     } as unknown as Booking);
-
-    // 2. Insert into Local SQLite (Optimistic Write) 🔴 FIX: Persist locally via Repository
-    try {
-      // Construct full Booking object for Repository
-      const fullBooking: Booking = {
-        ...validated,
-        currency: data.currency || 'IQD', // ✅ Add missing required field
-        clientId: validated.clientId || data.clientId || '',
-        clientPhone: validated.clientPhone || data.clientPhone || '',
-        category: validated.category || data.category || 'Wedding',
-        location: validated.location || data.location || '',
-        statusHistory: (data.statusHistory as Booking['statusHistory']) || [],
-        details: (data.details as Booking['details']) || {},
-        nasStatus: 'none',
-        nasProgress: 0,
-        notes: validated.notes || '',
-        created_by: currentUser?.id || 'local',
-        createdBy: currentUser?.id || 'local',
-        updatedAt: new Date().toISOString(),
-        client_token: clientToken,
-      } as Booking;
-
-      await bookingRepo.create(fullBooking);
-      console.log('✅ Booking persisted locally via Repository');
-    } catch (localErr) {
-      console.error('❌ Failed to persist booking locally:', localErr);
-    }
+    console.log('✅ Booking persisted locally via Repository');
 
     // 3. Sync to Cloud
     if (navigator.onLine) {
       try {
         console.log('☁️ Attempting to insert into Supabase...');
-        // console.log('📤 Sending data:', JSON.stringify(dbObject, null, 2));
-
-        const { data: insertedData, error } = await supabase
-          .from('bookings')
-          .insert(dbObject)
-          .select();
-
-        if (error) {
-          // If error is RLS related to RANK, we might handle it here?
-          // For now, treat as queueable failure.
-          throw error;
-        }
+        const insertResult = await this.insertBookingToCloudWithSchemaFallback(dbObject);
+        if (!insertResult.success) throw insertResult.error;
 
         console.log('✅ Booking synced to Cloud successfully!');
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error('❌ Cloud Sync Failed (Add), adding to SQL queue...', JSON.stringify(e, null, 2));
         // Use SQL Queue
         await SyncQueueService.enqueue('create', 'booking', dbObject);
@@ -467,7 +527,7 @@ export class BookingService {
     return { ...validated, nasStatus: 'none', nasProgress: 0 } as unknown as Booking;
   }
 
-  async updateBooking(id: string, updates: any): Promise<void> {
+  async updateBooking(id: string, updates: BookingInput): Promise<void> {
     // 🔒 SECURITY: Authorization check
     const { CurrentUserService } = await import('../../CurrentUserService');
     const currentUser = CurrentUserService.getCurrentUser();
@@ -497,7 +557,7 @@ export class BookingService {
     const userRole = currentUser?.roleLabel || 'غير محدد';
 
     // 1. Update Local
-    const dbUpdates: any = {
+    const dbUpdates: Record<string, unknown> = {
       ...updates,
       modifiedBy: fullName,
       modifiedByRole: userRole,
@@ -508,7 +568,7 @@ export class BookingService {
     await bookingRepo.update(id, dbUpdates);
 
     // 2. Sync to Cloud
-    const cloudUpdates: any = {
+    const cloudUpdates: Record<string, unknown> = {
       modifiedBy: fullName,
       modifiedByRole: userRole,
     };
@@ -545,9 +605,9 @@ export class BookingService {
 
     const updatedHistory = [...history, historyItem];
 
-    const updates: any = {
-      status: newStatus,
-      statusHistory: updatedHistory,
+    const updates: Partial<Booking> = {
+      status: newStatus as Booking['status'],
+      statusHistory: updatedHistory as Booking['statusHistory'],
     };
 
     if (newStatus === 'Editing' || newStatus === 'q_editing') {
@@ -572,7 +632,7 @@ export class BookingService {
       // Adjust based on exact status string
       updates.videoEditCompletedAt = new Date().toISOString();
     }
-    if (newStatus === 'Delivered') {
+    if (newStatus === 'Delivered' || newStatus === 'Archived') {
       updates.printCompletedAt = new Date().toISOString(); // Or delivery completed
     }
 
@@ -586,7 +646,7 @@ export class BookingService {
     });
 
     // NAS Cleanup Notification — when booking is Delivered, notify staff to delete photos from NAS
-    if (newStatus === 'Delivered') {
+    if (newStatus === 'Delivered' || newStatus === 'Archived') {
       this.dispatchNasCleanupNotification(id, booking.clientName || booking.title || id);
     }
   }

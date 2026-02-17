@@ -16,7 +16,7 @@ interface MaterialInventoryProps {
 
 const PrinterMaterialInventory: React.FC<MaterialInventoryProps> = ({ materials }) => {
   return (
-    <div className="p-2 rounded-xl bg-gradient-to-br from-white/5 to-white/10 border border-white/10">
+    <div className="p-2 rounded-xl bg-linear-to-br from-white/5 to-white/10 border border-white/10">
       <div className="flex items-center gap-2 mb-3">
         <Droplet size={14} className="text-emerald-400" />
         <h3 className="text-white font-bold text-[10px]">مخزون المواد</h3>
@@ -35,7 +35,7 @@ const PrinterMaterialInventory: React.FC<MaterialInventoryProps> = ({ materials 
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${(mat.level / mat.max) * 100}%` }}
-                className={`h-full bg-gradient-to-r ${mat.color}`}
+                className={`h-full bg-linear-to-r ${mat.color}`}
               />
             </div>
           </div>

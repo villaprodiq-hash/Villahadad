@@ -89,7 +89,8 @@ export function generateSecurePassword(length: number = 16): string {
   crypto.getRandomValues(randomValues);
   
   for (let i = 0; i < length; i++) {
-    password += charset[randomValues[i] % charset.length];
+    const randomByte = randomValues[i] ?? 0;
+    password += charset[randomByte % charset.length];
   }
   
   return password;

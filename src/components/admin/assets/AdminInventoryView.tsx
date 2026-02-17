@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Camera, Search, Plus, Trash2, Edit3, Save,
-  Battery, HardDrive, User, Box, MapPin, X,
-  ChevronDown, Zap, Aperture, Package, RefreshCw,
-  ArrowLeftRight, Calendar, Filter
+  Battery, HardDrive, User, Box, X,
+  Zap, Aperture, Package, RefreshCw,
+  ArrowLeftRight, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { electronBackend } from '../../../services/mockBackend';
@@ -36,6 +36,28 @@ interface StaffUser {
   name: string;
   role: string;
 }
+
+type InventoryType = InventoryItem['type'];
+type InventoryStatus = InventoryItem['status'];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const parseStaffUser = (row: unknown): StaffUser | null => {
+  if (!isRecord(row)) return null;
+
+  const id = row.id;
+  const name = row.name;
+  const role = row.role;
+
+  if (!id || !name || !role) return null;
+
+  return {
+    id: String(id),
+    name: String(name),
+    role: String(role),
+  };
+};
 
 // ─── Canon Catalog ───────────────────────────────────────────
 const CANON_CAMERAS = [
@@ -76,7 +98,7 @@ const CANON_LENSES = [
   { name: 'RF-S 18-150mm f/3.5-6.3 IS STM', icon: '⭕' },
 ];
 
-const TYPE_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+const TYPE_CONFIG: Record<InventoryType, { label: string; color: string; icon: React.ReactNode }> = {
   camera: { label: 'كاميرا', color: 'text-cyan-400', icon: <Camera size={12} /> },
   lens: { label: 'عدسة', color: 'text-purple-400', icon: <Aperture size={12} /> },
   light: { label: 'إضاءة', color: 'text-yellow-400', icon: <Zap size={12} /> },
@@ -85,6 +107,15 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; icon: React.Re
   audio: { label: 'صوت', color: 'text-pink-400', icon: <Camera size={12} /> },
 };
 
+const INVENTORY_TYPES: ReadonlyArray<InventoryType> = ['camera', 'lens', 'light', 'accessory', 'drone', 'audio'];
+const INVENTORY_STATUSES: ReadonlyArray<InventoryStatus> = ['storage', 'deployed', 'maintenance'];
+
+const normalizeInventoryType = (value: string): InventoryType =>
+  INVENTORY_TYPES.includes(value as InventoryType) ? (value as InventoryType) : 'accessory';
+
+const normalizeInventoryStatus = (value: string): InventoryStatus =>
+  INVENTORY_STATUSES.includes(value as InventoryStatus) ? (value as InventoryStatus) : 'storage';
+
 // ─── Main Component ──────────────────────────────────────────
 const AdminInventoryView: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -92,8 +123,8 @@ const AdminInventoryView: React.FC = () => {
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterType, setFilterType] = useState<InventoryType | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<InventoryStatus | 'all'>('all');
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -119,20 +150,24 @@ const AdminInventoryView: React.FC = () => {
       ]);
 
       // Fetch users for assignment
-      const api = (window as any).electronAPI;
+      const api = window.electronAPI;
       let staffUsers: StaffUser[] = [];
       if (api?.db) {
         try {
-          const rows = await api.db.query("SELECT id, name, role FROM users WHERE deletedAt IS NULL ORDER BY name ASC");
-          staffUsers = rows.map((r: any) => ({ id: String(r.id), name: String(r.name), role: String(r.role) }));
+          const rows = await api.db.query('SELECT id, name, role FROM users WHERE deletedAt IS NULL ORDER BY name ASC');
+          staffUsers = rows
+            .map(parseStaffUser)
+            .filter((user): user is StaffUser => Boolean(user));
         } catch { /* ignore */ }
       }
 
       // Map assignedTo names
       const userMap = new Map(staffUsers.map(u => [u.id, u.name]));
-      const mappedItems = inventoryItems.map((item: any) => ({
+      const mappedItems: InventoryItem[] = inventoryItems.map(item => ({
         ...item,
-        assignedToName: item.assignedTo ? userMap.get(item.assignedTo) || 'غير معروف' : null,
+        type: normalizeInventoryType(item.type),
+        status: normalizeInventoryStatus(item.status),
+        assignedToName: item.assignedTo ? (userMap.get(item.assignedTo) ?? 'غير معروف') : undefined,
       }));
 
       setItems(mappedItems);
@@ -338,7 +373,20 @@ const AdminInventoryView: React.FC = () => {
             className="w-full bg-zinc-900/60 border border-white/5 rounded-lg py-2 pr-9 pl-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500/50"
           />
         </div>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="bg-zinc-900/60 border border-white/5 rounded-lg py-2 px-3 text-[11px] text-zinc-300 focus:outline-none focus:border-amber-500/50">
+        <select
+          value={filterType}
+          onChange={e => {
+            const nextType = e.target.value;
+            if (nextType === 'all') {
+              setFilterType('all');
+              return;
+            }
+            setFilterType(
+              INVENTORY_TYPES.includes(nextType as InventoryType) ? (nextType as InventoryType) : 'all'
+            );
+          }}
+          className="bg-zinc-900/60 border border-white/5 rounded-lg py-2 px-3 text-[11px] text-zinc-300 focus:outline-none focus:border-amber-500/50"
+        >
           <option value="all">كل الأنواع</option>
           <option value="camera">كاميرات</option>
           <option value="lens">عدسات</option>
@@ -347,7 +395,22 @@ const AdminInventoryView: React.FC = () => {
           <option value="drone">درون</option>
           <option value="audio">صوت</option>
         </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-zinc-900/60 border border-white/5 rounded-lg py-2 px-3 text-[11px] text-zinc-300 focus:outline-none focus:border-amber-500/50">
+        <select
+          value={filterStatus}
+          onChange={e => {
+            const nextStatus = e.target.value;
+            if (nextStatus === 'all') {
+              setFilterStatus('all');
+              return;
+            }
+            setFilterStatus(
+              INVENTORY_STATUSES.includes(nextStatus as InventoryStatus)
+                ? (nextStatus as InventoryStatus)
+                : 'all'
+            );
+          }}
+          className="bg-zinc-900/60 border border-white/5 rounded-lg py-2 px-3 text-[11px] text-zinc-300 focus:outline-none focus:border-amber-500/50"
+        >
           <option value="all">كل الحالات</option>
           <option value="storage">مخزن</option>
           <option value="deployed">مستلم</option>
@@ -495,11 +558,9 @@ const AdminInventoryView: React.FC = () => {
                 <div className="text-5xl mb-2">{inspectingItem.icon}</div>
                 <h3 className="text-lg font-bold text-white mb-1">{inspectingItem.name}</h3>
                 <div className="flex gap-2 items-center">
-                  {TYPE_CONFIG[inspectingItem.type] && (
-                    <span className={`text-[10px] ${TYPE_CONFIG[inspectingItem.type].color} flex items-center gap-1`}>
-                      {TYPE_CONFIG[inspectingItem.type].icon} {TYPE_CONFIG[inspectingItem.type].label}
-                    </span>
-                  )}
+                  <span className={`text-[10px] ${TYPE_CONFIG[inspectingItem.type].color} flex items-center gap-1`}>
+                    {TYPE_CONFIG[inspectingItem.type].icon} {TYPE_CONFIG[inspectingItem.type].label}
+                  </span>
                   {statusBadge(inspectingItem.status)}
                 </div>
                 {inspectingItem.assignedToName && (
@@ -685,7 +746,9 @@ const AdminInventoryView: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <span className="text-lg">{cat.icon}</span>
                             <span className="text-xs font-bold text-white">{cat.name}</span>
-                            {'batteryTotal' in cat && <span className="text-[9px] text-zinc-500">{cat.batteryTotal} بطاريات</span>}
+                            {'batteryTotal' in cat && typeof cat.batteryTotal === 'number' && (
+                              <span className="text-[9px] text-zinc-500">{cat.batteryTotal} بطاريات</span>
+                            )}
                           </div>
                           {alreadyExists ? (
                             <span className="text-[9px] text-zinc-600">موجود</span>

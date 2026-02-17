@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
-import { Lock, Shield, Camera, Film, Printer, CheckCircle, User as UserIcon, UserX } from 'lucide-react';
+import { Lock, Shield, Camera, Film, Printer, CheckCircle, User as UserIcon, UserX, Pin, PinOff, Plus } from 'lucide-react';
 import { UserRole, RoleLabels, User } from '../../../types';
 import { verifyPasswordSync } from '../../../services/security/PasswordService';
 import { SyncManager } from '../../../services/sync/SyncManager';
@@ -38,22 +38,29 @@ const PROFILES: Profile[] = [
 interface SecurityAccessTerminalProps {
   onLogin: (role: UserRole, userId?: string) => void;
   users?: User[];
+  pinnedUsers?: User[];
   // 🔐 macOS-style device login props
   rememberedUser?: User | null;
   onNotMe?: () => void;
+  onPinUser?: (userId: string) => void;
+  onUnpinUser?: (userId: string) => void;
 }
 
 export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({ 
   onLogin, 
   users = [],
+  pinnedUsers = [],
   rememberedUser,
-  onNotMe
+  onNotMe,
+  onPinUser,
+  onUnpinUser
 }) => {
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showAllUsers, setShowAllUsers] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(Date.now());
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,8 +96,10 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // 🔐 Single-user mode: if rememberedUser exists, show only that user
-  const isSingleUserMode = !!rememberedUser;
+  const pinnedUserIds = useMemo(() => new Set(pinnedUsers.map(user => user.id)), [pinnedUsers]);
+  const hasPinnedUsers = pinnedUsers.length > 0;
+  // 🔐 Single-user mode: if rememberedUser exists and no pinned-user quick list
+  const isSingleUserMode = !!rememberedUser && !hasPinnedUsers;
 
   // 🔐 Auto-focus password input when in single-user mode
   useEffect(() => {
@@ -124,6 +133,21 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
   };
 
   useEffect(() => {
+    const mapUsersToProfiles = (usersToMap: User[]): Profile[] =>
+      usersToMap.map((user) => {
+        const assets = getRoleAssets(user.role);
+        return {
+          id: user.id,
+          name: user.name || RoleLabels[user.role],
+          email: user.email,
+          role: user.role,
+          icon: assets.icon,
+          avatarUrl: user.avatar || assets.avatar,
+          color: assets.color,
+          password: user.password
+        };
+      });
+
     // 🔐 If single-user mode, only show the remembered user
     if (isSingleUserMode && rememberedUser) {
       const assets = getRoleAssets(rememberedUser.role);
@@ -143,43 +167,52 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
       return;
     }
 
+    const shouldShowPinnedOnly = hasPinnedUsers && !showAllUsers;
+    if (shouldShowPinnedOnly) {
+      setProfiles(mapUsersToProfiles(pinnedUsers));
+      return;
+    }
+
     // Normal mode: show all users
     let displayUsers = [...users];
-    if (!users.some(u => u.role === UserRole.MANAGER)) {
-      displayUsers = [{
-        id: 'bootstrap_manager',
-        name: 'المديرة (Sura)',
-        role: UserRole.MANAGER,
-        password: '1234',
-        email: 'manager@villahaddad.local',
-      }, ...users];
+    if (!users.some(user => user.role === UserRole.MANAGER)) {
+      displayUsers = [
+        {
+          id: 'bootstrap_manager',
+          name: 'المديرة (Sura)',
+          role: UserRole.MANAGER,
+          password: '1234',
+          email: 'manager@villahaddad.local',
+        },
+        ...users
+      ];
     }
-    
+
     if (displayUsers.length > 0) {
-      // Show ALL users (multiple employees can share the same role)
-      const mappedProfiles = displayUsers.map((user) => {
-        const assets = getRoleAssets(user.role);
-        return {
-          id: user.id,
-          name: user.name || RoleLabels[user.role],
-          email: user.email,
-          role: user.role,
-          icon: assets.icon,
-          avatarUrl: user.avatar || assets.avatar, // 🔐 Use user's saved avatar first
-          color: assets.color,
-          password: user.password
-        };
-      });
-      setProfiles(mappedProfiles);
+      setProfiles(mapUsersToProfiles(displayUsers));
     } else {
       setProfiles(PROFILES);
     }
-  }, [users, lastUpdate, rememberedUser, isSingleUserMode]);
+  }, [users, pinnedUsers, showAllUsers, hasPinnedUsers, lastUpdate, rememberedUser, isSingleUserMode]);
 
   const handleProfileSelect = (profile: Profile) => {
+    if (showAllUsers && hasPinnedUsers && onPinUser && !pinnedUserIds.has(profile.id) && profile.id !== 'bootstrap_manager') {
+      onPinUser(profile.id);
+    }
     setSelectedProfile(profile);
     setPassword('');
     setError(false);
+  };
+
+  const handleTogglePin = (event: React.MouseEvent, profile: Profile) => {
+    event.stopPropagation();
+    if (profile.id === 'bootstrap_manager') return;
+
+    if (pinnedUserIds.has(profile.id)) {
+      onUnpinUser?.(profile.id);
+    } else {
+      onPinUser?.(profile.id);
+    }
   };
 
   const handlePasswordSubmit = async () => {
@@ -277,7 +310,7 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
 
   return (
     <div 
-      className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900"
+      className="relative min-h-screen w-full overflow-hidden bg-linear-to-br from-slate-900 via-blue-900 to-slate-900"
       onMouseMove={handleMouseMove}
     >
       {/* Animated Background */}
@@ -327,6 +360,15 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="flex flex-col items-center gap-6"
               >
+                {hasPinnedUsers && showAllUsers && (
+                  <button
+                    onClick={() => setShowAllUsers(false)}
+                    className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white/90 text-sm transition-colors"
+                  >
+                    عرض المستخدمين المثبّتين
+                  </button>
+                )}
+
                 {/* Horizontal Avatar Row */}
                 <div className="flex items-center justify-center gap-8 flex-wrap max-w-4xl">
                   {profiles.map((profile, index) => (
@@ -340,6 +382,20 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
                     >
                       {/* Circular Avatar */}
                       <div className="relative">
+                        {(hasPinnedUsers || showAllUsers) && profile.id !== 'bootstrap_manager' && (
+                          <button
+                            onClick={(event) => handleTogglePin(event, profile)}
+                            className={`absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full border flex items-center justify-center transition-all ${
+                              pinnedUserIds.has(profile.id)
+                                ? 'bg-amber-500/90 border-amber-300 text-black hover:bg-amber-400'
+                                : 'bg-black/50 border-white/30 text-white hover:bg-white/20'
+                            }`}
+                            title={pinnedUserIds.has(profile.id) ? 'إلغاء التثبيت' : 'تثبيت المستخدم'}
+                            aria-label={pinnedUserIds.has(profile.id) ? 'إلغاء التثبيت' : 'تثبيت المستخدم'}
+                          >
+                            {pinnedUserIds.has(profile.id) ? <PinOff size={13} /> : <Pin size={13} />}
+                          </button>
+                        )}
                         <motion.div
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
@@ -368,6 +424,29 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
                       </div>
                     </motion.button>
                   ))}
+
+                  {hasPinnedUsers && !showAllUsers && (
+                    <motion.button
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: profiles.length * 0.07 }}
+                      onClick={() => setShowAllUsers(true)}
+                      className="group relative flex flex-col items-center gap-3 cursor-pointer"
+                    >
+                      <div className="relative">
+                        <motion.div
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="w-24 h-24 rounded-full overflow-hidden border-2 border-dashed border-white/30 group-hover:border-white/60 transition-all duration-200 bg-black/30 flex items-center justify-center"
+                        >
+                          <Plus size={30} className="text-white/85" />
+                        </motion.div>
+                      </div>
+                      <div className="text-lg font-semibold text-white group-hover:text-white/80 transition-colors">
+                        إضافة مستخدم
+                      </div>
+                    </motion.button>
+                  )}
                 </div>
               </motion.div>
             ) : (
@@ -383,7 +462,7 @@ export const SecurityAccessTerminal: React.FC<SecurityAccessTerminalProps> = ({
                 <motion.div
                   initial={{ scale: 0.8 }}
                   animate={{ scale: 1 }}
-                  className={`w-32 h-32 rounded-full bg-gradient-to-br ${getRoleColor(selectedProfile.role)} p-[3px] shadow-2xl`}
+                  className={`w-32 h-32 rounded-full bg-linear-to-br ${getRoleColor(selectedProfile.role)} p-[3px] shadow-2xl`}
                 >
                   <div className="w-full h-full rounded-full overflow-hidden bg-black/20 backdrop-blur-sm">
                     {selectedProfile.avatarUrl ? (

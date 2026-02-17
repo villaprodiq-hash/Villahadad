@@ -128,9 +128,28 @@
   }
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
 body {
   background-color: var(--color-background);
   color: #ffffff;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   font-family: var(--font-sans);
+}
+
+html.runtime-electron body {
+  overflow: hidden;
+}
+
+html.runtime-web body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }

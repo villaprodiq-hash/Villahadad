@@ -12,7 +12,12 @@ interface AdminHeaderProps {
   onOpenSettings?: () => void;
 }
 
-const AdminHeader: React.FC<AdminHeaderProps> = ({ title = 'لوحة القيادة', currentUser, onLogout, onOpenSettings }) => {
+const AdminHeader: React.FC<AdminHeaderProps> = ({
+  title: _title = 'لوحة القيادة',
+  currentUser: _currentUser,
+  onLogout: _onLogout,
+  onOpenSettings: _onOpenSettings,
+}) => {
   return (
      <header className="h-16 border-b border-cyan-500/10 bg-[#0B0E14]/50 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-30">
         <div className="flex items-center gap-6">

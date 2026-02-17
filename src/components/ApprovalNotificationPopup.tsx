@@ -69,7 +69,7 @@ const ApprovalNotificationPopup: React.FC<ApprovalNotificationPopupProps> = ({
   return (
     <div className="fixed inset-0 z-[400000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-[#1E1E1E] border border-yellow-500/30 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 p-4 flex items-center justify-between border-b border-yellow-500/20">
+        <div className="bg-linear-to-r from-yellow-500/20 to-orange-500/20 p-4 flex items-center justify-between border-b border-yellow-500/20">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
               <AlertTriangle size={20} className="text-yellow-500" />

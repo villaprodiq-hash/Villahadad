@@ -1,14 +1,15 @@
 
 import React, { useState } from 'react';
-import { Booking, BookingStatus, Reminder, ReminderType, StatusLabels, BookingCategory, Currency } from '../../types';
+import { Booking, BookingStatus, Reminder, StatusLabels, BookingCategory, Currency } from '../../types';
 import {
-  Calendar, DollarSign, Package, CheckCircle2, Clock, User, Bell, Plus,
-  Camera, Monitor, Truck, Sparkles, Wand2, Users, Building, Shirt, Trash2,
-  ArrowRight, Edit2, Copy, Check, MoreHorizontal, Phone, Mail,
-  ExternalLink, PhoneCall, FileText, Gift, Heart, Home, MessageCircle,
-  Image as ImageIcon, MapPin, Music, Star, Video, Zap, AlertTriangle, Briefcase,
-  Mic, Smile, Meh, Frown, Sun, Sunset, Timer, ListChecks, Wallet, HardDrive, Crown,
-  Cake, Globe as Global, Coins, Grid3X3, Printer
+  Calendar, DollarSign, Package, Clock, Bell, Plus,
+  Sparkles, Users, Building, Shirt,
+  ArrowRight, Copy, Check, Phone, Mail,
+  ExternalLink, MessageCircle,
+  MapPin, Star,
+  Smile, Meh, Frown, Sun, Sunset, ListChecks, Wallet, HardDrive, Crown,
+  Coins, Grid3X3, Printer,
+  type LucideIcon
 } from 'lucide-react';
 import { ClientTransactionModal, ClientTransactionHistory } from '../client';
 import AddExtraItemModal from '../AddExtraItemModal';
@@ -16,7 +17,7 @@ import { SelectionModal } from '../session/SelectionModal';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { formatMoney } from '../../utils/formatMoney';
-import { printReceipt, ReceiptType } from '../../utils/printReceipt';
+import { printReceipt } from '../../utils/printReceipt';
 import { toast } from 'sonner';
 import ClientBadge from '../shared/ClientBadge';
 import { buildClientPortalUrl } from '../../utils/clientPortal';
@@ -32,29 +33,6 @@ interface ManagerBookingDetailsViewProps {
 
 type DetailsTab = 'client' | 'logistics' | 'financials' | 'workflow';
 
-const ICON_MAP: Record<string, any> = {
-    'Bell': Bell,
-    'DollarSign': DollarSign,
-    'Camera': Camera,
-    'Monitor': Monitor,
-    'Truck': Truck,
-    'Calendar': Calendar,
-    'FileText': FileText,
-    'Gift': Gift,
-    'Heart': Heart,
-    'Home': Home,
-    'Image': ImageIcon,
-    'MapPin': MapPin,
-    'Music': Music,
-    'Phone': Phone,
-    'Star': Star,
-    'User': User,
-    'Video': Video,
-    'Zap': Zap,
-    'AlertTriangle': AlertTriangle,
-    'Briefcase': Briefcase,
-};
-
 const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
   booking,
   reminders,
@@ -64,7 +42,6 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
   onUpdateBooking
 }) => {
   const [activeTab, setActiveTab] = useState<DetailsTab>(initialTab || 'client');
-  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [transactionRefreshKey, setTransactionRefreshKey] = useState(0);
   const [showAddExtraItemModal, setShowAddExtraItemModal] = useState(false);
@@ -109,12 +86,12 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
       });
     } else {
       // Different currency: store separately (do NOT mix into totalAmount)
-      const currentAddOnTotal = (booking as any).addOnTotal || 0;
+      const currentAddOnTotal = booking.addOnTotal || 0;
       onUpdateBooking(booking.id, {
         addOnTotal: currentAddOnTotal + amount,
         originalPackagePrice: booking.originalPackagePrice || booking.totalAmount,
         details: { ...booking.details, extraItems: updatedExtraItems },
-      } as any);
+      });
     }
 
     toast.success('تم إضافة الخدمة الإضافية بنجاح');
@@ -123,6 +100,10 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
   const clientSentiment = getSentiment(booking.clientId);
   const SentimentIcon = clientSentiment.icon;
   const remainingBalance = booking.totalAmount - booking.paidAmount;
+  const appliedDiscount = booking.details?.discount;
+  const hasAppliedDiscount = Boolean(
+    appliedDiscount && Number(appliedDiscount.discountAmount || 0) > 0
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12" dir="rtl">
@@ -250,7 +231,7 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
                                         icon={ExternalLink} 
                                         label="بوابة العميل" 
                                         value={buildClientPortalUrl(booking.client_token)} 
-                                        color="rose" 
+                                        color="emerald" 
                                     />
                                 )}
                             </div>
@@ -421,11 +402,41 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
                         </div>
 
                         {/* الإجمالي + المدفوع + المتبقي */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl border border-gray-200">
-                            <FinancialStat label="المبلغ الواصل" value={formatMoney(booking.totalAmount, booking.currency)} color="text-gray-900" />
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-linear-to-r from-gray-50 to-gray-100 rounded-2xl border border-gray-200">
+                            <FinancialStat label={hasAppliedDiscount ? "الإجمالي بعد الخصم" : "المبلغ الواصل"} value={formatMoney(booking.totalAmount, booking.currency)} color="text-gray-900" />
                             <FinancialStat label="المدفوع" value={formatMoney(booking.paidAmount, booking.currency)} color="text-emerald-600" />
                             <FinancialStat label="المتبقي" value={formatMoney(remainingBalance, booking.currency)} color={remainingBalance > 0 ? "text-rose-600" : "text-gray-400"} />
                         </div>
+
+                        {hasAppliedDiscount && appliedDiscount && (
+                            <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
+                                <p className="text-[10px] font-black text-amber-700 uppercase">تفاصيل الخصم</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="rounded-xl border border-amber-200 bg-white px-3 py-2">
+                                        <p className="text-[10px] text-gray-500 font-bold">قبل الخصم</p>
+                                        <p className="text-xs font-black text-gray-900">
+                                            {formatMoney(appliedDiscount.subtotalAmount, booking.currency)}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-amber-200 bg-white px-3 py-2">
+                                        <p className="text-[10px] text-gray-500 font-bold">الخصم</p>
+                                        <p className="text-xs font-black text-rose-600">
+                                            -{formatMoney(appliedDiscount.discountAmount, booking.currency)}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                                        <p className="text-[10px] text-emerald-700 font-bold">بعد الخصم</p>
+                                        <p className="text-xs font-black text-emerald-700">
+                                            {formatMoney(booking.totalAmount, booking.currency)}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-[11px] text-amber-800 flex flex-wrap items-center gap-2 font-bold">
+                                    <span>الكود: {appliedDiscount.code}</span>
+                                    {appliedDiscount.reason ? <span className="text-gray-600">السبب: {appliedDiscount.reason}</span> : null}
+                                </div>
+                            </div>
+                        )}
 
                         {/* قائمة الخدمات الإضافية */}
                         {booking.details?.extraItems && booking.details.extraItems.length > 0 && (
@@ -490,7 +501,7 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
                                 onClick={() => printReceipt({
                                     booking,
                                     type: 'addon',
-                                    amount: (booking as any).addOnTotal || 0,
+                                    amount: booking.addOnTotal || 0,
                                     currency: booking.currency,
                                     description: 'مبلغ الخدمات الإضافية',
                                 })}
@@ -651,31 +662,43 @@ const ManagerBookingDetailsView: React.FC<ManagerBookingDetailsViewProps> = ({
 
 // --- Subcomponents (Light Theme Versions) ---
 
-const SocialContactItem = ({ icon: Icon, label, value, color, isWhatsApp }: any) => {
-    const colors: any = {
-        blue: 'text-blue-600 bg-blue-50 border-blue-100',
-        emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100'
-    };
+type SocialContactColor = 'blue' | 'emerald';
 
-    return (
-        <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-100 group/social hover:bg-gray-100 transition-all font-bold">
-            <div className="flex items-center gap-2 min-w-0">
-                <div className={`p-1.5 rounded-lg ${colors[color] || colors.blue}`}>
-                    <Icon size={12} />
-                </div>
-                <div className="min-w-0">
-                    <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter leading-none mb-0.5">{label}</p>
-                    <p className="text-[10px] font-black text-gray-900 truncate" dir="ltr">{value}</p>
-                </div>
-            </div>
-            <button onClick={() => { navigator.clipboard.writeText(value); }} className="p-1 text-gray-400 hover:text-gray-900 rounded-lg opacity-0 group-hover/social:opacity-100">
-                <Copy size={10} />
-            </button>
+const SocialContactItem = ({
+  icon: Icon,
+  label,
+  value,
+  color,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  color: SocialContactColor;
+}) => {
+  const colors: Record<SocialContactColor, string> = {
+    blue: 'text-blue-600 bg-blue-50 border-blue-100',
+    emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+  };
+
+  return (
+    <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-100 group/social hover:bg-gray-100 transition-all font-bold">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className={`p-1.5 rounded-lg ${colors[color]}`}>
+          <Icon size={12} />
         </div>
-    );
+        <div className="min-w-0">
+          <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter leading-none mb-0.5">{label}</p>
+          <p className="text-[10px] font-black text-gray-900 truncate" dir="ltr">{value}</p>
+        </div>
+      </div>
+      <button onClick={() => { navigator.clipboard.writeText(value); }} className="p-1 text-gray-400 hover:text-gray-900 rounded-lg opacity-0 group-hover/social:opacity-100">
+        <Copy size={10} />
+      </button>
+    </div>
+  );
 };
 
-const MiniStat = ({ label, value, icon: Icon }: any) => (
+const MiniStat = ({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) => (
     <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 flex flex-col items-center text-center font-bold">
         <Icon size={12} className="text-gray-400 mb-1" />
         <p className="text-[9px] font-black text-gray-900 font-mono">{value}</p>
@@ -683,7 +706,7 @@ const MiniStat = ({ label, value, icon: Icon }: any) => (
     </div>
 );
 
-const InfoRow = ({ label, value, icon: Icon }: any) => (
+const InfoRow = ({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) => (
     <div className="flex items-center gap-2 font-bold">
         <div className="p-1.5 bg-blue-50 rounded-lg text-blue-600">
             <Icon size={12} />
@@ -695,28 +718,6 @@ const InfoRow = ({ label, value, icon: Icon }: any) => (
     </div>
 );
 
-const ActivityRow = ({ icon: Icon, title, date, status, isMissed, color }: any) => {
-    const colorClasses: any = {
-        blue: 'text-blue-600 bg-blue-50 border-blue-100',
-        emerald: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-        rose: 'text-rose-600 bg-rose-50 border-rose-100'
-    };
-    return (
-        <div className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-all group/activity font-bold">
-            <div className={`p-2 rounded-lg ${isMissed ? 'bg-rose-50 text-rose-500' : 'bg-gray-100 text-gray-500'}`}>
-                <Icon size={14} />
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black text-gray-800 truncate">{title}</p>
-                <p className="text-[8px] font-black text-gray-400 uppercase">{date}</p>
-            </div>
-            <div className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isMissed ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}`}>
-                {status}
-            </div>
-        </div>
-    );
-};
-
 const FinancialStat = ({ label, value, color }: { label: string, value: string, color: string }) => (
     <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 shadow-inner flex flex-col items-center justify-center font-bold">
         <p className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{label}</p>
@@ -724,8 +725,8 @@ const FinancialStat = ({ label, value, color }: { label: string, value: string, 
     </div>
 );
 
-const InfoItem = ({ label, value, icon, color }: { label: string, value: string, icon: any, color: 'blue' | 'amber' | 'emerald' | 'rose' }) => {
-    const iconColors: any = {
+const InfoItem = ({ label, value, icon, color }: { label: string, value: string, icon: React.ReactNode, color: 'blue' | 'amber' | 'emerald' | 'rose' }) => {
+    const iconColors: Record<'blue' | 'amber' | 'emerald' | 'rose', string> = {
         blue: 'text-blue-600 bg-blue-50',
         amber: 'text-amber-600 bg-amber-50',
         emerald: 'text-emerald-600 bg-emerald-50',

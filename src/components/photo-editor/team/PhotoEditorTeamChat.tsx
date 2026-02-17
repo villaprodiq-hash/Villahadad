@@ -2,9 +2,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, UserRole } from '../../../types';
 import { 
-  MessageSquare, CheckSquare, Activity, Send, User as UserIcon, 
-  MoreVertical, Clock, CheckCircle2, Circle, Plus, Hash, Sparkles, Smile,
-  Image as ImageIcon, Mic, FileText, Download, Play, Music, Paperclip, Users
+  MessageSquare, CheckSquare, Send, User as UserIcon, 
+  MoreVertical, CheckCircle2, Plus, Hash, Sparkles, Smile,
+  Mic, FileText, Download, Play, Music, Paperclip, Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReceptionPageWrapper from '../../reception/layout/ReceptionPageWrapper';
@@ -49,13 +49,6 @@ const AVAILABLE_ROLES = [
   { label: 'مصور', value: UserRole.PHOTO_EDITOR },
   { label: 'مونتير', value: UserRole.VIDEO_EDITOR },
   { label: 'طابعة', value: UserRole.PRINTER },
-];
-
-const ACTIVITY_LOG = [
-  { id: 1, user: 'أحمد (مصور)', action: 'قام برفع 450 صورة', target: 'عرس محمد وسارة', time: 'منذ 15 دقيقة' },
-  { id: 2, user: 'ماي (محاسبة)', action: 'أكدت استلام دفعة', target: '$500 - نقدي', time: 'منذ ساعة' },
-  { id: 3, user: 'أحمد حداد', action: 'أنشأ حجز جديد', target: 'جلسة تصوير مودل', time: 'منذ ساعتين' },
-  { id: 4, user: 'System', action: 'نسخ احتياطي تلقائي', target: 'NAS Server', time: 'أمس 11:00 PM' },
 ];
 
 const SMART_SUGGESTIONS = [
@@ -163,6 +156,7 @@ const PhotoEditorTeamChat: React.FC<PhotoEditorTeamChatProps> = ({ currentUser, 
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
+                const messageType: Message['type'] = file.type.startsWith('image/') ? 'image' : 'file';
                 const msg: Message = {
                   id: Date.now(),
                   user: currentUser?.name || 'أنا',
@@ -170,7 +164,7 @@ const PhotoEditorTeamChat: React.FC<PhotoEditorTeamChatProps> = ({ currentUser, 
                   time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                   isMe: true,
                   to: selectedUserId,
-                  type: (file.type.startsWith('image/') ? 'image' : 'file') as any
+                  type: messageType
                 };
                 setMessages([...messages, msg]);
               }
@@ -234,7 +228,7 @@ const PhotoEditorTeamChat: React.FC<PhotoEditorTeamChatProps> = ({ currentUser, 
             </div>
 
             <div className={`flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar ${isManager ? 'bg-white/30' : 'bg-[#1a1c22]/50'} no-scrollbar`}>
-                {filteredMessages.map((msg: any) => (
+                {filteredMessages.map((msg) => (
                     <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'} group/msg animate-in slide-in-from-bottom-2 duration-300`}>
                         <div className={`flex items-end gap-3 max-w-[85%] ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                             {!msg.isMe && (
@@ -511,7 +505,7 @@ const PhotoEditorTeamChat: React.FC<PhotoEditorTeamChatProps> = ({ currentUser, 
                                                               initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                                               animate={{ opacity: 1, scale: 1, y: 0 }}
                                                               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                                                              className="absolute top-full left-0 mt-2 w-64 p-3 bg-[#2a2d36] rounded-xl border border-white/10 shadow-2xl z-[100] origin-top-left"
+                                                              className="absolute top-full left-0 mt-2 w-64 p-3 bg-[#2a2d36] rounded-xl border border-white/10 shadow-2xl z-100 origin-top-left"
                                                           >
                                                               <form onSubmit={handleAddTask} className="space-y-3">
                                                                   <div>

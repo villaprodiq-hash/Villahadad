@@ -88,7 +88,7 @@ export async function secureLogin(credentials: AuthCredentials): Promise<AuthRes
     }
 
     // 5. Create Supabase session (for RLS)
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password: dbUser.password_hash || password, // Use actual hashed password
     });
@@ -177,6 +177,9 @@ export async function changePassword(
     }
 
     const currentUser = users[0];
+    if (!currentUser) {
+      throw new Error('المستخدم غير موجود');
+    }
 
     // 3. Verify current password
     const isValid = await PasswordService.verify(currentPassword, currentUser.password);

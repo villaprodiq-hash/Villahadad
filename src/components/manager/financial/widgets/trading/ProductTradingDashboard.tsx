@@ -1,22 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { Booking, PACKAGES_DATA } from '../../../../../types';
+import { Booking, Expense, PACKAGES_DATA } from '../../../../../types';
 import {
-  TrendingUp, TrendingDown, Filter, LayoutGrid, List, Users, Globe, Package,
-  Calendar, DollarSign, ArrowUpRight, ArrowDownRight, Activity, PieChart, BarChart3,
-  Printer, RefreshCw, Zap, Table2
+  Users, Globe, Package, Calendar, DollarSign, ArrowUpRight, ArrowDownRight, Activity,
+  BarChart3, Printer, Table2
 } from 'lucide-react';
-import { format, subDays, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { format, subDays, startOfDay } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import AnalyticsAreaChart from './view/AnalyticsAreaChart';
 import { cn } from '../../../../../lib/utils';
-import { AnimatePresence, motion } from 'framer-motion';
 
 interface ProductTradingDashboardProps {
     bookings: Booking[];
+    expenses?: Expense[];
     onUpdateBooking?: (id: string, updates: Partial<Booking>) => void;
-    // expenses?: any[]; 
-    onAddExpense?: any;
-    onDeleteExpense?: any;
+    onAddExpense?: (...args: unknown[]) => void;
+    onDeleteExpense?: (...args: unknown[]) => void;
 }
 
 // --- UTILS ---
@@ -164,9 +162,6 @@ const ProductTradingDashboard: React.FC<ProductTradingDashboardProps> = ({ booki
              }
         });
 
-        const totalUSD = stats.revenueUSD || 1;
-        const totalIQD = stats.revenueIQD || 1;
-
         return Object.values(groups)
             .sort((a, b) => (b.revenueUSD + b.revenueIQD) - (a.revenueUSD + a.revenueIQD))
             .map((item, index) => ({
@@ -176,14 +171,15 @@ const ProductTradingDashboard: React.FC<ProductTradingDashboardProps> = ({ booki
                 growthIQD: item.prevRevenueIQD > 0 ? ((item.revenueIQD - item.prevRevenueIQD) / item.prevRevenueIQD) * 100 : 0,
             }));
 
-    }, [filteredBookings, previousBookings, groupBy, stats.revenueUSD, stats.revenueIQD]);
+    }, [filteredBookings, previousBookings, groupBy]);
 
     // --- 4. CHART DATA (USD only for chart - single currency) ---
     const chartData = useMemo(() => {
         const mapUSD: Record<string, number> = {};
         const mapIQD: Record<string, number> = {};
         filteredBookings.forEach(b => {
-             const d = b.shootDate.split('T')[0];
+             if (!b.shootDate) return;
+             const d = b.shootDate.slice(0, 10);
              if (b.currency === 'USD') mapUSD[d] = (mapUSD[d] || 0) + (b.paidAmount || 0);
              else mapIQD[d] = (mapIQD[d] || 0) + (b.paidAmount || 0);
         });
@@ -330,7 +326,7 @@ const ProductTradingDashboard: React.FC<ProductTradingDashboardProps> = ({ booki
                             ].map(g => (
                                 <button
                                     key={g.id}
-                                    onClick={() => setGroupBy(g.id as any)}
+                                    onClick={() => setGroupBy(g.id as 'PRODUCT' | 'SOURCE' | 'STAFF')}
                                     className={cn(
                                         "py-2 px-3 text-[11px] font-bold rounded-xl transition-all text-right flex items-center gap-3",
                                         groupBy === g.id
@@ -382,7 +378,7 @@ const ProductTradingDashboard: React.FC<ProductTradingDashboardProps> = ({ booki
                                 </thead>
                                 <tbody className="text-xs">
                                     {tableData.length > 0 ? (
-                                        tableData.map((item, i) => (
+                                        tableData.map(item => (
                                             <tr key={item.id} className="border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
                                                 <td className="py-3 px-4 text-center text-gray-400 font-bold">{item.rank}</td>
                                                 <td className="py-3 px-4">

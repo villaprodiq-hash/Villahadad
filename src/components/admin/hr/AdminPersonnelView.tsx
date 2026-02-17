@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User as UserIcon, ShieldAlert, Award, FileText, 
-  Search, AlertCircle, Plus, MoreHorizontal 
+  Search
 } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
-import { User, UserRole, RoleLabels } from '../../../types';
+import { User, RoleLabels } from '../../../types';
 import { toast } from 'sonner';
 
 const AdminPersonnelView = () => {

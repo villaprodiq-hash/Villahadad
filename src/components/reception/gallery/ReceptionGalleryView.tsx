@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Booking, ImageRetouchTag, RetouchOption, RetouchOptionLabels } from '../../../types';
-import { Search, Image as ImageIcon, ArrowRight, Heart, X, ChevronLeft, ChevronRight, MessageSquare, HelpCircle, ZoomIn, ZoomOut, Tag, Maximize2, Move } from 'lucide-react';
+import { Search, Image as ImageIcon, ArrowRight, Heart, X, ChevronLeft, ChevronRight, MessageSquare, HelpCircle, ZoomIn, Tag, Move } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReceptionPageWrapper from '../layout/ReceptionPageWrapper';
 
@@ -11,8 +11,16 @@ interface GalleryViewProps {
   isManager?: boolean;
 }
 
+type GalleryFilter = 'all' | 'selected' | 'maybe' | 'rejected';
+
+interface GalleryImage {
+  id: string;
+  title?: string;
+  url: string;
+}
+
 // ✅ PRODUCTION: No mock images - will show empty state until real images are uploaded
-const getBookingImages = (booking: any) => {
+const getBookingImages = (booking: Booking & { images?: GalleryImage[] }): GalleryImage[] => {
     // Real images would come from booking.images or a gallery service
     // For now, return empty array to show "no images" state
     return booking?.images || [];
@@ -21,7 +29,7 @@ const getBookingImages = (booking: any) => {
 const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReception = true, isManager = false }) => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewFilter, setViewFilter] = useState<'all' | 'selected' | 'maybe' | 'rejected'>('all');
+  const [viewFilter, setViewFilter] = useState<GalleryFilter>('all');
   const [colorLabels, setColorLabels] = useState<Record<string, string>>({});
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -31,8 +39,6 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
   const [showTagMenu, setShowTagMenu] = useState(false);
   const [retouchTags, setRetouchTags] = useState<ImageRetouchTag[]>([]);
   const imageContainerRef = useRef<HTMLDivElement>(null);
-  const [showHeader, setShowHeader] = useState(true);
-  const headerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const images = useMemo(() => selectedBooking ? getBookingImages(selectedBooking) : [], [selectedBooking]);
 
@@ -49,7 +55,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
       setColorLabels(prev => ({ ...prev, [id]: prev[id] === color ? 'none' : color }));
   };
 
-  const navigate = (dir: number) => {
+  const navigate = useCallback((dir: number) => {
       if (lightboxIndex === null) return;
       let next = lightboxIndex + dir;
       
@@ -60,7 +66,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
       setLightboxIndex(next);
       setZoomLevel(100);
       setPanPosition({ x: 0, y: 0 });
-  };
+  }, [filteredImages.length, lightboxIndex]);
 
   const handleZoom = (delta: number) => {
     setZoomLevel(prev => Math.max(50, Math.min(300, prev + delta)));
@@ -141,29 +147,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [lightboxIndex, zoomLevel]); // Added zoomLevel to dependency to access current state in Escape
-
-  // Auto-hide header after 2 seconds, show on mouse move
-  useEffect(() => {
-    if (lightboxIndex === null) return;
-    
-    // Hide header after 2 seconds
-    const timeout = setTimeout(() => {
-      setShowHeader(false);
-    }, 2000);
-    
-    return () => clearTimeout(timeout);
-  }, [lightboxIndex]);
-
-  const handleMouseMoveInLightbox = () => {
-    setShowHeader(true);
-    if (headerTimeoutRef.current) {
-      clearTimeout(headerTimeoutRef.current);
-    }
-    headerTimeoutRef.current = setTimeout(() => {
-      setShowHeader(false);
-    }, 2000);
-  };
+  }, [lightboxIndex, zoomLevel, navigate]); // Added zoomLevel to dependency to access current state in Escape
 
   // Hide header when lightbox is open
   useEffect(() => {
@@ -228,7 +212,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
   return (
     <ReceptionPageWrapper isReception={isReception} isManager={isManager}>
         <div className="flex flex-col h-full overflow-hidden relative" dir="rtl">
-      <div className={`flex items-center justify-between mb-4 ${isManager ? 'bg-white/60 backdrop-blur-3xl border-white/40 ring-1 ring-white/60 text-gray-800' : 'bg-[#262626]/80 border-white/5'} p-4 rounded-[2rem] border`}>
+      <div className={`flex items-center justify-between mb-4 ${isManager ? 'bg-white/60 backdrop-blur-3xl border-white/40 ring-1 ring-white/60 text-gray-800' : 'bg-[#262626]/80 border-white/5'} p-4 rounded-4xl border`}>
          <div className="flex items-center gap-3">
             {selectedBooking && <button onClick={()=>setSelectedBooking(null)} className={`p-2 ${isManager ? 'bg-white/50 text-gray-500 hover:text-gray-800' : 'bg-white/5 text-gray-400 hover:text-white'} rounded-lg`}><ArrowRight size={16} className="rotate-180" /></button>}
             <h2 className={`text-lg font-bold ${isManager ? 'text-gray-800' : 'text-white'} flex items-center gap-2`}>
@@ -239,7 +223,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
          <div className="flex gap-2">
             {selectedBooking && (
                 <div className={`flex ${isManager ? 'bg-gray-100/50' : 'bg-black/20'} p-1 rounded-lg`}>
-                    {['all', 'selected', 'maybe', 'rejected'].map((f: any) => (
+                    {(['all', 'selected', 'maybe', 'rejected'] as const).map((f) => (
                         <button key={f} onClick={()=>setViewFilter(f)} className={`px-3 py-1 rounded text-[10px] font-bold ${viewFilter === f ? (isManager ? 'bg-amber-500 text-white' : 'bg-pink-500 text-white') : (isManager ? 'text-gray-500 hover:text-gray-800' : 'text-gray-500')}`}>
                             {f === 'all' ? 'الكل' : f === 'selected' ? 'مختارة' : f === 'maybe' ? 'محتار' : 'مرفوضة'}
                         </button>
@@ -347,7 +331,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
                           {/* Right Zone (Previous in RTL) */}
                           <div 
                              onClick={(e)=>{e.stopPropagation(); navigate(-1)}} 
-                             className="fixed right-0 top-0 bottom-0 w-[15%] z-[100] cursor-pointer flex items-center justify-end pr-4 opacity-0 hover:opacity-100 transition-opacity duration-300 group"
+                             className="fixed right-0 top-0 bottom-0 w-[15%] z-100 cursor-pointer flex items-center justify-end pr-4 opacity-0 hover:opacity-100 transition-opacity duration-300 group"
                           >
                               <div className="p-3 bg-black/40 rounded-full text-white backdrop-blur-md group-hover:bg-black/60 group-hover:scale-110 transition-all">
                                 <ChevronRight size={40} />
@@ -357,7 +341,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
                           {/* Left Zone (Next in RTL) */}
                           <div 
                              onClick={(e)=>{e.stopPropagation(); navigate(1)}} 
-                             className="fixed left-0 top-0 bottom-0 w-[15%] z-[100] cursor-pointer flex items-center justify-start pl-4 opacity-0 hover:opacity-100 transition-opacity duration-300 group"
+                             className="fixed left-0 top-0 bottom-0 w-[15%] z-100 cursor-pointer flex items-center justify-start pl-4 opacity-0 hover:opacity-100 transition-opacity duration-300 group"
                           >
                               <div className="p-3 bg-black/40 rounded-full text-white backdrop-blur-md group-hover:bg-black/60 group-hover:scale-110 transition-all">
                                 <ChevronLeft size={40} />
@@ -394,7 +378,7 @@ const ReceptionGalleryView: React.FC<GalleryViewProps> = ({ bookings, isReceptio
                   </div>
 
                   {/* Bottom Actions */}
-                  <div className="p-6 flex flex-col items-center gap-4 bg-gradient-to-t from-black to-transparent" onClick={e=>e.stopPropagation()}>
+                  <div className="p-6 flex flex-col items-center gap-4 bg-linear-to-t from-black to-transparent" onClick={e=>e.stopPropagation()}>
                       
                       {/* Retouch Tags Display */}
                       {currentImageTags.length > 0 && (

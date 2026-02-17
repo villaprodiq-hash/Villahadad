@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Play, Eye } from 'lucide-react';
 
 interface EditingProject {
@@ -37,11 +37,11 @@ const PhotoEditorProjectCard: React.FC<ProjectCardProps> = ({
       exit={{ opacity: 0, x: 20 }}
       transition={{ delay: index * 0.05 }}
       onClick={() => onSelect(project)}
-      className="group p-2 rounded-xl bg-gradient-to-br from-white/5 to-white/10 border border-white/10 hover:border-blue-400/50 transition-all cursor-pointer"
+      className="group p-2 rounded-xl bg-linear-to-br from-white/5 to-white/10 border border-white/10 hover:border-blue-400/50 transition-all cursor-pointer"
     >
       <div className="flex items-center gap-2">
         {/* Thumbnail */}
-        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border-2 border-blue-400/30 flex items-center justify-center text-2xl shadow-lg">
+        <div className="w-12 h-12 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 border-2 border-blue-400/30 flex items-center justify-center text-2xl shadow-lg">
           {project.thumbnail}
         </div>
 
@@ -67,7 +67,7 @@ const PhotoEditorProjectCard: React.FC<ProjectCardProps> = ({
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${(project.editedImages / project.totalImages) * 100}%` }}
-                className={`h-full bg-gradient-to-r ${
+                className={`h-full bg-linear-to-r ${
                   project.status === 'approved' ? 'from-emerald-500 to-emerald-600' :
                   project.status === 'in-progress' ? 'from-blue-500 to-blue-600' :
                   'from-amber-500 to-amber-600'

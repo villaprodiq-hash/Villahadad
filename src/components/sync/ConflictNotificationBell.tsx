@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ConflictService, ConflictRecord } from '../../services/sync/ConflictService';
+import { ConflictService } from '../../services/sync/ConflictService';
 import { ConflictResolverModal } from './ConflictResolverModal';
-import { Bell, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 export const ConflictNotificationBell: React.FC<{ managerName?: string }> = ({ managerName }) => {
     const [count, setCount] = useState(0);

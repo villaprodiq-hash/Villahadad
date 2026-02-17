@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { LucideIcon, ArrowRight } from 'lucide-react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 
@@ -47,7 +47,7 @@ const StatCard: React.FC<StatCardProps> = ({
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      className="bg-white rounded-[1.5rem] p-6 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden"
+      className="bg-white rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden"
     >
       {/* Decorative Blur Background (Subtle) */}
       <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-5 blur-2xl transition-all group-hover:scale-150 ${iconBg.replace('bg-', 'bg-')}`}></div>

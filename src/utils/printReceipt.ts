@@ -301,7 +301,7 @@ export const printReceipt = (data: ReceiptData) => {
 
     <div class="signatures">
       <div class="sig-box">
-        <div class="sig-line">توقيع المستلم</div>
+        <div class="sig-line">توقيع المستلم (${receivedBy})</div>
       </div>
       <div class="sig-box">
         <div class="sig-line">توقيع العميل</div>

@@ -6,13 +6,13 @@ interface SyncQueueItem {
   id: string;
   action: 'create' | 'update' | 'delete';
   entity: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   timestamp: number;
   retryCount: number;
 }
 
 type OfflineEvent = 'status_change' | 'sync_start' | 'sync_complete' | 'sync_error' | 'server_down';
-type Listener = (event: OfflineEvent, data?: any) => void;
+type Listener = (event: OfflineEvent, data?: unknown) => void;
 
 class OfflineManagerService {
   private isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
@@ -85,9 +85,9 @@ class OfflineManagerService {
       // This is much more accurate than pinging localhost
       if (
         typeof window !== 'undefined' &&
-        (window as any).electronAPI?.fileSystem?.checkNasStatus
+        window.electronAPI?.fileSystem?.checkNasStatus
       ) {
-        const nasStatus = await (window as any).electronAPI.fileSystem.checkNasStatus();
+        const nasStatus = await window.electronAPI.fileSystem.checkNasStatus();
 
         if (nasStatus && nasStatus.connected) {
           if (!this.isOnline) this.handleConnectionChange(true);
@@ -96,7 +96,7 @@ class OfflineManagerService {
           this.notifyListeners('server_down');
         }
       }
-    } catch (e) {
+    } catch (_error) {
       if (this.isOnline) this.handleConnectionChange(false);
     }
   }
@@ -230,9 +230,12 @@ class OfflineManagerService {
   }
 
   public hasPendingItem(entityId: string): boolean {
-    return this.syncQueue.some(
-      item => (item.data && item.data.id === entityId) || (item.data && item.data.ID === entityId)
-    );
+    return this.syncQueue.some(item => {
+      if (!item.data) return false;
+      const data = item.data as Record<string, unknown>;
+      const candidateId = data.id ?? data.ID;
+      return typeof candidateId === 'string' && candidateId === entityId;
+    });
   }
 
   public subscribe(listener: Listener) {
@@ -242,7 +245,7 @@ class OfflineManagerService {
     };
   }
 
-  private notifyListeners(event: OfflineEvent, data?: any) {
+  private notifyListeners(event: OfflineEvent, data?: unknown) {
     this.listeners.forEach(l => l(event, data));
   }
 }

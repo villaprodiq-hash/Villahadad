@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Wand2, Sparkles, Copy, RefreshCw, Send, Check } from 'lucide-react';
 import { electronBackend } from '../services/mockBackend';
 import { BookingStatus } from '../types';
@@ -26,16 +26,7 @@ const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   const [copied, setCopied] = useState(false);
   const nodeRef = useRef(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      handleGenerate();
-    } else {
-      setGeneratedText('');
-      setCopied(false);
-    }
-  }, [isOpen]);
-
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     setIsGenerating(true);
     setGeneratedText('');
 
@@ -67,7 +58,16 @@ const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [bookingStatus, clientName, outstandingAmount]);
+
+  useEffect(() => {
+    if (isOpen) {
+      void handleGenerate();
+    } else {
+      setGeneratedText('');
+      setCopied(false);
+    }
+  }, [isOpen, handleGenerate]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(generatedText);

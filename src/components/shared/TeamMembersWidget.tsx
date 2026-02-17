@@ -1,7 +1,7 @@
 import React from 'react';
-import { Users, Circle, MoreHorizontal } from 'lucide-react';
+import { Users, MoreHorizontal } from 'lucide-react';
 
-export const TeamMembersWidget: React.FC<{ isManager?: boolean }> = ({ isManager = false }) => {
+export const TeamMembersWidget: React.FC<{ isManager?: boolean }> = ({ isManager: _isManager = false }) => {
   const team = [
     { name: 'علي مصطفى', role: 'مصور رئيسي', status: 'online', avatar: 'https://i.pravatar.cc/150?u=ali' },
     { name: 'سارة خالد', role: 'مونتير', status: 'busy', avatar: 'https://i.pravatar.cc/150?u=sara' },
@@ -10,7 +10,7 @@ export const TeamMembersWidget: React.FC<{ isManager?: boolean }> = ({ isManager
   ];
 
   return (
-    <div className="bg-white/60 backdrop-blur-3xl rounded-[2rem] shadow-[0_10px_30px_rgba(0,0,0,0.03)] border border-white/40 ring-1 ring-white/60 p-4 flex flex-col h-full overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
+    <div className="bg-white/60 backdrop-blur-3xl rounded-4xl shadow-[0_10px_30px_rgba(0,0,0,0.03)] border border-white/40 ring-1 ring-white/60 p-4 flex flex-col h-full overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
       <div className="flex justify-between items-center mb-2">
         <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
           <Users size={16} className="text-amber-500" />

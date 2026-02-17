@@ -93,7 +93,8 @@ describe('EntityMemory', () => {
 
       const results = entityMemory.searchEntities('john');
       expect(results).toHaveLength(1);
-      expect(results[0].name).toBe('John Doe');
+      expect(results[0]).toBeDefined();
+      expect(results[0]?.name).toBe('John Doe');
     });
   });
 

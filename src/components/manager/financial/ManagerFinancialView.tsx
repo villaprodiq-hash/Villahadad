@@ -4,7 +4,8 @@ import ManagerFinancialOverview from './ManagerFinancialOverview';
 import ManagerAccountsView from './ManagerAccountsView';
 import ManagerPackagesView from './ManagerPackagesView';
 import ManagerPaymentGatewayView from './ManagerPaymentGatewayView'; // ✅ New Import
-import { LayoutDashboard, TableProperties, Package, CreditCard } from 'lucide-react'; // Added CreditCard
+import ManagerDiscountCodesView from './ManagerDiscountCodesView';
+import { LayoutDashboard, TableProperties, Package, CreditCard, BadgePercent } from 'lucide-react'; // Added CreditCard
 
 interface FinancialViewProps {
   bookings: Booking[];
@@ -13,7 +14,7 @@ interface FinancialViewProps {
 
 const ManagerFinancialView: React.FC<FinancialViewProps> = ({ bookings, onUpdateBooking }) => {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'accounts' | 'packages' | 'payment_gateway'
+    'overview' | 'accounts' | 'packages' | 'discounts' | 'payment_gateway'
   >('overview'); // Changed default to overview to be safe
 
   return (
@@ -44,6 +45,13 @@ const ManagerFinancialView: React.FC<FinancialViewProps> = ({ bookings, onUpdate
             الباقات
           </button>
           <button
+            onClick={() => setActiveTab('discounts')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 whitespace-nowrap ${activeTab === 'discounts' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/25' : 'text-gray-500 dark:text-gray-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-300'}`}
+          >
+            <BadgePercent size={14} />
+            أكواد الخصم
+          </button>
+          <button
             onClick={() => setActiveTab('payment_gateway')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 whitespace-nowrap ${activeTab === 'payment_gateway' ? 'bg-[#C94557] text-white shadow-lg shadow-rose-500/20' : 'text-gray-500 dark:text-gray-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400'}`}
           >
@@ -61,6 +69,8 @@ const ManagerFinancialView: React.FC<FinancialViewProps> = ({ bookings, onUpdate
           <ManagerAccountsView bookings={bookings} onUpdateBooking={onUpdateBooking} />
         ) : activeTab === 'packages' ? (
           <ManagerPackagesView />
+        ) : activeTab === 'discounts' ? (
+          <ManagerDiscountCodesView />
         ) : (
           <ManagerPaymentGatewayView />
         )}

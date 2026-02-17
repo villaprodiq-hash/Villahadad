@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  LayoutGrid, CalendarCheck, Users, DollarSign, Image, 
-  LogOut, X, ChevronRight, ChevronLeft, User as UserIcon,
+  LayoutGrid, CalendarCheck, Users,
+  X, ChevronRight, ChevronLeft,
   MessageCircle, SquareKanban
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // ✅ تصحيح المسار
-import { User, UserRole } from '../../../types';
+import { User } from '../../../types';
 import ProfileDropdown from '../../shared/ProfileDropdown';
 
 interface SidebarProps {
@@ -19,7 +19,7 @@ interface SidebarProps {
   currentUser?: User;
   onLogout?: () => void;
   onOpenSettings?: () => void;
-  badges?: any;
+  badges?: Record<string, number>;
 
 }
 
@@ -66,7 +66,7 @@ const ReceptionSidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto py-4 space-y-3 custom-scrollbar px-2">
           {menuItems.filter(item => !currentUser?.preferences?.hiddenSections?.includes(item.id)).map((item) => {
             const isActive = activeSection === item.id;
-            const badgeCount = badges ? badges[item.id] : 0;
+            const badgeCount = badges?.[item.id] ?? 0;
             return (
               <div key={item.id} className="relative flex justify-center w-full">
                 <button

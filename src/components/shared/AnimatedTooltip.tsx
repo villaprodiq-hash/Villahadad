@@ -104,8 +104,6 @@ export const AvatarTooltip: React.FC<AvatarTooltipProps> = ({
     lg: 'w-20 h-20 text-2xl'
   };
 
-  const tooltipContent = designation ? `${name}\n${designation}` : name;
-
   return (
     <div
       className="avatar-tooltip-wrapper"

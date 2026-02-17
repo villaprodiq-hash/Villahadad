@@ -2,6 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { Download, RefreshCw, AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface UpdateStatusPayload {
+  status: 'idle' | 'available' | 'downloading' | 'ready' | 'error';
+  progress?: number;
+  error?: string;
+}
+
+interface UpdateBridge {
+  onUpdateStatus?: (callback: (_event: unknown, data: UpdateStatusPayload) => void) => void;
+  restartApp?: () => void;
+}
+
 const UpdateNotification: React.FC = () => {
   const [status, setStatus] = useState<'idle' | 'available' | 'downloading' | 'ready' | 'error'>(
     'idle'
@@ -10,11 +21,11 @@ const UpdateNotification: React.FC = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI as (typeof window.electronAPI & UpdateBridge) | undefined;
     if (!api) return;
 
     if (api.onUpdateStatus) {
-      api.onUpdateStatus((_event: any, data: any) => {
+      api.onUpdateStatus((_event: unknown, data: UpdateStatusPayload) => {
         setStatus(data.status);
         if (data.progress) setProgress(data.progress);
         if (data.error) setError(data.error);
@@ -23,7 +34,7 @@ const UpdateNotification: React.FC = () => {
   }, []);
 
   const handleRestart = () => {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI as (typeof window.electronAPI & UpdateBridge) | undefined;
     if (api && api.restartApp) {
       api.restartApp();
     }
@@ -37,7 +48,7 @@ const UpdateNotification: React.FC = () => {
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
-        className="fixed bottom-4 left-4 z-[9999] max-w-sm w-full"
+        className="fixed bottom-4 left-4 z-9999 max-w-sm w-full"
       >
         <div className="bg-[#1a1c22] border border-white/10 rounded-xl shadow-2xl p-4 flex items-center gap-4 relative overflow-hidden">
           <div

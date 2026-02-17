@@ -5,7 +5,7 @@ import { DollarSign, TrendingUp, CornerDownLeft } from 'lucide-react';
 const TreasuryHUD: React.FC = () => {
     return (
         <div className="h-full w-full bg-[#0B0E14]/60 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-6 flex flex-col relative overflow-hidden group">
-            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-cyan-500/5 blur-[40px] rounded-full group-hover:bg-cyan-500/10 transition-all"></div>
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-cyan-500/5 blur-2xl rounded-full group-hover:bg-cyan-500/10 transition-all"></div>
             
             <div className="flex justify-between items-start mb-8">
                 <div>

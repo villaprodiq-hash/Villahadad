@@ -5,14 +5,12 @@
  * Displays: Upload progress, bytes transferred, file count
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Cloud,
   CloudOff,
   Upload,
-  CheckCircle2,
-  Loader2,
   X,
   ChevronDown,
   Server,
@@ -55,7 +53,6 @@ export const R2UploadStatusWidget: React.FC<R2UploadStatusWidgetProps> = ({
   useEffect(() => {
     const checkR2 = async () => {
       try {
-        // @ts-ignore - electronAPI
         const status = await window.electronAPI?.sessionLifecycle?.getR2Status?.();
         setR2Enabled(status?.enabled ?? false);
       } catch (err) {
@@ -67,13 +64,16 @@ export const R2UploadStatusWidget: React.FC<R2UploadStatusWidgetProps> = ({
 
   // Listen for upload progress events
   useEffect(() => {
-    const handleProgress = (_event: any, data: UploadProgress) => {
+    const handleProgress = (eventOrData: unknown, maybeData?: UploadProgress) => {
+      const data = maybeData ?? (eventOrData as UploadProgress);
+      if (!data || typeof data.percent !== 'number') return;
       setInternalProgress(data);
       setInternalIsUploading(data.percent < 100);
     };
 
-    // @ts-ignore - electronAPI
-    const unsubscribe = window.electronAPI?.sessionLifecycle?.onIngestionProgress?.(handleProgress);
+    const unsubscribe = window.electronAPI?.sessionLifecycle?.onIngestionProgress?.(
+      data => handleProgress(data)
+    );
     
     return () => {
       unsubscribe?.();
@@ -213,7 +213,7 @@ export const R2UploadStatusWidget: React.FC<R2UploadStatusWidgetProps> = ({
                   {/* Progress Bar */}
                   <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
                     <motion.div
-                      className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full"
+                      className="h-full bg-linear-to-r from-blue-500 to-cyan-400 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${progress.percent}%` }}
                       transition={{ duration: 0.3 }}

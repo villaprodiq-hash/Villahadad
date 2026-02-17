@@ -9,7 +9,7 @@ interface ClientsStatsWidgetProps {
 const ClientsStatsWidget: React.FC<ClientsStatsWidgetProps> = ({ totalClients }) => {
   return (
     <>
-      <GlowCard className="p-4 flex items-center gap-4 border-amber-500/10 bg-gradient-to-r from-amber-500/5 to-transparent">
+      <GlowCard className="p-4 flex items-center gap-4 border-amber-500/10 bg-linear-to-r from-amber-500/5 to-transparent">
         <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
           <UserIcon size={24} />
         </div>

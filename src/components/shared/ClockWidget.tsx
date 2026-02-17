@@ -26,7 +26,7 @@ const ClockWidget: React.FC = () => {
   return (
     <div className="bg-[#1E1E1E] backdrop-blur-xl rounded-2xl p-3 border border-gray-700/5 shadow-[0_8px_32px_rgba(0,0,0,0.3)] h-full flex items-center justify-center relative overflow-hidden">
       {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-br from-white/[0.02] to-transparent pointer-events-none" />
       
       {/* Noise texture */}
       <div className="absolute inset-0 opacity-[0.06] pointer-events-none mix-blend-overlay" 
@@ -34,7 +34,7 @@ const ClockWidget: React.FC = () => {
       
       <div className="relative z-10 flex items-center gap-3">
         {/* Analog Clock - Smaller */}
-        <div className="relative w-16 h-16 flex-shrink-0">
+        <div className="relative w-16 h-16 shrink-0">
           <svg viewBox="0 0 200 200" className="w-full h-full">
             {/* Clock face */}
             <circle cx="100" cy="100" r="95" fill="#262626" stroke="#333" strokeWidth="2"/>

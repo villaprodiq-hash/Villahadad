@@ -1,6 +1,6 @@
 import React from 'react';
 import ManagerDashboardCard from './ManagerDashboardCard';
-import { useAuth } from '../../../../providers/AuthProvider';
+import { useAuth } from '../../../../hooks/useAuth';
 
 const ManagerProfileWidget = () => {
   const { currentUser } = useAuth();

@@ -72,7 +72,7 @@ const ReceptionFinancialView: React.FC<FinancialViewProps> = ({ bookings, isMana
               {/* Revenue Chart Removed - Focusing on Drawer */}
               <ReceptionWidgetCard
                 className={`p-6 ${isManager ? 'bg-white/60 backdrop-blur-3xl shadow-[0_10px_30px_rgba(0,0,0,0.03)] border-white/40 ring-1 ring-white/60 text-gray-800' : ''}`}
-                rounded={isManager ? 'rounded-[2rem]' : undefined}
+                rounded={isManager ? 'rounded-4xl' : undefined}
               >
                 <p className="text-gray-500 text-xs font-bold uppercase mb-2">
                   المقبوضات (في الدرج)
@@ -83,7 +83,7 @@ const ReceptionFinancialView: React.FC<FinancialViewProps> = ({ bookings, isMana
               </ReceptionWidgetCard>
               <ReceptionWidgetCard
                 className={`p-6 relative overflow-hidden ${isManager ? 'bg-white/60 backdrop-blur-3xl shadow-[0_10px_30px_rgba(0,0,0,0.03)] border-white/40 ring-1 ring-white/60 text-gray-800' : ''}`}
-                rounded={isManager ? 'rounded-[2rem]' : undefined}
+                rounded={isManager ? 'rounded-4xl' : undefined}
               >
                 <p className="text-gray-500 text-xs font-bold uppercase mb-2">ديون بذمة العملاء</p>
                 <p className="text-4xl font-bold text-red-400">
@@ -108,7 +108,7 @@ const ReceptionFinancialView: React.FC<FinancialViewProps> = ({ bookings, isMana
               {/* Revenue Chart Removed - Focusing on Drawer */}
               <ReceptionWidgetCard
                 className={`p-6 ${isManager ? 'bg-white/60 backdrop-blur-3xl shadow-[0_10px_30px_rgba(0,0,0,0.03)] border-white/40 ring-1 ring-white/60 text-gray-800' : ''}`}
-                rounded={isManager ? 'rounded-[2rem]' : undefined}
+                rounded={isManager ? 'rounded-4xl' : undefined}
               >
                 <p className="text-gray-500 text-xs font-bold uppercase mb-2">
                   المقبوضات (في الدرج)
@@ -119,7 +119,7 @@ const ReceptionFinancialView: React.FC<FinancialViewProps> = ({ bookings, isMana
               </ReceptionWidgetCard>
               <ReceptionWidgetCard
                 className={`p-6 relative overflow-hidden ${isManager ? 'bg-white/60 backdrop-blur-3xl shadow-[0_10px_30px_rgba(0,0,0,0.03)] border-white/40 ring-1 ring-white/60 text-gray-800' : ''}`}
-                rounded={isManager ? 'rounded-[2rem]' : undefined}
+                rounded={isManager ? 'rounded-4xl' : undefined}
               >
                 <p className="text-gray-500 text-xs font-bold uppercase mb-2">ديون بذمة العملاء</p>
                 <p className="text-3xl font-bold text-red-400 font-mono">

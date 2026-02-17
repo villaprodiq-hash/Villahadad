@@ -3,8 +3,15 @@ import { DollarSign } from 'lucide-react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip } from 'recharts';
 import ManagerDashboardCard from './ManagerDashboardCard';
 
+interface RevenueSourceBooking {
+  deletedAt?: number | string | null;
+  paidAmount?: number;
+  category?: string;
+  currency?: string;
+}
+
 interface ManagerRevenueSourcesWidgetProps {
-  bookings: any[];
+  bookings: RevenueSourceBooking[];
 }
 
 const ManagerRevenueSourcesWidget: React.FC<ManagerRevenueSourcesWidgetProps> = ({ bookings = [] }) => {
@@ -33,7 +40,6 @@ const ManagerRevenueSourcesWidget: React.FC<ManagerRevenueSourcesWidgetProps> = 
   // Use IQD map if it has more data, otherwise USD
   const hasMoreIQD = Object.keys(revenueMapIQD).length >= Object.keys(revenueMapUSD).length;
   const revenueMap = hasMoreIQD ? revenueMapIQD : revenueMapUSD;
-  const currencyLabel = hasMoreIQD ? 'د.ع' : '$';
 
   // Mapping internal category keys to Display Labels
   const categoryLabels: Record<string, string> = {
@@ -52,7 +58,7 @@ const ManagerRevenueSourcesWidget: React.FC<ManagerRevenueSourcesWidgetProps> = 
 
   const data = Object.keys(revenueMap).map(key => ({
       subject: categoryLabels[key] || key,
-      value: revenueMap[key],
+      value: revenueMap[key] ?? 0,
       fullMark: 0
   }));
 

@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Download, RefreshCw, X, CheckCircle2, 
-  AlertCircle, Sparkles, ChevronLeft, 
+  Sparkles, 
   FileText, Zap, ShieldCheck
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 interface UpdateStatus {
   status: 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'idle';
@@ -16,16 +15,30 @@ interface UpdateStatus {
   totalSize?: string;
 }
 
+type UpdateEventPayload = {
+  status: 'available' | 'downloading' | 'ready' | 'error';
+  version?: string;
+  releaseNotes?: string;
+  progress?: number;
+};
+
+type DesktopUpdateBridge = {
+  onUpdateStatus?: (callback: (data: UpdateEventPayload) => void) => (() => void) | void;
+  checkForUpdates?: () => Promise<void> | void;
+  downloadUpdate?: () => Promise<void> | void;
+  installUpdate?: () => Promise<void> | void;
+};
+
 export const UpdateNotification: React.FC = () => {
   const [updateState, setUpdateState] = useState<UpdateStatus>({ status: 'idle' });
   const [isVisible, setIsVisible] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI as (typeof window.electronAPI & DesktopUpdateBridge) | undefined;
     if (!api?.onUpdateStatus) return;
 
-    const unsubscribe = api.onUpdateStatus((data: any) => {
+    const unsubscribe = api.onUpdateStatus((data: UpdateEventPayload) => {
       if (data.status === 'available') {
         setUpdateState({ 
           status: 'available', 
@@ -38,7 +51,7 @@ export const UpdateNotification: React.FC = () => {
         setUpdateState(prev => ({ 
           ...prev, 
           status: 'downloading', 
-          progress: Math.round(data.progress) 
+          progress: Math.round(data.progress ?? 0) 
         }));
         setIsVisible(true);
       } 
@@ -52,11 +65,13 @@ export const UpdateNotification: React.FC = () => {
     });
 
     api.checkForUpdates?.();
-    return () => unsubscribe();
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, []);
 
   const handleDownload = async () => {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI as (typeof window.electronAPI & DesktopUpdateBridge) | undefined;
     if (api?.downloadUpdate) {
       setUpdateState(prev => ({ ...prev, status: 'downloading', progress: 0 }));
       await api.downloadUpdate();
@@ -64,7 +79,7 @@ export const UpdateNotification: React.FC = () => {
   };
 
   const handleInstall = async () => {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI as (typeof window.electronAPI & DesktopUpdateBridge) | undefined;
     if (api?.installUpdate) {
       await api.installUpdate();
     }
@@ -81,7 +96,7 @@ export const UpdateNotification: React.FC = () => {
         className="fixed bottom-6 right-6 z-[999] w-[380px]"
         dir="rtl"
       >
-        <div className="bg-[#14161c]/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden">
+        <div className="bg-[#14161c]/90 backdrop-blur-2xl border border-white/10 rounded-4xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden">
           
           {/* Header Area with Status Glow */}
           <div className="p-5 relative">
@@ -175,7 +190,7 @@ export const UpdateNotification: React.FC = () => {
                         </div>
                         <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-px">
                             <motion.div 
-                                className="h-full bg-gradient-to-l from-blue-600 to-blue-400 rounded-full"
+                                className="h-full bg-linear-to-l from-blue-600 to-blue-400 rounded-full"
                                 initial={{ width: 0 }}
                                 animate={{ width: `${updateState.progress}%` }}
                                 transition={{ type: 'spring', bounce: 0, duration: 0.5 }}
@@ -208,4 +223,3 @@ export const UpdateNotification: React.FC = () => {
     </AnimatePresence>
   );
 };
-

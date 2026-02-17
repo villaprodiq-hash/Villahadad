@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { 
-    Calculator, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle 
+    TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle 
 } from 'lucide-react';
-import { Booking, Expense, Currency } from '../../../../types';
+import { Booking, Expense } from '../../../../types';
 
 interface FinancialHealthWidgetProps {
     bookings: Booking[];
@@ -75,7 +75,7 @@ const FinancialHealthWidget: React.FC<FinancialHealthWidgetProps> = ({ bookings,
     const healthText = stats.profitMargin >= 40 ? 'ممتاز' : stats.profitMargin >= 15 ? 'متوسط' : 'خطر';
 
     return (
-        <div className="bg-white rounded-[1.5rem]  shadow-sm p-6 h-full flex flex-col justify-between relative overflow-hidden">
+        <div className="bg-white rounded-3xl  shadow-sm p-6 h-full flex flex-col justify-between relative overflow-hidden">
              
              {/* Background Decoration */}
              <div className="absolute top-0 left-0 w-32 h-32 bg-gray-50 rounded-br-full -mt-10 -ml-10 opacity-50"></div>

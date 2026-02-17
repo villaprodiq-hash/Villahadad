@@ -1,5 +1,4 @@
 import React from 'react';
-import { PrinterIcon, Eye, Package, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface StatsCardProps {
@@ -10,14 +9,14 @@ interface StatsCardProps {
   bg: string;
 }
 
-const PrinterStatsCard: React.FC<StatsCardProps> = ({ label, value, icon: Icon, color, bg }) => {
+const PrinterStatsCard: React.FC<StatsCardProps> = ({ label, value, icon: Icon, color: _color, bg }) => {
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className="p-2 rounded-xl bg-gradient-to-br from-white/5 to-white/10 border border-white/10 backdrop-blur-xl hover:border-emerald-400/30 transition-all cursor-pointer"
+      className="p-2 rounded-xl bg-linear-to-br from-white/5 to-white/10 border border-white/10 backdrop-blur-xl hover:border-emerald-400/30 transition-all cursor-pointer"
     >
       <div className="flex items-center gap-2">
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center bg-gradient-to-br ${bg} shadow-lg`}>
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center bg-linear-to-br ${bg} shadow-lg`}>
           <Icon size={12} className="text-white" />
         </div>
         <div>

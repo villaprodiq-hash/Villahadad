@@ -13,7 +13,13 @@ interface ProductionHeaderProps {
   role: UserRole;
 }
 
-const ProductionHeader: React.FC<ProductionHeaderProps> = ({ title, currentUser, onLogout, onOpenSettings, role }) => {
+const ProductionHeader: React.FC<ProductionHeaderProps> = ({
+  title,
+  currentUser: _currentUser,
+  onLogout: _onLogout,
+  onOpenSettings: _onOpenSettings,
+  role,
+}) => {
   const getIcon = () => {
       switch(role) {
           case UserRole.PHOTO_EDITOR: return <ImageIcon size={16} />;

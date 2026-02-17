@@ -1,5 +1,4 @@
 import React from 'react';
-import { useSpring, animated } from '@react-spring/web';
 
 interface AnimatedNumberProps {
   value: number;
@@ -11,7 +10,7 @@ interface AnimatedNumberProps {
 
 const AnimatedNumber: React.FC<AnimatedNumberProps> = ({ 
   value, 
-  duration = 1000,
+  duration: _duration = 1000,
   decimals = 0,
   suffix = '',
   prefix = ''

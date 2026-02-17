@@ -29,11 +29,11 @@ const PrinterJobCard: React.FC<JobCardProps> = ({ job, index, onSelect }) => {
       exit={{ opacity: 0, x: 20 }}
       transition={{ delay: index * 0.05 }}
       onClick={() => onSelect(job)}
-      className="group p-2 rounded-xl bg-gradient-to-br from-white/5 to-white/10 border border-white/10 hover:border-emerald-400/50 transition-all cursor-pointer"
+      className="group p-2 rounded-xl bg-linear-to-br from-white/5 to-white/10 border border-white/10 hover:border-emerald-400/50 transition-all cursor-pointer"
     >
       <div className="flex items-center gap-2">
         {/* Thumbnail */}
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border-2 border-emerald-400/30 flex items-center justify-center text-xl shadow-lg">
+        <div className="w-10 h-10 rounded-lg bg-linear-to-br from-emerald-500/20 to-teal-500/20 border-2 border-emerald-400/30 flex items-center justify-center text-xl shadow-lg">
           {job.thumbnail}
         </div>
 
@@ -60,7 +60,7 @@ const PrinterJobCard: React.FC<JobCardProps> = ({ job, index, onSelect }) => {
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${job.progress}%` }}
-                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600"
+                  className="h-full bg-linear-to-r from-emerald-500 to-emerald-600"
                 />
               </div>
             </div>

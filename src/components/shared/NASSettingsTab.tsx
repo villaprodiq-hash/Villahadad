@@ -16,7 +16,6 @@ import {
   AlertCircle,
   Settings,
   Wifi,
-  WifiOff,
   Database,
   Loader2,
   Save,
@@ -51,7 +50,6 @@ export const NASSettingsTab: React.FC = () => {
   const loadConfig = async () => {
     setLoading(true);
     try {
-      // @ts-ignore
       const result = await window.electronAPI?.nasConfig?.getConfig?.();
       if (result) {
         setConfig(result);
@@ -68,7 +66,6 @@ export const NASSettingsTab: React.FC = () => {
     
     setSaving(true);
     try {
-      // @ts-ignore
       await window.electronAPI?.nasConfig?.setAppSubfolder?.(editedSubfolder.trim());
       await loadConfig();
       await nasStatus.refresh();
@@ -80,7 +77,6 @@ export const NASSettingsTab: React.FC = () => {
 
   const handleOpenFolder = async () => {
     try {
-      // @ts-ignore
       await window.electronAPI?.nasConfig?.openAppFolder?.();
     } catch (error) {
       console.error('Failed to open folder:', error);
@@ -89,7 +85,6 @@ export const NASSettingsTab: React.FC = () => {
 
   const handleInitializeFolder = async () => {
     try {
-      // @ts-ignore
       const result = await window.electronAPI?.nasConfig?.initializeAppFolder?.();
       if (result?.success) {
         await nasStatus.refresh();

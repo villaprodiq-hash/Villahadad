@@ -28,7 +28,7 @@ export interface BackupData {
   appVersion: string;
   platform: 'desktop';
   tables: {
-    [tableName: string]: any[];
+    [tableName: string]: Record<string, unknown>[];
   };
   metadata: {
     totalRecords: number;
@@ -53,6 +53,29 @@ export interface ValidationResult {
 class DesktopBackupService {
   private APP_VERSION = '1.0.0';
 
+  private isSafeIdentifier(value: string): boolean {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+  }
+
+  private async upsertRecord(tableName: string, record: Record<string, unknown>): Promise<boolean> {
+    if (!this.isSafeIdentifier(tableName)) return false;
+    const api = window.electronAPI?.db;
+    if (!api) return false;
+
+    const columns = Object.keys(record).filter(
+      (column) => this.isSafeIdentifier(column)
+    );
+    if (columns.length === 0) return false;
+
+    const placeholders = columns.map(() => '?').join(', ');
+    const quotedColumns = columns.map((column) => `"${column}"`).join(', ');
+    const sql = `INSERT OR REPLACE INTO "${tableName}" (${quotedColumns}) VALUES (${placeholders})`;
+    const params = columns.map((column) => record[column] ?? null);
+
+    await api.run(sql, params);
+    return true;
+  }
+
   /**
    * تصدير نسخة احتياطية شاملة
    */
@@ -74,7 +97,7 @@ class DesktopBackupService {
       for (const tableName of BACKUP_TABLES) {
         try {
           const rows = await db
-            .selectFrom(tableName as any)
+            .selectFrom(tableName as never)
             .selectAll()
             .execute();
           
@@ -99,8 +122,12 @@ class DesktopBackupService {
 
       // Use Electron's dialog to save file
       if (window.electronAPI?.saveBackupFile) {
-        const saved = await window.electronAPI.saveBackupFile(filename, jsonContent);
-        if (saved) {
+        const saved = await window.electronAPI.saveBackupFile({
+          fileName: filename,
+          data: jsonContent,
+          mimeType: 'application/json',
+        });
+        if (saved.success) {
           return {
             success: true,
             message: `تم تصدير ${backup.metadata.totalRecords} سجل بنجاح`,
@@ -199,26 +226,16 @@ class DesktopBackupService {
 
         try {
           for (const record of records) {
+            const safeRecord = record as Record<string, unknown>;
             // Try to insert or update
             try {
-              await db
-                .insertInto(tableName as any)
-                .values(record)
-                .onConflict((oc) => oc.column('id').doUpdateSet(record))
-                .execute();
+              const upserted = await this.upsertRecord(tableName, safeRecord);
+              if (!upserted) {
+                continue;
+              }
               importedCount++;
             } catch (insertErr) {
-              // Try update if insert fails
-              try {
-                await db
-                  .updateTable(tableName as any)
-                  .set(record)
-                  .where('id', '=', record.id)
-                  .execute();
-                importedCount++;
-              } catch (updateErr) {
-                console.warn(`Failed to import record in ${tableName}:`, record.id);
-              }
+              console.warn(`Failed to import record in ${tableName}:`, safeRecord.id, insertErr);
             }
           }
           console.log(`✅ Imported ${tableName}: ${records.length} records`);
@@ -257,7 +274,7 @@ class DesktopBackupService {
   async exportTable(tableName: string): Promise<BackupResult> {
     try {
       const rows = await db
-        .selectFrom(tableName as any)
+        .selectFrom(tableName as never)
         .selectAll()
         .execute();
 
@@ -306,7 +323,7 @@ class DesktopBackupService {
     try {
       for (const tableName of BACKUP_TABLES) {
         try {
-          await db.deleteFrom(tableName as any).execute();
+          await db.deleteFrom(tableName as never).execute();
           console.log(`🗑️ Cleared ${tableName}`);
         } catch (err) {
           // Table might not exist

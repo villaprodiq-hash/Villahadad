@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Clock, Check, X } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 interface TimePickerProps {
   value: string;
@@ -9,7 +9,7 @@ interface TimePickerProps {
   label?: string;
 }
 
-const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, label }) => {
+const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, label: _label }) => {
   const [isOpen, setIsOpen] = useState(false);
   
   const [hour, setHour] = useState(12);
@@ -23,8 +23,8 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, label }) => {
   useEffect(() => {
     if (value) {
       const [hStr, mStr] = value.split(':');
-      let h = parseInt(hStr, 10);
-      const m = parseInt(mStr, 10);
+      let h = parseInt(hStr ?? '12', 10);
+      const m = parseInt(mStr ?? '00', 10);
       if (!isNaN(h) && !isNaN(m)) {
         const p = h >= 12 ? 'PM' : 'AM';
         if (h > 12) h -= 12;
@@ -96,7 +96,7 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, label }) => {
     if (!value) return '--:-- --';
     try {
       const [hStr, mStr] = String(value).split(':');
-      let h = parseInt(hStr, 10);
+      let h = parseInt(hStr ?? '12', 10);
       if (isNaN(h)) h = 12; // Fallback
       
       const p = h >= 12 ? 'PM' : 'AM';

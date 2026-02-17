@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { toast } from 'sonner';
 import { User, UserRole, RoleLabels } from '../types';
 import { electronBackend } from '../services/mockBackend';
@@ -6,17 +6,8 @@ import { supabase } from '../services/supabase';
 import { SyncManager } from '../services/sync/SyncManager';
 import { attendanceService } from '../services/db/services/AttendanceService';
 import { presenceService } from '../services/db/services/PresenceService';
-
-interface AuthContextValue {
-  currentUser: User | undefined;
-  users: User[];
-  login: (role: UserRole, userId?: string) => Promise<void>;
-  logout: () => Promise<void>;
-  updateUser: (id: string, updates: Partial<User>) => Promise<void>;
-  isAuthenticated: boolean;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+import { CurrentUserService } from '../services/CurrentUserService';
+import { AuthContext, type AuthContextValue } from './auth-context';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -136,6 +127,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       setCurrentUser(safeUser);
+      CurrentUserService.setCurrentUser({
+        id: safeUser.id,
+        name: safeUser.name,
+        role: safeUser.role,
+        roleLabel: RoleLabels[safeUser.role] || safeUser.role,
+      });
 
       // Inform SyncManager of current user (for audit trail)
       SyncManager.setCurrentUser(safeUser.id);
@@ -173,6 +170,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         avatar: '',
       };
       setCurrentUser(mockUser);
+      CurrentUserService.setCurrentUser({
+        id: mockUser.id,
+        name: mockUser.name,
+        role: mockUser.role,
+        roleLabel: RoleLabels[mockUser.role] || mockUser.role,
+      });
       SyncManager.setCurrentUser(mockUser.id);
       toast.success(`مرحباً بك: ${RoleLabels[role]}`);
     }
@@ -189,6 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
     setCurrentUser(undefined);
+    CurrentUserService.clearCurrentUser();
   };
 
   const updateUser = async (id: string, updates: Partial<User>) => {
@@ -197,6 +201,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUsers((prev) => prev.map((u) => (u.id === id ? updatedUser : u)));
       if (currentUser && currentUser.id === id) {
         setCurrentUser(updatedUser);
+        CurrentUserService.setCurrentUser({
+          id: updatedUser.id,
+          name: updatedUser.name,
+          role: updatedUser.role,
+          roleLabel: RoleLabels[updatedUser.role] || updatedUser.role,
+        });
       }
     } catch (e) {
       console.error(e);
@@ -215,12 +225,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }

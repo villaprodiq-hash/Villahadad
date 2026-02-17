@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Booking, BookingStatus } from '../../../../types';
-import { formatMoney } from '../../../../utils/formatMoney';
 import { CheckCircle, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -9,11 +8,26 @@ interface WeeklyChartWidgetProps {
   isManager?: boolean;
 }
 
+interface WeeklyDayData {
+  nameEn: string;
+  nameAr: string;
+  date: number;
+  bookedSlots: number;
+  totalSlots: number;
+  percentage: number;
+  barColor: string;
+  showCheckmark: boolean;
+  showWarning: boolean;
+  isToday: boolean;
+  isPast: boolean;
+  isFuture: boolean;
+}
+
 const WeeklyChartWidget: React.FC<WeeklyChartWidgetProps> = ({ bookings, isManager = false }) => {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const weekData = useMemo(() => {
-    const days = [];
+    const days: WeeklyDayData[] = [];
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - ((today.getDay() + 1) % 7) + (weekOffset * 7));
@@ -80,8 +94,8 @@ const WeeklyChartWidget: React.FC<WeeklyChartWidgetProps> = ({ bookings, isManag
       }
       
       days.push({
-        nameEn: dayNamesEn[i],
-        nameAr: dayNamesAr[i],
+        nameEn: dayNamesEn[i] ?? '',
+        nameAr: dayNamesAr[i] ?? '',
         date: day.getDate(),
         bookedSlots,
         totalSlots,
@@ -105,7 +119,7 @@ const WeeklyChartWidget: React.FC<WeeklyChartWidgetProps> = ({ bookings, isManag
   return (
     <div className={`w-full h-full ${isManager ? 'bg-[#1a1c22] rounded-xl border border-white/10 shadow-2xl' : 'bg-[#262626] rounded-2xl p-4'} flex flex-col gap-3 relative overflow-hidden ${isManager ? 'p-5' : ''}`}>
       {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-br from-white/[0.02] to-transparent pointer-events-none" />
       
       {/* Noise texture */}
       <div className="absolute inset-0 opacity-[0.06] pointer-events-none mix-blend-overlay" 

@@ -36,8 +36,49 @@ export interface ExtraService {
   currency?: Currency; // ✅ Support mixed currencies (USD/IQD)
 }
 
+export interface BookingExtraItem {
+  id: string;
+  amount: number;
+  currency?: Currency;
+  description: string;
+}
+
+export type DiscountCodeType = 'percentage' | 'fixed';
+
+export interface AppliedDiscount {
+  codeId: string;
+  code: string;
+  type: DiscountCodeType;
+  value: number;
+  reason: string;
+  subtotalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+  appliedAt: string;
+  appliedBy?: string;
+  appliedByName?: string;
+}
+
+export interface DiscountCode {
+  id: string;
+  code: string;
+  type: DiscountCodeType;
+  value: number;
+  startAt: string;
+  endAt?: string;
+  isActive: boolean;
+  isPublished: boolean;
+  notes?: string;
+  usageCount: number;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Booking Details
 export interface BookingDetails {
+  baseAmount?: number;
   groomName?: string;
   brideName?: string;
   groomBirthday?: string;
@@ -67,11 +108,33 @@ export interface BookingDetails {
   allowPublishing?: boolean;
   allowPhotography?: boolean;
   zaffaTime?: string;
+  groomPhone?: string;
+  bridePhone?: string;
+  genericPhone?: string;
   secondaryPhone?: string;
   printerNotificationSentAt?: string;
   printerDeliveredAt?: string;
+  printerProductId?: string;
+  printerUnitPrice?: number;
+  printerQuantity?: number;
   actualArrivalTime?: string;
   selectionAppointment?: string;
+  selectionCompletedAt?: string;
+  extraItems?: BookingExtraItem[];
+  discount?: AppliedDiscount;
+  // Legacy assignment/media fields used by admin/reception dashboards
+  includesVideo?: boolean;
+  assignedTo?: string;
+  photographer?: string;
+  editor?: string;
+  videoNotes?: string;
+  // Photo editor completion metadata
+  photoEditorStartedAt?: string;
+  photoEditorCompletedAt?: string;
+  photoEditorCompletedById?: string;
+  photoEditorCompletedByName?: string;
+  photoEditorDurationMinutes?: number;
+  photoEditorCompletedImages?: number;
 }
 
 // Status History Item
@@ -102,8 +165,12 @@ export interface Booking {
   nasProgress?: number;
   details?: BookingDetails;
   folderPath?: string;
+  nasSessionId?: string;
   extras?: ExtraService[];
   notes?: string;
+  packageName?: string;
+  assignedToName?: string;
+  createdByName?: string;
   selectionDeadline?: string;
   actualSelectionDate?: string;
   deliveryDeadline?: string;
@@ -113,8 +180,8 @@ export interface Booking {
   paymentMethod?: 'Cash' | 'Mastercard' | 'ZainCash';
   receivedBy?: string;
   zainCashTransactionId?: string;
-  retouchPreferences?: any; // Will be imported from retouch.types.ts
-  imageRetouchTags?: any[]; // Will be imported from retouch.types.ts
+  retouchPreferences?: Record<string, unknown>; // Will be imported from retouch.types.ts
+  imageRetouchTags?: unknown[]; // Will be imported from retouch.types.ts
   assignedPhotoEditor?: string;
   assignedVideoEditor?: string;
   assignedPrinter?: string;
@@ -135,7 +202,9 @@ export interface Booking {
   source?: 'website' | 'manual';
   client_token?: string;
   created_by?: string;
+  createdBy?: string;
   updated_by?: string;
+  updatedBy?: string;
   updated_at?: string;
   photoEditCompletedAt?: string;
   videoEditCompletedAt?: string;
@@ -145,8 +214,8 @@ export interface Booking {
   // Financial add-on fields
   originalPackagePrice?: number;
   addOnTotal?: number;
-  paymentHistory?: any;
-  invoiceHistory?: any;
+  paymentHistory?: unknown;
+  invoiceHistory?: unknown;
   // Crew/Priority
   isPriority?: boolean;
   isCrewShooting?: boolean;

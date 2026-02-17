@@ -1,19 +1,36 @@
 
 import React, { useState } from 'react';
 import { 
-  Briefcase, ArrowRight, User as UserIcon, 
-  Layers, Clock, AlertCircle, CheckCircle2 
+  ArrowRight, User as UserIcon, 
+  Layers, Clock, CheckCircle2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+type TaskPriority = 'critical' | 'high' | 'normal';
+
+interface DispatchTask {
+  id: string;
+  priority: TaskPriority;
+  type: string;
+  duration: string;
+  title: string;
+}
+
+interface StaffMember {
+  id: string;
+  name: string;
+  tasks: DispatchTask[];
+  load: number;
+}
+
 const TaskDispatcher = () => {
     // ✅ PRODUCTION: Empty initial state - tasks come from task service
-    const [tasks, setTasks] = useState<any[]>([]);
+    const [tasks, setTasks] = useState<DispatchTask[]>([]);
 
     // ✅ PRODUCTION: Staff will be populated from users service
-    const [staffMembers, setStaffMembers] = useState<any[]>([]);
+    const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
 
-    const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
         e.dataTransfer.setData('taskId', taskId);
     };
 
@@ -57,7 +74,7 @@ const TaskDispatcher = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.5 }}
                                 draggable
-                                onDragStart={(e: any) => handleDragStart(e, task.id)}
+                                onDragStartCapture={e => handleDragStart(e as React.DragEvent<HTMLDivElement>, task.id)}
                                 className={`p-4 rounded-xl border cursor-grab active:cursor-grabbing hover:scale-[1.02] transition-transform ${
                                     task.priority === 'critical' ? 'bg-red-500/10 border-red-500/30' :
                                     task.priority === 'high' ? 'bg-amber-500/10 border-amber-500/30' :
@@ -126,7 +143,7 @@ const TaskDispatcher = () => {
 
                             {/* Assigned Tasks Preview */}
                             <div className="space-y-2 mt-2">
-                                {staff.tasks.slice(-2).map((task: any) => (
+                                {staff.tasks.slice(-2).map(task => (
                                     <div key={task.id} className="text-xs bg-black/20 p-2 rounded flex justify-between items-center text-zinc-400">
                                         <span>{task.title}</span>
                                         <CheckCircle2 size={10} className="text-green-500" />

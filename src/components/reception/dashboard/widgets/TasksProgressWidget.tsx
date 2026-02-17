@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CheckCircle2, Circle, Trash2, Plus, AlertCircle, Clock, DollarSign, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { electronBackend as mockBackend } from '../../../../services/mockBackend';
-import { DashboardTask, ReminderType, BookingCategory } from '../../../../types';
+import { Booking, DashboardTask, ReminderType, BookingCategory } from '../../../../types';
 
 // --- Interfaces ---
 // Using DashboardTask directly allows for easier integration
@@ -11,18 +11,20 @@ type Task = DashboardTask;
 
 interface TasksProgressWidgetProps {
   isDraggable?: boolean;
-  bookings?: any[];
+  bookings?: Booking[];
   isManager?: boolean;
 }
 
-const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = [], isManager = false }) => {
+const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({
+  bookings = [],
+  isManager = false,
+}) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [showAddTask, setShowAddTask] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
 
-  // --- Auto-Generation Logic ---
-  // ✅ FIX: Use useMemo to compute today's bookings to reduce re-renders
+  // ✅ Use useMemo to compute today's bookings to reduce re-renders
   const todayBookings = useMemo(() => {
     if (!bookings || bookings.length === 0) return [];
     
@@ -39,17 +41,34 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
     });
   }, [bookings]);
 
-  // ✅ FIX: Only run when today's bookings actually change, not on every render
+  // --- Data Loading & Subscription ---
+  const loadTasks = useCallback(async () => {
+      try {
+          // Fetch from backend
+          const backendTasks = await mockBackend.getDashboardTasks();
+          
+          // Filter out tasks for deleted bookings (only for system-generated tasks)
+          const activeBookingIds = new Set(bookings.filter(b => !b.deletedAt).map(b => b.id));
+          const filteredTasks = backendTasks.filter(task => {
+              // Manual tasks are always shown
+              if (task.source === 'manual' || !task.relatedBookingId) return true;
+              // System tasks only if booking is active
+              return activeBookingIds.has(task.relatedBookingId);
+          });
+          
+          setTasks(filteredTasks);
+      } catch (e) {
+          console.error("Failed to load tasks", e);
+      }
+  }, [bookings]);
+
   useEffect(() => {
     const generateAndAddBookingTasks = async () => {
-      // Check if bookings exist
       if (!todayBookings || todayBookings.length === 0) return;
 
-      // ✅ Get existing tasks first to avoid duplicates
       const existingTasks = await mockBackend.getDashboardTasks();
 
       for (const booking of todayBookings) {
-        // ✅ Check if reception task already exists for this booking
         const receptionTaskId = `reception-${booking.id}`;
         const hasReceptionTask = existingTasks.some(t => t.id === receptionTaskId);
         
@@ -65,16 +84,15 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
           );
         }
 
-        // ✅ Check if payment task already exists
         const remainingAmount = booking.totalAmount - booking.paidAmount;
         if (remainingAmount > 0) {
           const paymentTaskId = `payment-verify-${booking.id}`;
           const hasPaymentTask = existingTasks.some(t => t.id === paymentTaskId);
           
           if (!hasPaymentTask) {
-            const isDeposit = booking.paidAmount < (booking.totalAmount * 0.5);
+            const isDeposit = booking.paidAmount < booking.totalAmount * 0.5;
             await mockBackend.addTask(
-              isDeposit 
+              isDeposit
                 ? `استلام متبقي (${remainingAmount.toLocaleString()}) من ${booking.clientName}`
                 : `تصفية حساب ${booking.clientName}: ${remainingAmount.toLocaleString()}`,
               'payment',
@@ -87,7 +105,6 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
           }
         }
 
-        // ✅ Check if equipment task already exists
         if (booking.category === BookingCategory.SHOOT) {
           const equipmentTaskId = `equipment-${booking.id}`;
           const hasEquipmentTask = existingTasks.some(t => t.id === equipmentTaskId);
@@ -106,50 +123,25 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
         }
       }
       
-      // After generating, refresh the list
-      loadTasks();
+      await loadTasks();
     };
 
-    generateAndAddBookingTasks();
-  }, [todayBookings]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Note: We intentionally depend on todayBookings (memoized) to reduce re-runs
-
-
-
-  // --- Data Loading & Subscription ---
-  const loadTasks = async () => {
-      try {
-          // Fetch from backend
-          const backendTasks = await mockBackend.getDashboardTasks();
-          
-          // Filter out tasks for deleted bookings (only for system-generated tasks)
-          const activeBookingIds = new Set(bookings.filter(b => !b.deletedAt).map(b => b.id));
-          const filteredTasks = backendTasks.filter(task => {
-              // Manual tasks are always shown
-              if (task.source === 'manual' || !task.relatedBookingId) return true;
-              // System tasks only if booking is active
-              return activeBookingIds.has(task.relatedBookingId);
-          });
-          
-          setTasks(filteredTasks);
-      } catch (e) {
-          console.error("Failed to load tasks", e);
-      }
-  };
+    void generateAndAddBookingTasks();
+  }, [todayBookings, loadTasks]);
 
   useEffect(() => {
-      loadTasks();
+      void loadTasks();
       
       const unsubscribe = mockBackend.subscribe((event) => {
           if (event === 'tasks_updated') {
-              loadTasks();
+              void loadTasks();
           }
       });
       
       return () => {
           unsubscribe();
       };
-  }, [bookings]); // Reload when bookings change to filter deleted bookings
+  }, [loadTasks]); // Reload when bookings change to filter deleted bookings
 
   // --- Calculations & Actions ---
   const completedCount = tasks.filter(t => t.completed).length;
@@ -230,7 +222,7 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
   };
 
   return (
-    <div className={`${isManager ? 'bg-[#1a1c22] rounded-xl' : 'bg-[#1E1E1E] rounded-[2rem]'} p-4 border border-white/10 shadow-2xl h-full flex flex-col relative overflow-hidden group font-sans`} dir="rtl">
+    <div className={`${isManager ? 'bg-[#1a1c22] rounded-xl' : 'bg-[#1E1E1E] rounded-4xl'} p-4 border border-white/10 shadow-2xl h-full flex flex-col relative overflow-hidden group font-sans`} dir="rtl">
       
       {/* Header Compact */}
       <div className="flex items-center justify-between mb-4 shrink-0 relative z-10">
@@ -305,9 +297,11 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
       {/* Tasks List - Slim & Clean Design */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
         <AnimatePresence mode="popLayout">
-          {tasks.map((task) => {
-             const priorityStyle = getPriorityStyles(task.priority);
-             return (
+            {tasks.map((task) => {
+               const priorityStyle = getPriorityStyles(task.priority);
+                 const priorityClass = priorityStyle.split(' ')[2] ?? 'text-gray-500';
+                 const priorityBgClass = priorityClass.replace('text-', 'bg-');
+               return (
                 <motion.div
                 key={task.id}
                 data-testid={`task-${task.id}`}
@@ -322,7 +316,7 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
                     }`}
                 >
                 {/* Priority Indicator Strip (Right Border) */}
-                <div className={`w-1 h-8 rounded-full ${task.completed ? 'bg-gray-700' : priorityStyle.split(' ')[2].replace('text-', 'bg-')}`}></div>
+                  <div className={`w-1 h-8 rounded-full ${task.completed ? 'bg-gray-700' : priorityBgClass}`}></div>
 
                 {/* Icon */}
                 <div className={`shrink-0 ${task.completed ? 'text-gray-600' : 'text-gray-400'}`}>
@@ -334,7 +328,7 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
 
                 {/* Text Content */}
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <span className={`text-[11px] font-medium leading-tight break-words ${task.completed ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
+                    <span className={`text-[11px] font-medium leading-tight wrap-break-word ${task.completed ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
                         {task.title}
                     </span>
                     {task.time && !task.completed && (
@@ -378,7 +372,7 @@ const TasksProgressWidget: React.FC<TasksProgressWidgetProps> = ({ bookings = []
         {showCelebration && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-black/80 z-50 rounded-[2rem]"
+            className="absolute inset-0 flex items-center justify-center bg-black/80 z-50 rounded-4xl"
           >
             <div className="text-center">
               <div className="text-4xl mb-2">🎉</div>

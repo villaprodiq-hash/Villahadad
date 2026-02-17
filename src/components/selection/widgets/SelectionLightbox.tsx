@@ -7,10 +7,8 @@ import {
   Check,
   XCircle,
   MessageSquare,
-  Info,
   Calendar,
   Camera,
-  Hash,
   Tag,
   HelpCircle,
   Heart,
@@ -77,7 +75,7 @@ const SelectionLightbox: React.FC<SelectionLightboxProps> = ({
   onRate,
   showRatings = true,
   onToggleRatings,
-  onAddNote,
+  onAddNote: _onAddNote,
   availableTags,
   onToggleTag,
   theme = 'selection',
@@ -108,10 +106,8 @@ const SelectionLightbox: React.FC<SelectionLightboxProps> = ({
       setLocalSrc(null);
 
       try {
-        // @ts-ignore
         if (window.electronAPI?.fileSystem) {
-          // @ts-ignore
-          const cached = await window.electronAPI.fileSystem.checkCache(image.image);
+          const cached = await window.electronAPI.fileSystem.checkCache?.(image.image);
           if (mounted) {
             if (cached) {
               setLocalSrc(cached);
@@ -136,15 +132,13 @@ const SelectionLightbox: React.FC<SelectionLightboxProps> = ({
     return () => {
       mounted = false;
     };
-  }, [image.id, image.image]);
+  }, [image]);
 
   const handleDownload = async () => {
     setCacheStatus('downloading');
     try {
-      // @ts-ignore
       if (window.electronAPI?.fileSystem) {
-        // @ts-ignore
-        const path = await window.electronAPI.fileSystem.cacheImage(image.image);
+        const path = await window.electronAPI.fileSystem.cacheImage?.(image.image);
         if (path) {
           setLocalSrc(path);
           setCacheStatus('cached');
@@ -172,7 +166,7 @@ const SelectionLightbox: React.FC<SelectionLightboxProps> = ({
     if (newScale === 1) setPosition({ x: 0, y: 0 });
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
+  const handleDoubleClick = (_e: React.MouseEvent) => {
     if (scale > 1) {
       setScale(1);
       setPosition({ x: 0, y: 0 });
@@ -222,7 +216,7 @@ const SelectionLightbox: React.FC<SelectionLightboxProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, onNext, onPrev]);
+  }, [isOpen, onClose, onNext, onPrev, scale]);
 
   if (!isOpen || !image) return null;
 

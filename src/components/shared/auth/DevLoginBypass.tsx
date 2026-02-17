@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserRole, RoleLabels, User } from '../../../types';
+import { UserRole, User } from '../../../types';
 import { Shield, User as UserIcon, Camera, Printer, Film } from 'lucide-react';
 import { SyncManager } from '../../../services/sync/SyncManager';
 
@@ -22,7 +22,7 @@ export const DevLoginBypass: React.FC<DevLoginBypassProps> = ({ onLogin, users }
     );
   }
 
-  const handleQuickLogin = (role: UserRole, mockName: string) => {
+  const handleQuickLogin = (role: UserRole, _mockName: string) => {
     // Attempt to find real user, fallback to mock
     const user = users.find(u => u.role === role);
     const userId = user ? user.id : `mock_${role}`;

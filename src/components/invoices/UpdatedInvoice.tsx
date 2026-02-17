@@ -73,7 +73,7 @@ export const UpdatedInvoice: React.FC<UpdatedInvoiceProps> = ({
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden" dir="rtl">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+      <div className="bg-linear-to-r from-blue-600 to-blue-700 p-6 text-white">
         <div className="flex justify-between items-start">
           <div>
             <h2 className="text-2xl font-bold">فاتورة محدثة</h2>
@@ -171,7 +171,7 @@ export const UpdatedInvoice: React.FC<UpdatedInvoiceProps> = ({
         )}
 
         {/* Totals */}
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
+        <div className="bg-linear-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-gray-700">الإجمالي الكلي</span>
@@ -226,6 +226,15 @@ export const UpdatedInvoice: React.FC<UpdatedInvoiceProps> = ({
             <Printer className="w-5 h-5" />
             طباعة
           </button>
+
+          <button
+            onClick={onDownloadPDF}
+            disabled={!onDownloadPDF}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            تحميل PDF
+          </button>
         </div>
       </div>
 
@@ -251,7 +260,7 @@ interface InvoicePreviewProps {
 
 export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   invoice,
-  booking,
+  booking: _booking,
   onClick,
 }) => {
   const formatDate = (dateString: string) => {

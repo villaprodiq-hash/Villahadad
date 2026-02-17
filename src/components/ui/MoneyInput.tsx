@@ -20,7 +20,6 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
   const parseArabic = (str: string) =>
     str.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
   const formatNum = (n: number | string) => (n === 0 || n === '0' ? '0' : (n ? Number(n).toLocaleString('en-US') : ''));
-  const formatNumWithoutCommas = (n: number | string) => (n === 0 || n === '0' ? '0' : (n ? Number(n).toLocaleString('en-US').replace(/,/g, '') : ''));
 
   useEffect(() => {
     setDisplayValue(formatNum(value));

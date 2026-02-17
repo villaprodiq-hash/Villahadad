@@ -62,7 +62,7 @@ const WorkloadHeatmapWidget: React.FC<WorkloadHeatmapWidgetProps> = ({ users = [
 
           {/* Role Groups */}
           {Object.entries(roleGroups).map(([role, members]) => (
-            <div key={role} className={`rounded-xl border bg-gradient-to-br ${getRoleBg(role as UserRole)} p-3`}>
+            <div key={role} className={`rounded-xl border bg-linear-to-br ${getRoleBg(role as UserRole)} p-3`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   {getRoleIcon(role as UserRole)}

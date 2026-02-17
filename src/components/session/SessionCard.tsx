@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Image as ImageIcon, CheckSquare, FolderOpen, Cloud } from 'lucide-react';
+import { Image as ImageIcon, CheckSquare, FolderOpen } from 'lucide-react';
 import type { SessionsTable } from '../../services/db/types';
 
 interface SessionCardProps {

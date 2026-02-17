@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Printer, CheckCircle2, Clock, 
-  User as UserIcon, Calendar, 
-  ArrowRight, AlertCircle, Sparkles
+  Calendar, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlowCard } from '../../../shared/GlowCard';

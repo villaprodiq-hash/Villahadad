@@ -1,13 +1,15 @@
 import React from 'react';
-import { motion, useMotionValue, useMotionTemplate, useSpring } from 'framer-motion';
+import { motion, useMotionValue, useMotionTemplate, useSpring, type HTMLMotionProps } from 'framer-motion';
 
-const DashboardCard: React.FC<{ 
+type DashboardCardProps = {
   children: React.ReactNode; 
   className?: string; 
   title?: string; 
   action?: React.ReactNode; 
   noPadding?: boolean;
-} & React.HTMLAttributes<HTMLDivElement>> = ({ children, className = "", title, action, noPadding = false, ...props }) => {
+} & HTMLMotionProps<'div'>;
+
+const DashboardCard: React.FC<DashboardCardProps> = ({ children, className = "", title, action, noPadding = false, ...props }) => {
   const ref = React.useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -48,8 +50,8 @@ const DashboardCard: React.FC<{
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{ transform }}
-      {...(props as any)}
-      className={`relative group rounded-4xl shadow-[0_12px_24px_-8px_rgba(100,116,139,0.2)] border border-gray-900/5 dark:border-white/5 ${noPadding ? '' : 'p-5'} ${className.includes('bg-') ? className : `bg-gradient-to-br from-[#F9F3DE] to-[#DCE0E2] dark:from-[#1a1c22] dark:to-[#0f1115] ${className}`}`}
+      {...props}
+      className={`relative group rounded-4xl shadow-[0_12px_24px_-8px_rgba(100,116,139,0.2)] border border-gray-900/5 dark:border-white/5 ${noPadding ? '' : 'p-5'} ${className.includes('bg-') ? className : `bg-linear-to-br from-[#F9F3DE] to-[#DCE0E2] dark:from-[#1a1c22] dark:to-[#0f1115] ${className}`}`}
     >
       <motion.div 
         className="pointer-events-none absolute inset-0 z-0 transition-opacity duration-500 opacity-0 group-hover:opacity-100 mix-blend-overlay"

@@ -3,8 +3,38 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Camera, CheckCircle, Users } from 'lucide-react';
 import { format } from 'date-fns';
 
+const QURAN_VERSES = [
+  "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا",
+  "لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+  "وَاصْبِرْ لِحُكْمِ رَبِّكَ فَإِنَّكَ بِأَعْيُنِنَا",
+  "وَفِي السَّمَاءِ رِزْقُكُمْ وَمَا تُوعَدُونَ",
+  "وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ۚ عَلَيْهِ تَوَكَّلْتُ",
+  "قُل لَّن يُصِيبَنَا إِلَّا مَا كَتَبَ اللَّهُ لَنَا",
+  "رَبِّ اشْرَحْ لِي صَدْرِي * وَيَسِّرْ لِي أَمْرِي",
+  "وَأُفَوِّضُ أَمْرِي إِلَى اللَّهِ ۚ إِنَّ اللَّهَ بَصِيرٌ بِالْعِبَادِ",
+  "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰ",
+  "إِنَّ اللَّهَ مَعَ الصَّابِرِينَ",
+  "وَقُل رَّبِّ زِدْنِي عِلْمًا",
+  "فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ",
+  "وَاللَّهُ يَرْزُقُ مَن يَشَاءُ بِغَيْرِ حِسَابٍ",
+  "وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ",
+  "إِنَّ رَحْمَتَ اللَّهِ قَرِيبٌ مِّنَ الْمُحْسِنِينَ",
+  "فَبَشِّرِ الصَّابِرِينَ",
+  "لَا تَحْزَنْ إِنَّ اللَّهَ مَعَنَا",
+  "وَتَوَكَّلْ عَلَى الْحَيِّ الَّذِي لَا يَمُوتُ",
+  "وَقَالُوا الْحَمْدُ لِلَّهِ الَّذِي أَذْهَبَ عَنَّا الْحَزَنَ",
+  "حَسْبِيَ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ ۖ عَلَيْهِ تَوَكَّلْتُ",
+] as const;
+
+interface StatBooking {
+  deletedAt?: unknown;
+  status?: string;
+  clientName?: string;
+  category?: string;
+}
+
 interface ManagerTopStatsBarProps {
-  bookings: any[];
+  bookings: StatBooking[];
 }
 
 const ManagerTopStatsBar: React.FC<ManagerTopStatsBarProps> = ({ bookings = [] }) => {
@@ -17,7 +47,8 @@ const ManagerTopStatsBar: React.FC<ManagerTopStatsBarProps> = ({ bookings = [] }
     const totalClients = new Set(activeBookings.map(b => b.clientName)).size;
 
     // Calculate Categories for Progress Pills
-    const categories = activeBookings.reduce((acc: any, curr) => {
+    const categories = activeBookings.reduce<Record<string, number>>((acc, curr) => {
+        if (!curr.category) return acc;
         acc[curr.category] = (acc[curr.category] || 0) + 1;
         return acc;
     }, {});
@@ -44,35 +75,12 @@ const ManagerTopStatsBar: React.FC<ManagerTopStatsBarProps> = ({ bookings = [] }
       const [isVisible, setIsVisible] = useState(true);
       const [verse, setVerse] = useState('');
   
-      const verses = [
-        "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا",
-        "لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
-        "وَاصْبِرْ لِحُكْمِ رَبِّكَ فَإِنَّكَ بِأَعْيُنِنَا",
-        "وَفِي السَّمَاءِ رِزْقُكُمْ وَمَا تُوعَدُونَ",
-        "وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ۚ عَلَيْهِ تَوَكَّلْتُ",
-        "قُل لَّن يُصِيبَنَا إِلَّا مَا كَتَبَ اللَّهُ لَنَا",
-        "رَبِّ اشْرَحْ لِي صَدْرِي * وَيَسِّرْ لِي أَمْرِي",
-        "وَأُفَوِّضُ أَمْرِي إِلَى اللَّهِ ۚ إِنَّ اللَّهَ بَصِيرٌ بِالْعِبَادِ",
-        "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰ",
-        "إِنَّ اللَّهَ مَعَ الصَّابِرِينَ",
-        "وَقُل رَّبِّ زِدْنِي عِلْمًا",
-        "فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ",
-        "وَاللَّهُ يَرْزُقُ مَن يَشَاءُ بِغَيْرِ حِسَابٍ",
-        "وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ",
-        "إِنَّ رَحْمَتَ اللَّهِ قَرِيبٌ مِّنَ الْمُحْسِنِينَ",
-        "فَبَشِّرِ الصَّابِرِينَ",
-        "لَا تَحْزَنْ إِنَّ اللَّهَ مَعَنَا",
-        "وَتَوَكَّلْ عَلَى الْحَيِّ الَّذِي لَا يَمُوتُ",
-        "وَقَالُوا الْحَمْدُ لِلَّهِ الَّذِي أَذْهَبَ عَنَّا الْحَزَنَ",
-        "حَسْبِيَ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ ۖ عَلَيْهِ تَوَكَّلْتُ"
-      ];
-  
       const [showClock, setShowClock] = useState(false);
       const [currentTime, setCurrentTime] = useState(new Date());
   
       useEffect(() => {
         // Select random verse on mount
-        const randomVerse = verses[Math.floor(Math.random() * verses.length)];
+        const randomVerse = QURAN_VERSES[Math.floor(Math.random() * QURAN_VERSES.length)] ?? QURAN_VERSES[0];
         setVerse(randomVerse);
   
         // Hide verse and show clock after 5 seconds

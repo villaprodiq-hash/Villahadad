@@ -22,7 +22,7 @@ interface LeaderboardItem {
     charts: number;    // charts position
     chartsTrend: number;
 
-    trendData: any[];
+    trendData: Array<{ value: number }>;
     hypemeter: number; // 0-100
 }
 

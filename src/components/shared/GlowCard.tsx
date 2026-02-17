@@ -1,10 +1,9 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { motion, useMotionTemplate, useMotionValue, useSpring } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
 const ROTATION_RANGE = 20; 
-const HALF_ROTATION_RANGE = ROTATION_RANGE / 2;
 
 interface GlowCardProps {
     children?: React.ReactNode; 
@@ -73,7 +72,7 @@ export const GlowCard = ({ children, className = "", variant = 'dark', glowColor
       onMouseLeave={handleMouseLeave}
       style={{ transform }}
       className={cn(
-        "relative group rounded-[1.5rem] overflow-hidden transition-all duration-200",
+        "relative group rounded-3xl overflow-hidden transition-all duration-200",
         isDark ? "bg-black/40 backdrop-blur-md border border-white/5" : "bg-white border border-gray-100 shadow-sm hover:shadow-lg",
         className
       )}
@@ -87,7 +86,7 @@ export const GlowCard = ({ children, className = "", variant = 'dark', glowColor
       {/* 2. Border Glow */}
       <motion.div
         className={cn(
-            "pointer-events-none absolute inset-0 z-10 border-2 rounded-[1.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-300",
+            "pointer-events-none absolute inset-0 z-10 border-2 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300",
             activeBorderClass
         )}
         style={{ 
@@ -102,7 +101,7 @@ export const GlowCard = ({ children, className = "", variant = 'dark', glowColor
       </div>
       
       {/* 4. Glossy Reflection (Subtle) */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-30 mix-blend-overlay" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-30 mix-blend-overlay" />
     </motion.div>
   );
 };

@@ -1,5 +1,5 @@
 import { db } from '../index';
-import { AddOnItem, AddOnAuditEntry, AddOnStatus } from '../../../types/addon.types';
+import { AddOnItem, AddOnAuditEntry } from '../../../types/addon.types';
 import { safeJsonParse } from '../../../utils/safeJson';
 
 /**

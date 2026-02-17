@@ -17,15 +17,28 @@ interface ChartDataPoint {
   expenses: number;
 }
 
+interface TooltipEntry {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+}
+
 // --- Custom Components ---
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
+    const parsedLabelDate = label ? new Date(label) : new Date();
     return (
       <div className="bg-[#18181b]/90 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl">
         <p className="text-gray-400 text-xs mb-2 font-medium">
-          {format(new Date(label), 'MMMM yyyy', { locale: ar })}
+          {format(parsedLabelDate, 'MMMM yyyy', { locale: ar })}
         </p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry, index: number) => (
           <div key={index} className="flex items-center gap-3 mb-1 last:mb-0">
             <div 
               className="w-2 h-2 rounded-full shadow-[0_0_8px]" 
@@ -49,7 +62,11 @@ interface UnifiedAnalyticsWidgetProps {
     isManager?: boolean;
 }
 
-const UnifiedAnalyticsWidget: React.FC<UnifiedAnalyticsWidgetProps> = ({ bookings, expenses, isManager = false }) => {
+const UnifiedAnalyticsWidget: React.FC<UnifiedAnalyticsWidgetProps> = ({
+  bookings,
+  expenses,
+  isManager: _isManager = false,
+}) => {
   const [activeTab, setActiveTab] = useState<'revenue' | 'bookings'>('revenue');
 
   // ✅ Calculate real data from props
@@ -260,7 +277,7 @@ const UnifiedAnalyticsWidget: React.FC<UnifiedAnalyticsWidgetProps> = ({ booking
       </div>
 
       <div className={`
-         absolute -top-20 -left-20 w-64 h-64 bg-gradient-to-br 
+         absolute -top-20 -left-20 w-64 h-64 bg-linear-to-br 
          ${activeTab === 'revenue' ? 'from-rose-500/10' : 'from-blue-500/10'} 
          to-transparent rounded-full blur-3xl pointer-events-none transition-colors duration-700
       `} />

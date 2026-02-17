@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { bookingService } from '../BookingService';
 import { BookingRepository } from '../../repositories/BookingRepository';
-import { activityLogService } from '../ActivityLogService';
-import { SyncQueueService } from '../../../sync/SyncQueue';
+import { BookingCategory, BookingStatus } from '../../../../../types';
 
 vi.mock('../../repositories/BookingRepository', () => ({
   BookingRepository: {
@@ -35,11 +34,11 @@ describe('BookingService Critical Path', () => {
     const validBooking = {
       clientName: 'Mohamed',
       clientPhone: '0770',
-      category: 'WEDDING',
+      category: BookingCategory.WEDDING,
       title: 'Wedding Shoot',
       totalAmount: 1000,
       paidAmount: 200,
-      status: 'CONFIRMED',
+      status: BookingStatus.CONFIRMED,
     };
 
     const result = await bookingService.addBooking(validBooking);
@@ -52,11 +51,11 @@ describe('BookingService Critical Path', () => {
   it('should fail if totalAmount is negative', async () => {
     const invalidBooking = {
       clientName: 'Mohamed',
-      category: 'WEDDING',
+      category: BookingCategory.WEDDING,
       title: 'Wedding Shoot',
       totalAmount: -100,
       paidAmount: 0,
-      status: 'CONFIRMED',
+      status: BookingStatus.CONFIRMED,
     };
 
     await expect(bookingService.addBooking(invalidBooking)).rejects.toThrow();
@@ -65,11 +64,11 @@ describe('BookingService Critical Path', () => {
   it('should fail if paidAmount exceeds totalAmount', async () => {
     const invalidBooking = {
       clientName: 'Mohamed',
-      category: 'WEDDING',
+      category: BookingCategory.WEDDING,
       title: 'Wedding Shoot',
       totalAmount: 100,
       paidAmount: 200,
-      status: 'CONFIRMED',
+      status: BookingStatus.CONFIRMED,
     };
 
     await expect(bookingService.addBooking(invalidBooking)).rejects.toThrow();
@@ -78,11 +77,11 @@ describe('BookingService Critical Path', () => {
   it('should sanitize input strings against XSS', async () => {
     const maliciousBooking = {
       clientName: "Mohamed <script>alert('xss')</script>",
-      category: 'WEDDING',
+      category: BookingCategory.WEDDING,
       title: 'Wedding Shoot',
       totalAmount: 1000,
       paidAmount: 0,
-      status: 'CONFIRMED',
+      status: BookingStatus.CONFIRMED,
     };
 
     const result = await bookingService.addBooking(maliciousBooking);

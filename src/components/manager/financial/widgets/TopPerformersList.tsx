@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, TrendingUp, DollarSign, Camera, Video, Music } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 
 interface TopPerformerProps {
     data: {
@@ -13,7 +13,7 @@ interface TopPerformerProps {
     exchangeRate?: number;
 }
 
-const TopPerformersList: React.FC<TopPerformerProps> = ({ data, exchangeRate = 1 }) => {
+const TopPerformersList: React.FC<TopPerformerProps> = ({ data, exchangeRate: _exchangeRate = 1 }) => {
     return (
         <div className="bg-white dark:bg-[#1a1c22] rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-white/5 h-full flex flex-col">
             <div className="flex items-center justify-between mb-6">

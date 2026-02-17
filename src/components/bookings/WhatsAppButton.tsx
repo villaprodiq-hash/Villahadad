@@ -29,8 +29,8 @@ const WhatsAppButton: React.FC<WhatsAppButtonProps> = ({
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     // Use Integrated WhatsApp Window (Electron)
-    if ((window as any).electronAPI && (window as any).electronAPI.openWhatsApp) {
-      (window as any).electronAPI.openWhatsApp(url);
+    if (window.electronAPI?.openWhatsApp) {
+      void window.electronAPI.openWhatsApp(url);
     } else {
       // Fallback for web browser mode
       window.open(url, '_blank');

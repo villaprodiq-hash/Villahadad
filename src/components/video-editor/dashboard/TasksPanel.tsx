@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, AlertCircle, Maximize2, Minimize2, CheckCircle2, Circle, Film } from 'lucide-react';
+import { Booking, BookingCategory, BookingStatus } from '../../../types';
 
 interface Album {
   id: string;
@@ -16,14 +17,19 @@ interface Album {
 
 interface TasksPanelProps {
   isManager?: boolean;
-  bookings?: any[];
+  bookings?: Booking[];
 }
 
-const TasksPanel: React.FC<TasksPanelProps> = ({ isManager = false, bookings = [] }) => {
+const TasksPanel: React.FC<TasksPanelProps> = ({ isManager: _isManager = false, bookings = [] }) => {
   // ✅ Generate videos from REAL bookings only (weddings usually have video)
   const initialAlbums: Album[] = bookings
-    .filter(b => (b.status === 'completed' || b.status === 'confirmed') && 
-                 (b.category === 'Wedding' || b.category === 'زفاف' || b.details?.includesVideo))
+    .filter(
+      b =>
+        (b.status === BookingStatus.SHOOTING_COMPLETED ||
+          b.status === BookingStatus.SELECTION ||
+          b.status === BookingStatus.EDITING) &&
+        (b.category === BookingCategory.WEDDING || Boolean(b.details?.includesVideo))
+    )
     .slice(0, 10)
     .map(b => ({
       id: b.id,

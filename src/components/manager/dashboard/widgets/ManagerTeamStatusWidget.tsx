@@ -5,7 +5,7 @@ import { presenceService } from '../../../../services/db/services/PresenceServic
 import { User } from '../../../../types';
 
 interface ManagerTeamStatusWidgetProps {
-  users: any[];
+  users: User[];
 }
 
 const ManagerTeamStatusWidget: React.FC<ManagerTeamStatusWidgetProps> = ({ users = [] }) => {

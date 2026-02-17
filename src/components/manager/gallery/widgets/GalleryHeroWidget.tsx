@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Clock } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PortfolioItem } from '../../../selection/widgets/GalleryGridWidget';
 

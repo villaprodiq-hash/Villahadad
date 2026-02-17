@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import Sparkline from './Sparkline';
 
 interface HighlightItem {
@@ -9,7 +9,7 @@ interface HighlightItem {
     image?: string;
     value: string; // e.g. "90%"
     trend: number; // e.g., 45
-    trendData: any[];
+    trendData: Array<{ value: number }>;
 }
 
 interface HighlightCardProps {
@@ -35,7 +35,7 @@ const HighlightCard: React.FC<HighlightCardProps> = ({ title, icon, items, accen
 
         {/* Items List */}
         <div className="flex flex-col gap-6">
-            {items.map((item, idx) => (
+            {items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between group">
                     {/* Left: Info */}
                     <div className="flex items-center gap-4 flex-1">

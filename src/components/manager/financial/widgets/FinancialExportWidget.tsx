@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Booking } from '../../../../types';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
-import { Download, FileSpreadsheet, Calendar, CheckSquare, Square, FileText } from 'lucide-react';
+import { Calendar, CheckSquare, Square, FileText } from 'lucide-react';
 
 interface FinancialExportWidgetProps {
     bookings: Booking[];
 }
 
-const FinancialExportWidget: React.FC<FinancialExportWidgetProps> = ({ bookings }) => {
+const FinancialExportWidget: React.FC<FinancialExportWidgetProps> = ({ bookings: _bookings }) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     
@@ -23,46 +23,6 @@ const FinancialExportWidget: React.FC<FinancialExportWidgetProps> = ({ bookings 
 
     const toggleColumn = (key: keyof typeof columns) => {
         setColumns(prev => ({ ...prev, [key]: !prev[key] }));
-    };
-
-    const handleExport = (format: 'csv' | 'excel') => {
-        // Filter Data
-        let data = bookings;
-        if (startDate) data = data.filter(b => b.shootDate >= startDate);
-        if (endDate) data = data.filter(b => b.shootDate <= endDate);
-
-        // Generate CSV Content
-        if (format === 'csv' || format === 'excel') {
-            const headers = [];
-            if (columns.date) headers.push('Date');
-            if (columns.client) headers.push('Client Name');
-            if (columns.phone) headers.push('Phone');
-            if (columns.amount) headers.push('Total Amount');
-            if (columns.paid) headers.push('Paid Amount');
-            if (columns.status) headers.push('Status');
-
-            const rows = data.map(b => {
-                const row = [];
-                if (columns.date) row.push(b.shootDate);
-                if (columns.client) row.push(b.clientName);
-                if (columns.phone) row.push(Array.isArray(b.clientPhone) ? b.clientPhone.join(', ') : b.clientPhone);
-                if (columns.amount) row.push(b.totalAmount);
-                if (columns.paid) row.push(b.paidAmount);
-                if (columns.status) row.push(b.status);
-                return row.join(',');
-            });
-
-            const csvContent = [headers.join(','), ...rows].join('\n');
-            // Add BOM for proper Arabic display in Excel
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.setAttribute('href', url);
-            link.setAttribute('download', `financial_report_${new Date().toISOString().split('T')[0]}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
     };
 
     return (

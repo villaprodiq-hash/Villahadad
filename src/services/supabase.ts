@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // These environment variables must be set in .env
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -32,13 +32,18 @@ const createSupabaseClient = () => createClient(supabaseUrl || '', supabaseAnonK
 });
 
 // Use existing instance if available (prevents multiple GoTrueClient warnings)
-export const supabase = (typeof window !== 'undefined' && (window as any).__supabase)
-  ? (window as any).__supabase
-  : (()=>{
-      const client = createSupabaseClient();
-      if (typeof window !== 'undefined') (window as any).__supabase = client;
-      return client;
-    })();
+const browserWindow =
+  typeof window !== 'undefined'
+    ? (window as Window & { __supabase?: SupabaseClient })
+    : undefined;
+
+export const supabase =
+  browserWindow?.__supabase ??
+  (() => {
+    const client = createSupabaseClient();
+    if (browserWindow) browserWindow.__supabase = client;
+    return client;
+  })();
 
 // 🔒 SECURITY: Admin client removed from frontend
 // Sync operations now use Edge Function 'sync' which has secure access to service role key
@@ -67,13 +72,28 @@ export async function callSyncFunction(
     });
 
     if (error) {
-      console.error('Sync Function Error:', error);
-      return { success: false, error: error.message };
+      // Parse actual server error body for better debugging
+      let serverMessage = error.message;
+      try {
+        if (error.context && typeof error.context.json === 'function') {
+          const body = (await error.context.json()) as {
+            error?: string;
+            message?: string;
+          } | null;
+          serverMessage = body?.error || body?.message || JSON.stringify(body);
+        } else if (error.context && typeof error.context.text === 'function') {
+          serverMessage = await error.context.text();
+        }
+      } catch {
+        // Fallback to original message
+      }
+      console.error(`Sync Function Error [${action} ${entity}]:`, serverMessage);
+      return { success: false, error: serverMessage };
     }
 
     return { success: true, data: result };
   } catch (err) {
-    console.error('Sync Function Call Failed:', err);
+    console.error(`Sync Function Call Failed [${action} ${entity}]:`, err);
     return { success: false, error: String(err) };
   }
 }

@@ -1,18 +1,16 @@
 import React, { useMemo } from 'react';
-import { Booking, BookingStatus, BookingCategory, User } from '../../../../types';
+import { Booking, BookingStatus, BookingCategory, StatusHistoryItem, User } from '../../../../types';
 import { 
   Clock, Camera, Calendar, ArrowRight, Search, 
   Sparkles, Play, CheckCircle2, AlertTriangle, 
-  Activity, TrendingUp, Users, DollarSign, 
-  Paperclip, MessageSquare, Plus, MoreVertical,
-  ChevronDown
+  Activity, TrendingUp, Users, Plus, MoreVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../../../lib/utils';
 import { formatMoney } from '../../../../utils/formatMoney';
 import { differenceInDays, parseISO } from 'date-fns';
 
-const getTimeInStage = (statusHistory: any[], currentStatus: BookingStatus) => {
+const getTimeInStage = (statusHistory: StatusHistoryItem[], currentStatus: BookingStatus) => {
   if (!statusHistory || statusHistory.length === 0) return 0;
   const lastEntry = [...statusHistory].reverse().find(h => h.status === currentStatus);
   if (!lastEntry) return 0;
@@ -36,7 +34,7 @@ const STAGES = [
   { status: BookingStatus.DELIVERED, title: 'Delivered', icon: <CheckCircle2 size={14} />, color: 'green' },
 ];
 
-const UnifiedPulse: React.FC<UnifiedPulseProps> = ({ bookings, users, onViewBooking, onStatusUpdate }) => {
+const UnifiedPulse: React.FC<UnifiedPulseProps> = ({ bookings, users, onViewBooking, onStatusUpdate: _onStatusUpdate }) => {
   
   const stats = useMemo(() => {
     return STAGES.map(stage => {
@@ -130,8 +128,7 @@ const UnifiedPulse: React.FC<UnifiedPulseProps> = ({ bookings, users, onViewBook
 
       {/* Main Command Grid - All 7 Stages At Once */}
       <div className="flex-1 grid grid-cols-7 gap-3 min-h-0">
-         {stats.map((stage, idx) => {
-            const isHeavy = stage.load > 4;
+         {stats.map((stage) => {
             const isCritical = stage.criticalCount > 0;
             
             return (

@@ -27,10 +27,16 @@ export interface QueueItem {
 }
 
 export class SyncQueueService {
+  private static isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    );
+  }
+
   /**
    * Add an item to the persistent sync queue
    */
-  static async enqueue(action: SyncAction, entity: SyncEntity, data: any) {
+  static async enqueue(action: SyncAction, entity: SyncEntity, data: unknown) {
     try {
       const id = uuidv4();
       const createdAt = Date.now();
@@ -168,5 +174,43 @@ export class SyncQueueService {
    */
   static async clear() {
     await db.deleteFrom('sync_queue').execute();
+  }
+
+  /**
+   * Remove stale/invalid attendance queue rows that can never sync to cloud.
+   * This targets legacy local user IDs like "u_..." stored as `user_id`.
+   */
+  static async purgeInvalidAttendanceItems(): Promise<number> {
+    try {
+      const rows = await db
+        .selectFrom('sync_queue')
+        .select(['id', 'data'])
+        .where('entity', '=', 'attendance')
+        .execute();
+
+      const invalidIds: string[] = [];
+
+      for (const row of rows) {
+        const parsed = this.safeParse(row.data);
+        if (!parsed) {
+          invalidIds.push(row.id);
+          continue;
+        }
+
+        const userIdRaw = parsed.user_id ?? parsed.userId;
+        if (typeof userIdRaw === 'string' && !this.isUuid(userIdRaw)) {
+          invalidIds.push(row.id);
+        }
+      }
+
+      if (invalidIds.length > 0) {
+        await db.deleteFrom('sync_queue').where('id', 'in', invalidIds).execute();
+      }
+
+      return invalidIds.length;
+    } catch (error) {
+      console.error('❌ SyncQueue purge invalid attendance failed:', error);
+      return 0;
+    }
   }
 }

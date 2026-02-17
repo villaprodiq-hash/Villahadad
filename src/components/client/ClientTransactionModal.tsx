@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Wallet, AlertCircle, Clock, User, FileText, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, Plus, Wallet, AlertCircle, Clock, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { Currency } from '../../types/shared.types';
@@ -33,14 +33,22 @@ const ClientTransactionModal: React.FC<ClientTransactionModalProps> = ({
   const [note, setNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentTransactions, setRecentTransactions] = useState<ClientTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+
+  const loadRecentTransactions = useCallback(async () => {
+    try {
+      const transactions = await clientTransactionService.getClientTransactions(clientId);
+      setRecentTransactions(transactions.slice(0, 5));
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  }, [clientId]);
 
   // Load recent transactions when modal opens
   useEffect(() => {
     if (isOpen && clientId) {
       loadRecentTransactions();
     }
-  }, [isOpen, clientId]);
+  }, [isOpen, clientId, loadRecentTransactions]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -49,18 +57,6 @@ const ClientTransactionModal: React.FC<ClientTransactionModalProps> = ({
       setNote('');
     }
   }, [isOpen]);
-
-  const loadRecentTransactions = async () => {
-    setIsLoading(true);
-    try {
-      const transactions = await clientTransactionService.getClientTransactions(clientId);
-      setRecentTransactions(transactions.slice(0, 5));
-    } catch (error) {
-      console.error('Error loading transactions:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,7 +156,7 @@ const ClientTransactionModal: React.FC<ClientTransactionModalProps> = ({
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-5">
+              <div className="bg-linear-to-r from-amber-500 to-orange-500 px-6 py-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -228,7 +224,7 @@ const ClientTransactionModal: React.FC<ClientTransactionModalProps> = ({
 
                   {/* Info Box */}
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                     <div className="text-sm text-blue-700">
                       <p className="font-bold mb-1">معلومة مهمة</p>
                       <p className="text-blue-600">
@@ -243,7 +239,7 @@ const ClientTransactionModal: React.FC<ClientTransactionModalProps> = ({
                   <button
                     type="submit"
                     disabled={isSubmitting || !amount || !note.trim()}
-                    className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25"
+                    className="w-full bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25"
                   >
                     {isSubmitting ? (
                       <>

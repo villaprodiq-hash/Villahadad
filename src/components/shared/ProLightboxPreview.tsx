@@ -123,7 +123,7 @@ const ProLightboxPreview: React.FC<ProLightboxPreviewProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-[#050505] flex overflow-hidden font-sans"
+        className="fixed inset-0 z-9999 bg-[#050505] flex overflow-hidden font-sans"
         dir="rtl"
       >
         {/* Background Ambient Glow */}
@@ -135,7 +135,7 @@ const ProLightboxPreview: React.FC<ProLightboxPreviewProps> = ({
         {/* Main Viewing Area */}
         <div className="flex-1 relative flex items-center justify-center cursor-default group">
           {/* Top Bar Controls */}
-          <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-50 bg-gradient-to-b from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-50 bg-linear-to-b from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
@@ -260,7 +260,7 @@ const ProLightboxPreview: React.FC<ProLightboxPreviewProps> = ({
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-[420px] h-full bg-black/30 border-r border-white/10 backdrop-blur-[40px] z-[100] flex flex-col shadow-[-40px_0_60px_rgba(0,0,0,0.5)]"
+              className="w-[420px] h-full bg-black/30 border-r border-white/10 backdrop-blur-2xl z-100 flex flex-col shadow-[-40px_0_60px_rgba(0,0,0,0.5)]"
             >
               <div className="p-8 pb-4">
                 <div className="flex items-center justify-between mb-8">
@@ -413,7 +413,7 @@ const ProLightboxPreview: React.FC<ProLightboxPreviewProps> = ({
                           ? 'bg-amber-500 text-white border-amber-500 shadow-xl shadow-amber-500/20'
                           : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10'}`}
                     >
-                      وضع في "الحيرة"
+                      وضع في &quot;الحيرة&quot;
                     </button>
                   )}
                 </div>

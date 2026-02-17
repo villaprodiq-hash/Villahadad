@@ -82,7 +82,7 @@ const GalleryGridWidget: React.FC<GalleryGridWidgetProps> = ({ items, onItemClic
                  </div>
 
                 {/* Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
                    <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
                       <div className="flex justify-between items-end mb-2">
                          <span className="text-amber-400 text-xs font-bold uppercase tracking-wider block">

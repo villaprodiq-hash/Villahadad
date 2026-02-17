@@ -37,12 +37,12 @@ export const HoverProfileCard: React.FC<HoverProfileCardProps> = ({ user, onClic
       <div className="absolute inset-0 bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl transition-all duration-500 group-hover:scale-[1.02] group-hover:bg-white/10 group-hover:border-white/20 overflow-hidden">
         
         {/* 2. Ambient Glow Background */}
-        <div className={`absolute -inset-20 bg-gradient-to-br ${gradient} opacity-20 group-hover:opacity-40 blur-3xl transition-opacity duration-700`} />
+        <div className={`absolute -inset-20 bg-linear-to-br ${gradient} opacity-20 group-hover:opacity-40 blur-3xl transition-opacity duration-700`} />
         
         {/* 3. Image Container */}
         <div className="relative h-full flex flex-col items-center pt-8 pb-6 px-4">
             {/* Avatar Ring */}
-            <div className={`relative w-32 h-32 rounded-full p-1 bg-gradient-to-br ${gradient} mb-6 shadow-lg transition-transform duration-500 group-hover:scale-110`}>
+            <div className={`relative w-32 h-32 rounded-full p-1 bg-linear-to-br ${gradient} mb-6 shadow-lg transition-transform duration-500 group-hover:scale-110`}>
                 <div className="w-full h-full rounded-full overflow-hidden border-4 border-black/50 bg-black/50">
                     <img 
                         src={avatarUrl} 

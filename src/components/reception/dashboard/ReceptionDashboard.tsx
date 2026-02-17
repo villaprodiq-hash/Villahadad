@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Booking, BookingCategory, BookingStatus, User } from '../../../types';
-import { Calendar as CalendarIcon, PlusCircle, Camera, Briefcase, Gift, Clock, MapPin, Mic, Copy, CheckCircle, AlertCircle, DollarSign, MessageCircle, Sparkles, Move, X, ChevronLeft, ChevronRight, TrendingUp, Timer, Zap, MessageSquare, Send, Image as ImageIcon, Play, Volume2, Music, Paperclip, Smile, Wallet, Building } from 'lucide-react';
+import { PlusCircle, Camera, Briefcase, Gift, Clock, Mic, CheckCircle, DollarSign, MessageCircle, Move, X, Send, Play, Music, Paperclip, Smile, Wallet, Building } from 'lucide-react';
 import TasksProgressWidget from './widgets/TasksProgressWidget';
 import ClockWidget from './widgets/NeumorphicClockWidget';
 import WeeklyChartWidget from './widgets/WeeklyChartWidget';
@@ -10,11 +10,30 @@ import WorkflowKanbanWidget from './widgets/WorkflowKanbanWidget';
 import ReceptionTimelineWidget from './ReceptionTimelineWidget';
 import { motion } from 'framer-motion';
 import { Responsive, WidthProvider } from 'react-grid-layout';
+import type { Layout, Layouts } from 'react-grid-layout';
 import ReceptionPageWrapper from '../layout/ReceptionPageWrapper';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
+
+interface WeekBookingGroup {
+  date: Date;
+  bookings: Booking[];
+}
+
+interface MonthBookingCell {
+  date?: Date;
+  count: number;
+}
+
+interface WeekDaySummary {
+  date: Date;
+  number: number;
+  dayName: string;
+  isToday: boolean;
+  isSelected: boolean;
+}
 
 interface ReceptionDashboardProps {
   bookings: Booking[];
@@ -93,11 +112,9 @@ const defaultLayouts = {
 
 
 
-const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], users = [], onSelectBooking = () => {}, onStatusUpdate = () => {}, isDraggable = false, isManager = false, currentUser = null, onLogout = () => {} }) => {
+const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], users = [], onSelectBooking = () => {}, onStatusUpdate = () => {}, isDraggable = false, isManager = false, currentUser, onLogout = () => {} }) => {
   // دمج الحجوزات الحقيقية مع الوهمية
   const allBookings = bookings;
-  const [copiedMessage, setCopiedMessage] = useState<string | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -120,8 +137,9 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
   
   const [chatHistory] = useState<Record<string, Array<{text: string, sender: 'me' | 'client', time: string, type?: 'text' | 'image' | 'audio', url?: string}>>>({});
   
-  const [chatMessages, setChatMessages] = useState(chatHistory[activeChat] || []);
-  const [layouts, setLayouts] = useState(defaultLayouts);
+  const initialChatId = activeChat ?? '';
+  const [chatMessages, setChatMessages] = useState(chatHistory[initialChatId] || []);
+  const [layouts, setLayouts] = useState<Layouts>(defaultLayouts as Layouts);
 
   // Load existing rating when popup opens
   useEffect(() => {
@@ -134,60 +152,18 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
       }
       
       // Load notes from clientRatings if available
-      if (clientRatings[activeChat]) {
-        setRatingNotes(clientRatings[activeChat].notes || '');
+      if (activeChat && clientRatings[activeChat]) {
+        setRatingNotes(clientRatings[activeChat]?.notes || '');
       } else {
         setRatingNotes('');
       }
     }
   }, [showRatingPopup, activeChat, chatContacts, clientRatings]);
 
-  const today = new Date();
+  const today = useMemo(() => new Date(), []);
   const currentDay = selectedDate.getDate().toString();
   const currentMonth = selectedDate.toLocaleDateString('ar-IQ', { month: 'short' }).toUpperCase();
   
-  const stats = useMemo(() => {
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1);
-
-    const todayBookings = allBookings.filter(b => {
-      const bookingDate = new Date(b.shootDate);
-      return bookingDate >= todayStart && bookingDate < todayEnd;
-    });
-
-    const pendingPayments = allBookings.filter(b => b.paidAmount < b.totalAmount);
-    const totalPending = pendingPayments.reduce((sum, b) => sum + (b.totalAmount - b.paidAmount), 0);
-    const totalRevenue = todayBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-    const totalPaid = todayBookings.reduce((sum, b) => sum + b.paidAmount, 0);
-    const activeSession = todayBookings.find(b => b.status === BookingStatus.SHOOTING);
-    
-    // Get next upcoming session
-    const now = new Date();
-    const upcomingSessions = todayBookings
-      .filter(b => {
-        const bookingDateTime = new Date(b.shootDate);
-        const [hours, minutes] = (b.details?.startTime || '09:00').split(':');
-        bookingDateTime.setHours(parseInt(hours), parseInt(minutes));
-        return bookingDateTime > now;
-      })
-      .sort((a, b) => {
-        const timeA = a.details?.startTime || '00:00';
-        const timeB = b.details?.startTime || '00:00';
-        return timeA.localeCompare(timeB);
-      });
-    
-    return { 
-      todayBookings, 
-      pendingPayments, 
-      totalPending, 
-      totalRevenue, 
-      totalPaid, 
-      activeSession, 
-      nextSession: upcomingSessions[0] || null 
-    };
-  }, [allBookings, today]);
-
   // Get bookings for selected date
   const selectedDateBookings = useMemo(() => {
     const dateStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
@@ -213,7 +189,7 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
 
-    const weekData = [];
+    const weekData: WeekBookingGroup[] = [];
     for (let i = 0; i < 7; i++) {
       const day = new Date(startOfWeek);
       day.setDate(startOfWeek.getDate() + i);
@@ -239,11 +215,11 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
     const lastDay = new Date(year, month + 1, 0);
     const totalDays = lastDay.getDate();
     
-    const monthData = [];
-    let currentWeek = [];
+    const monthData: MonthBookingCell[][] = [];
+    let currentWeek: MonthBookingCell[] = [];
     
     for (let i = 0; i < firstDayOfWeek; i++) {
-      currentWeek.push({ date: null, count: 0 });
+      currentWeek.push({ date: undefined, count: 0 });
     }
     
     for (let day = 1; day <= totalDays; day++) {
@@ -265,7 +241,7 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
     }
     
     while (currentWeek.length > 0 && currentWeek.length < 7) {
-      currentWeek.push({ date: null, count: 0 });
+      currentWeek.push({ date: undefined, count: 0 });
     }
     if (currentWeek.length > 0) {
       monthData.push(currentWeek);
@@ -275,7 +251,7 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
   }, [allBookings, selectedDate]);
 
   const weekDays = useMemo(() => {
-    const days = [];
+    const days: WeekDaySummary[] = [];
     const startOfWeek = new Date(selectedDate);
     startOfWeek.setDate(selectedDate.getDate() - 2);
     
@@ -293,21 +269,8 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
     return days;
   }, [today, selectedDate]);
 
-  const handleDailyBriefing = () => {
-    if ('speechSynthesis' in window) {
-      setIsSpeaking(true);
-      const utterance = new SpeechSynthesisUtterance(
-        `Good morning. You have ${stats.todayBookings.length} bookings today, total revenue ${stats.totalRevenue} Iraqi Dinar, and pending payments of ${stats.totalPending} Iraqi Dinar.`
-      );
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      utterance.onend = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
   // Customizable Quick Replies with localStorage
-  const [quickReplies, setQuickReplies] = useState(() => {
+  const [quickReplies] = useState(() => {
     const saved = localStorage.getItem('reception_quick_replies');
     return saved ? JSON.parse(saved) : [
       { emoji: '📍', label: 'إرسال الموقع', message: 'مرحباً! موقعنا: استديو فيلا حداد، شارع الرئيسي، بغداد.' },
@@ -320,19 +283,10 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
     ];
   });
 
-  const [showQuickReplyEditor, setShowQuickReplyEditor] = useState(false);
-
   // Save quick replies to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('reception_quick_replies', JSON.stringify(quickReplies));
   }, [quickReplies]);
-
-
-  const handleQuickReply = (message: string, label: string) => {
-    navigator.clipboard.writeText(message);
-    setCopiedMessage(label);
-    setTimeout(() => setCopiedMessage(null), 2000);
-  };
 
   const getCategoryIcon = (booking: Booking) => {
     if (booking.details?.rentalType) return <Briefcase size={18} className="text-amber-400" />;
@@ -343,12 +297,13 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
 
   const getTimeDisplay = (booking: Booking) => {
     const startTime = booking.details?.startTime || '09:00';
-    const [hours, minutes] = startTime.split(':');
-    const endHour = parseInt(hours) + 1;
+    const [hours = '09', minutes = '00'] = startTime.split(':');
+    const parsedHour = Number.parseInt(hours, 10);
+    const endHour = (Number.isFinite(parsedHour) ? parsedHour : 9) + 1;
     return `${startTime} - ${endHour.toString().padStart(2, '0')}:${minutes}`;
   };
 
-  const onLayoutChange = useCallback((currentLayout: any, allLayouts: any) => {
+  const onLayoutChange = useCallback((_currentLayout: Layout[], allLayouts: Layouts) => {
     // Layout is fixed, we don't save to localStorage to ensure stability
     setLayouts(allLayouts);
   }, []);
@@ -356,22 +311,6 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
   const handleBookingClick = (booking: Booking) => {
     setSelectedBooking(booking);
   };
-
-  // Calculate time until next session
-  const getTimeUntilSession = (booking: Booking | null) => {
-    if (!booking) return null;
-    const now = new Date();
-    const sessionTime = new Date(booking.shootDate);
-    const [hours, minutes] = (booking.details?.startTime || '09:00').split(':');
-    sessionTime.setHours(parseInt(hours), parseInt(minutes));
-    const diff = sessionTime.getTime() - now.getTime();
-    const minutesLeft = Math.floor(diff / 60000);
-    const hoursLeft = Math.floor(minutesLeft / 60);
-    const minsLeft = minutesLeft % 60;
-    return { hours: hoursLeft, minutes: minsLeft };
-  };
-
-  const timeUntilNext = getTimeUntilSession(stats.nextSession);
 
   return (
     <ReceptionPageWrapper 
@@ -383,7 +322,7 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
 
       {/* Grid Layout */}
       <div 
-        className="flex-1 min-h-0 overflow-hidden relative z-10 p-4" 
+        className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto xl:overflow-hidden relative z-10 p-2 sm:p-3 lg:p-4" 
         dir="ltr"
         style={{ 
           scrollbarWidth: 'none', 
@@ -608,15 +547,6 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
         </div>
       )}
 
-      {/* WhatsApp Chat FAB */}
-      <button 
-        onClick={() => setShowChatModal(!showChatModal)}
-        className="fixed bottom-8 left-8 w-16 h-16 bg-linear-to-br from-[#25D366] to-[#128C7E] rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform group z-50"
-      >
-        <MessageCircle size={28} className="text-white group-hover:scale-110 transition-transform" />
-        <div className="absolute -top-2 -right-2 w-4 h-4 bg-red-500 rounded-full border-2 border-[#21242b] animate-pulse"></div>
-      </button>
-
       {/* Rating Popup Modal - Outside Grid */}
       {showRatingPopup && (
         <div className="fixed inset-0 z-999999 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -668,7 +598,7 @@ const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ bookings = [], 
               </button>
               <button
                 onClick={() => {
-                  if (currentRating > 0) {
+                  if (currentRating > 0 && activeChat) {
                     // Save to clientRatings
                     setClientRatings({
                       ...clientRatings,

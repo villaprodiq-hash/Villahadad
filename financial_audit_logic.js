@@ -1,14 +1,11 @@
-const { PaymentService } = require('./src/services/db/services/PaymentService');
-const { BookingRepository } = require('./src/services/db/repositories/BookingRepository');
-const fs = require('fs');
+import { PaymentService } from './src/services/db/services/PaymentService';
 
-async function stressTestFinancials() {
+export async function stressTestFinancials() {
   console.log('🌑 [الخبير المحاسبي] بدء اختبار الضغط المالي (Stress Test)...');
 
   // محاكاة إضافة 50 حجز بسرعة مع دفعات متعددة
   const count = 50;
   const paymentService = new PaymentService();
-  const bookingRepo = new BookingRepository();
 
   console.log(`🚀 جاري إنشاء ${count} معاملة وهمية للتحقق من تحمل السيستم...`);
 
@@ -27,7 +24,8 @@ async function stressTestFinancials() {
 
       if (i % 10 === 0) console.log(`✅ تم إنجاز ${i} معاملة...`);
     } catch (e) {
-      console.error(`❌ فشل في المعاملة ${i}: ${e.message}`);
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`❌ فشل في المعاملة ${i}: ${message}`);
     }
   }
 

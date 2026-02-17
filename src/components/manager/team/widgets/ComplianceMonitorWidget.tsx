@@ -1,16 +1,18 @@
 import React from 'react';
 import { ShieldCheck, Users, Briefcase, CheckCircle2, Activity } from 'lucide-react';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
-import { useAuth } from '../../../../providers/AuthProvider';
-import { useData } from '../../../../providers/DataProvider';
-import { UserRole, RoleLabels } from '../../../../types';
+import { useAuth } from '../../../../hooks/useAuth';
+import { useData } from '../../../../hooks/useData';
+import { UserRole, RoleLabels, BookingStatus } from '../../../../types';
 
 const ComplianceMonitorWidget: React.FC = () => {
     const { users } = useAuth();
     const { bookings } = useData();
 
     const totalUsers = users?.length || 0;
-    const activeBookings = bookings?.filter(b => b.status !== 'cancelled' && !b.deletedAt)?.length || 0;
+    const activeBookings = bookings?.filter(
+        b => b.status !== BookingStatus.DELIVERED && b.status !== BookingStatus.ARCHIVED && !b.deletedAt
+    )?.length || 0;
     
     // Count unique roles
     const uniqueRoles = new Set(users?.map(u => u.role) || []);

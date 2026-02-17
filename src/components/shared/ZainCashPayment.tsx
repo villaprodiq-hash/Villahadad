@@ -36,8 +36,11 @@ export const ZainCashPayment: React.FC<ZainCashPaymentProps> = ({ booking, onPay
       setTransactionId(response.id);
 
       // Open in default browser (Electron or Web)
-      if ((window as any).electronAPI) {
-        (window as any).electronAPI.openExternal(response.url);
+      const electronApi = window.electronAPI as
+        | (typeof window.electronAPI & { openExternal?: (url: string) => void | Promise<void> })
+        | undefined;
+      if (electronApi?.openExternal) {
+        void electronApi.openExternal(response.url);
       } else {
         window.open(response.url, '_blank');
       }

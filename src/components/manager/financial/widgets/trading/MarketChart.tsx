@@ -1,33 +1,45 @@
 import React, { useState } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps
 } from 'recharts';
-import { TrendingUp, TrendingDown, Maximize2, BarChart2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Maximize2, BarChart2 } from 'lucide-react';
+
+type Timeframe = '1H' | '1D' | '1W' | '1M' | '1Y';
+
+interface MarketChartPoint {
+  date: string;
+  value: number;
+  count?: number;
+}
+
+const TIMEFRAMES: Timeframe[] = ['1H', '1D', '1W', '1M', '1Y'];
 
 interface MarketChartProps {
-  data: any[];
+  data: MarketChartPoint[];
   selectedAsset: string;
 }
 
 const MarketChart: React.FC<MarketChartProps> = ({ data, selectedAsset }) => {
-  const [timeframe, setTimeframe] = useState<'1H' | '1D' | '1W' | '1M' | '1Y'>('1M');
+  const [timeframe, setTimeframe] = useState<Timeframe>('1M');
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+      const first = payload[0];
+      const value = typeof first?.value === 'number' ? first.value : 0;
+      const point = (first?.payload ?? {}) as Partial<MarketChartPoint>;
       return (
         <div className="bg-[#1e2026] border border-gray-700/50 rounded-lg p-3 shadow-2xl min-w-[180px]">
           <p className="text-gray-400 text-[10px] font-mono mb-2">{label}</p>
           <div className="flex items-center justify-between gap-4">
             <span className="text-xs font-bold text-gray-300">Volume</span>
             <span className="text-sm font-black text-[#0ecb81] font-mono">
-              ${payload[0].value.toLocaleString()}
+              ${value.toLocaleString()}
             </span>
           </div>
           <div className="flex items-center justify-between gap-4 mt-1">
             <span className="text-xs font-bold text-gray-300">Count</span>
             <span className="text-xs font-mono text-white">
-              {payload[0].payload.count} trades
+              {(point.count ?? 0).toLocaleString()} trades
             </span>
           </div>
         </div>
@@ -35,6 +47,8 @@ const MarketChart: React.FC<MarketChartProps> = ({ data, selectedAsset }) => {
     }
     return null;
   };
+
+  const lastValue = data.length > 0 ? (data[data.length - 1]?.value ?? 0) : 0;
 
   return (
     <div className="flex flex-col h-full bg-[#161a1e] rounded-xl border border-gray-800 overflow-hidden relative">
@@ -50,10 +64,10 @@ const MarketChart: React.FC<MarketChartProps> = ({ data, selectedAsset }) => {
                  </span>
              </div>
              <div className="hidden md:flex bg-black/20 rounded-lg p-0.5">
-                 {['1H', '1D', '1W', '1M', '1Y'].map((t) => (
+                 {TIMEFRAMES.map((t) => (
                      <button
                         key={t}
-                        onClick={() => setTimeframe(t as any)}
+                        onClick={() => setTimeframe(t)}
                         className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${timeframe === t ? 'bg-[#2b3139] text-[#f0b90b]' : 'text-gray-500 hover:text-gray-300'}`}
                      >
                         {t}
@@ -110,9 +124,9 @@ const MarketChart: React.FC<MarketChartProps> = ({ data, selectedAsset }) => {
       <div className="absolute top-16 left-4 z-10 pointer-events-none">
          <div className="flex flex-col">
             <span className="text-3xl font-black text-[#0ecb81] font-mono tracking-tighter">
-                ${data.length > 0 ? data[data.length-1].value.toLocaleString() : '0.00'}
+                ${lastValue.toLocaleString()}
             </span>
-            <span className="text-xs text-gray-500 font-mono">Vol: {data.reduce((acc: number, curr: any) => acc + curr.value, 0).toLocaleString()} USD</span>
+            <span className="text-xs text-gray-500 font-mono">Vol: {data.reduce((acc, curr) => acc + curr.value, 0).toLocaleString()} USD</span>
          </div>
       </div>
     </div>

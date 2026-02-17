@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Booking } from '../../../../types';
 import ManagerDashboardCard from '../../dashboard/widgets/ManagerDashboardCard';
-import { RefreshCw, TrendingUp, Users } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 interface ClientRetentionWidgetProps {
     bookings: Booking[];

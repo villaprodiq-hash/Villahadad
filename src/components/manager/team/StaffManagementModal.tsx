@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, ShieldAlert, User, Briefcase, Lock, Key, ChevronDown, BadgeCheck, EyeOff, LayoutGrid, ImagePlus } from 'lucide-react';
+import { X, Check, ShieldAlert, User, Briefcase, Lock, Key, ChevronDown, BadgeCheck, EyeOff, LayoutGrid } from 'lucide-react';
 import { User as UserType, UserRole, RoleLabels } from '../../../types';
 
 interface StaffManagementModalProps {
@@ -21,10 +21,8 @@ const ROLE_SECTIONS: Partial<Record<UserRole, { id: string; label: string }[]>> 
     ],
     [UserRole.PHOTO_EDITOR]: [
         { id: 'section-home', label: 'المهام (Tasks)' },
-        { id: 'section-quality', label: 'الجودة (Quality)' },
-        { id: 'section-stats', label: 'الإحصائيات (Stats)' },
+        { id: 'section-files', label: 'المعرض (Gallery)' },
         { id: 'section-team-chat', label: 'الدردشة (Chat)' },
-        { id: 'section-presets', label: 'الإعدادات (Presets)' },
     ],
     [UserRole.VIDEO_EDITOR]: [
          { id: 'dashboard', label: 'الرئيسية (Dashboard)' },
@@ -80,6 +78,7 @@ const StaffManagementModal: React.FC<StaffManagementModalProps> = ({
   const [confirmSuperAdmin, setConfirmSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const selectedRoleSections = formData.role ? (ROLE_SECTIONS[formData.role] ?? []) : [];
 
   // Reset form when modal opens or initialData changes
   useEffect(() => {
@@ -247,14 +246,14 @@ const StaffManagementModal: React.FC<StaffManagementModalProps> = ({
                             <label className="text-xs font-bold text-gray-700">لون الأفاتار</label>
                             <div className="flex flex-wrap gap-2">
                                 {[
-                                    'bg-gradient-to-br from-purple-500 to-pink-500',
-                                    'bg-gradient-to-br from-blue-500 to-cyan-500',
-                                    'bg-gradient-to-br from-green-500 to-emerald-500',
-                                    'bg-gradient-to-br from-amber-500 to-orange-500',
-                                    'bg-gradient-to-br from-red-500 to-rose-500',
-                                    'bg-gradient-to-br from-indigo-500 to-violet-500',
-                                    'bg-gradient-to-br from-teal-500 to-cyan-500',
-                                    'bg-gradient-to-br from-pink-500 to-rose-500',
+                                    'bg-linear-to-br from-purple-500 to-pink-500',
+                                    'bg-linear-to-br from-blue-500 to-cyan-500',
+                                    'bg-linear-to-br from-green-500 to-emerald-500',
+                                    'bg-linear-to-br from-amber-500 to-orange-500',
+                                    'bg-linear-to-br from-red-500 to-rose-500',
+                                    'bg-linear-to-br from-indigo-500 to-violet-500',
+                                    'bg-linear-to-br from-teal-500 to-cyan-500',
+                                    'bg-linear-to-br from-pink-500 to-rose-500',
                                 ].map((gradient) => (
                                     <button
                                         key={gradient}
@@ -409,7 +408,7 @@ const StaffManagementModal: React.FC<StaffManagementModalProps> = ({
                          </div>
 
                          <div className="grid grid-cols-1 gap-2">
-                             {(formData.role && ROLE_SECTIONS[formData.role])?.map(section => {
+                             {selectedRoleSections.map(section => {
                                  const isHidden = formData.preferences?.hiddenSections?.includes(section.id);
                                  return (
                                      <div 
@@ -434,7 +433,7 @@ const StaffManagementModal: React.FC<StaffManagementModalProps> = ({
                                  );
                              })}
                              
-                             {(!formData.role || !ROLE_SECTIONS[formData.role] || ROLE_SECTIONS[formData.role].length === 0) && (
+                             {selectedRoleSections.length === 0 && (
                                  <div className="text-center py-8 text-gray-400 text-xs">
                                      لا توجد أقسام قابلة للتخصيص لهذا الدور الوظيفي.
                                  </div>
