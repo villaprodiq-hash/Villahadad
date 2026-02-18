@@ -31,8 +31,9 @@ const AppLoader = () => {
 const PORTAL_ROUTE_PREFIXES = ['/select', '/client-portal', '/view/', '/gallery/'] as const;
 const DEFAULT_STAFF_WEB_HOST = 'staff.villahadad.org';
 const DEFAULT_PORTAL_WEB_HOST = 'select.villahadad.org';
+const DEFAULT_MANAGER_WEB_HOST = 'manager.villahadad.org';
 
-type WebHostMode = 'staff' | 'select' | 'other';
+type WebHostMode = 'staff' | 'select' | 'manager' | 'other';
 
 const getHostFromConfiguredUrl = (configuredUrl: string | undefined, fallback: string): string => {
   const raw = String(configuredUrl || '').trim();
@@ -53,12 +54,19 @@ const getPortalWebHost = (): string =>
     DEFAULT_PORTAL_WEB_HOST
   );
 
+const getManagerWebHost = (): string =>
+  getHostFromConfiguredUrl(
+    import.meta.env.VITE_MANAGER_BASE_URL as string | undefined,
+    DEFAULT_MANAGER_WEB_HOST
+  );
+
 const getWebHostMode = (): WebHostMode => {
   if (typeof window === 'undefined') return 'other';
   const hostname = window.location.hostname.toLowerCase();
   if (!hostname) return 'other';
 
   if (hostname === getPortalWebHost()) return 'select';
+  if (hostname === getManagerWebHost()) return 'manager';
   if (hostname === getStaffWebHost()) return 'staff';
   return 'other';
 };
@@ -80,6 +88,7 @@ const isClientPortalRoute = (): boolean => {
 
   const hostMode = getWebHostMode();
   if (hostMode === 'select') return true;
+  if (hostMode === 'manager') return false;
   if (hostMode === 'staff') return false;
 
   return false;
@@ -203,6 +212,7 @@ const SelectionLayout = React.lazy(() => import('./components/selection/layout/S
 const SelectionDashboard = React.lazy(() => import('./components/selection/SelectionDashboard'));
 const WorkflowView = React.lazy(() => import('./components/WorkflowView'));
 const ClientPortal = React.lazy(() => import('./pages/ClientPortal'));
+const ManagerMobilePortal = React.lazy(() => import('./pages/ManagerMobilePortal'));
 
 // Manager Financials - Lazy Load
 const ManagerFinancialView = React.lazy(
@@ -373,6 +383,8 @@ type StorageLocation = {
 };
 
 export default function App() {
+  const isManagerHostView = getWebHostMode() === 'manager';
+
   // ⚡️ PERFORMANCE MODE - Auto-detect Intel Macs and disable heavy effects
   useEffect(() => {
     const detectPerformanceMode = async () => {
@@ -446,6 +458,20 @@ export default function App() {
           <ClientPortal />
         </Suspense>
       </>
+    );
+  }
+
+  if (isManagerHostView) {
+    return (
+      <ErrorBoundary name="Manager Mobile Portal">
+        <Suspense fallback={<AppLoader />}>
+          <AuthProvider>
+            <DataProvider>
+              <ManagerMobilePortal />
+            </DataProvider>
+          </AuthProvider>
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
