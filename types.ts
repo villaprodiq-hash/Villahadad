@@ -277,6 +277,12 @@ export interface Booking {
   // Manager Approval & Conflict Lock
   approvalStatus?: 'pending' | 'approved' | 'rejected'; // For conflict overrides
   conflictDetails?: string; // Reason for the conflict (e.g. "Venue Full")
+  approvedBy?: string;
+  approvedByRole?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedByRole?: string;
+  rejectedAt?: string;
 
   // Audit Log / Workflow History
   statusHistory?: StatusHistoryItem[];
@@ -595,6 +601,12 @@ export interface User {
     hr_strikes?: number;
     hr_performance?: number;
     hr_notes?: string;
+    managerMobileAccess?: {
+      trustedDeviceId: string;
+      trustedDeviceLabel?: string;
+      trustedAt: string;
+      updatedAt?: string;
+    };
   };
 }
 

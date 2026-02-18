@@ -41,5 +41,11 @@ export interface User {
     hr_strikes?: number;
     hr_performance?: number;
     hr_notes?: string;
+    managerMobileAccess?: {
+      trustedDeviceId: string;
+      trustedDeviceLabel?: string;
+      trustedAt: string;
+      updatedAt?: string;
+    };
   };
 }
