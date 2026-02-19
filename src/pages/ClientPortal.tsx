@@ -503,10 +503,12 @@ const ClientPortal: React.FC = () => {
     setLoadingState('submitting');
 
     try {
+      // 🔧 CRITICAL FIX: Include fileName so backend can map to RAW files correctly
       const selections = images.map(img => ({
         imageId: img.id,
+        fileName: img.fileName, // ✅ Essential for matching with session_images table
         status: img.status,
-        liked: img.status === 'selected',
+        liked: img.status === 'selected' ? 1 : 0, // ✅ Use numeric format for DB
         notes: img.notes?.trim() || null,
       }));
 

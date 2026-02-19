@@ -59,6 +59,7 @@ interface SessionImagesSchema {
   sessionColumn: 'sessionId' | 'session_id' | null;
   statusColumn: 'status' | null;
   likedColumn: 'liked' | null;
+  selectedColumn: 'is_selected' | null;
   notesColumn: 'notes' | null;
   updatedColumn: 'updatedAt' | 'updated_at' | null;
 }
@@ -66,6 +67,7 @@ interface SessionImagesSchema {
 interface SessionImageMeta {
   status: string;
   liked: number;
+  isSelected: number;
   notes: string | null;
 }
 
@@ -79,8 +81,48 @@ const isClientSelectedMeta = (meta?: SessionImageMeta): boolean => {
   if (!meta) return false;
   const normalizedStatus = String(meta.status || '').toLowerCase();
   if (meta.liked > 0) return true;
+  if (meta.isSelected > 0) return true;
   if (SELECTED_STATUS_SET.has(normalizedStatus)) return true;
-  return typeof meta.notes === 'string' && meta.notes.trim().length > 0;
+  return false;
+};
+
+const mergeSessionMeta = (current: SessionImageMeta | undefined, incoming: SessionImageMeta): SessionImageMeta => {
+  if (!current) return incoming;
+
+  const currentScore =
+    (current.liked > 0 ? 3 : 0) +
+    (current.isSelected > 0 ? 2 : 0) +
+    (SELECTED_STATUS_SET.has(String(current.status || '').toLowerCase()) ? 1 : 0);
+  const incomingScore =
+    (incoming.liked > 0 ? 3 : 0) +
+    (incoming.isSelected > 0 ? 2 : 0) +
+    (SELECTED_STATUS_SET.has(String(incoming.status || '').toLowerCase()) ? 1 : 0);
+
+  const primary = incomingScore >= currentScore ? incoming : current;
+  const secondary = primary === incoming ? current : incoming;
+
+  const parsedPrimary = parseNotesPayload(primary.notes);
+  const parsedSecondary = parseNotesPayload(secondary.notes);
+  const mergedTags = Array.from(new Set([...parsedPrimary.tags, ...parsedSecondary.tags]));
+  const mergedNote = parsedPrimary.note || parsedSecondary.note || '';
+
+  return {
+    status: primary.status,
+    liked: Math.max(primary.liked, secondary.liked),
+    isSelected: Math.max(primary.isSelected, secondary.isSelected),
+    notes:
+      mergedNote || mergedTags.length > 0
+        ? JSON.stringify({ note: mergedNote, tags: mergedTags })
+        : primary.notes || secondary.notes || null,
+  };
+};
+
+const resolveMetaByFileName = (metaMap: Map<string, SessionImageMeta>, fileName: string): SessionImageMeta | undefined => {
+  for (const key of getMatchingNameKeys(fileName)) {
+    const meta = metaMap.get(key);
+    if (meta) return meta;
+  }
+  return undefined;
 };
 
 const createTaskId = () => {
@@ -98,6 +140,22 @@ const toFileUrl = (targetPath: string): string => {
 
 const normalizeBaseName = (fileName: string): string =>
   fileName.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+
+const getMatchingNameKeys = (fileName: string): string[] => {
+  const base = normalizeBaseName(fileName);
+  if (!base) return [];
+
+  const keys = new Set<string>([base]);
+
+  // uploader pattern: 1771436210040_0_original-name.jpg
+  keys.add(base.replace(/^\d+_\d+_/, ''));
+  // uuid/hash prefix pattern: a1b2c3d4-..._original-name.jpg
+  keys.add(base.replace(/^[a-f0-9-]{16,}_/i, ''));
+  // simple numeric prefix: 12345_original-name.jpg
+  keys.add(base.replace(/^\d+_/, ''));
+
+  return Array.from(keys).filter(Boolean);
+};
 
 const parseNotesPayload = (raw: string | null): { note: string; tags: string[] } => {
   if (!raw || raw.trim().length === 0) return { note: '', tags: [] };
@@ -148,7 +206,6 @@ const querySelectionReadyBookingIds = async (): Promise<Set<string>> => {
             SUM(CASE
                   WHEN liked = 1
                     OR status IN ('selected','approved','editing','final')
-                    OR (notes IS NOT NULL AND TRIM(notes) <> '')
                   THEN 1 ELSE 0 END) AS selected_count
        FROM session_images
       GROUP BY bookingId`,
@@ -156,7 +213,6 @@ const querySelectionReadyBookingIds = async (): Promise<Set<string>> => {
             SUM(CASE
                   WHEN liked = 1
                     OR status IN ('selected','approved','editing','final')
-                    OR (notes IS NOT NULL AND TRIM(notes) <> '')
                   THEN 1 ELSE 0 END) AS selected_count
        FROM session_images
       GROUP BY booking_id`,
@@ -280,6 +336,7 @@ const resolveSessionImagesSchema = async (): Promise<SessionImagesSchema | null>
       sessionColumn: columnNames.has('sessionId') ? 'sessionId' : columnNames.has('session_id') ? 'session_id' : null,
       statusColumn: columnNames.has('status') ? 'status' : null,
       likedColumn: columnNames.has('liked') ? 'liked' : null,
+      selectedColumn: columnNames.has('is_selected') ? 'is_selected' : null,
       notesColumn: columnNames.has('notes') ? 'notes' : null,
       updatedColumn: columnNames.has('updatedAt') ? 'updatedAt' : columnNames.has('updated_at') ? 'updated_at' : null,
     };
@@ -335,6 +392,7 @@ const querySessionImagesMeta = async (bookingId: string): Promise<Map<string, Se
   const selectColumns = [`${schema.fileColumn} AS file_name`];
   if (schema.statusColumn) selectColumns.push(`${schema.statusColumn} AS status`);
   if (schema.likedColumn) selectColumns.push(`${schema.likedColumn} AS liked`);
+  if (schema.selectedColumn) selectColumns.push(`${schema.selectedColumn} AS is_selected`);
   if (schema.notesColumn) selectColumns.push(`${schema.notesColumn} AS notes`);
 
   try {
@@ -355,11 +413,16 @@ const querySessionImagesMeta = async (bookingId: string): Promise<Map<string, Se
             : '';
       if (!fileName) continue;
 
-      byBaseName.set(normalizeBaseName(fileName), {
+      const incoming: SessionImageMeta = {
         status: String(rowObject.status || '').toLowerCase(),
         liked: toNumber(rowObject.liked),
+        isSelected: toNumber(rowObject.is_selected),
         notes: typeof rowObject.notes === 'string' ? rowObject.notes : null,
-      });
+      };
+
+      for (const key of getMatchingNameKeys(fileName)) {
+        byBaseName.set(key, mergeSessionMeta(byBaseName.get(key), incoming));
+      }
     }
   } catch {
     return byBaseName;
@@ -679,11 +742,12 @@ const TaskListView: React.FC<TaskListViewProps> = ({
         // If 02_SELECTED is empty but we have selected evidence in DB, copy matching RAW files.
         if (sourceFiles.length === 0 && rawFiles.length > 0) {
           const selectedRawFiles = rawFiles.filter((file) => {
-            const baseName = normalizeBaseName(file.name);
-            return isClientSelectedMeta(metaMap.get(baseName));
+            const meta = resolveMetaByFileName(metaMap, file.name);
+            return isClientSelectedMeta(meta);
           });
 
           if (selectedRawFiles.length > 0) {
+            console.log('[PhotoEditor] 🔧 Self-healing: Found', selectedRawFiles.length, 'selected images in DB');
             try {
               const copyToSelected = window.electronAPI?.sessionLifecycle?.copyToSelected;
               if (copyToSelected) {
@@ -692,20 +756,32 @@ const TaskListView: React.FC<TaskListViewProps> = ({
                   selectedRawFiles.map((file) => file.name)
                 );
                 sourceFiles = await listImageFiles(selectedDir);
+                console.log('[PhotoEditor] ✅ Copied', sourceFiles.length, 'files to 02_SELECTED');
               }
             } catch (copyError) {
               console.warn('[PhotoEditor] copyToSelected fallback failed:', copyError);
             }
 
+            // CRITICAL FIX: Use the selectedRawFiles with full RAW paths if copy failed
             if (sourceFiles.length === 0) {
               sourceFiles = selectedRawFiles;
+              console.log('[PhotoEditor] ℹ️ Using RAW files directly (copy failed or skipped)');
             }
           }
         }
 
         // Final fallback: never show empty gallery if RAW exists.
+        // BUT: Only use this if we have NO selection evidence (avoid showing unselected images)
         if (sourceFiles.length === 0 && rawFiles.length > 0) {
-          sourceFiles = rawFiles;
+          const hasAnySelectionEvidence = Array.from(metaMap.values()).some(meta => isClientSelectedMeta(meta));
+          if (!hasAnySelectionEvidence) {
+            // No selection data at all → show all RAW files
+            sourceFiles = rawFiles;
+            console.log('[PhotoEditor] ℹ️ No selection evidence - showing all RAW files');
+          } else {
+            // Has selection evidence but files missing → don't show anything (data integrity issue)
+            console.warn('[PhotoEditor] ⚠️ Selection evidence exists but no files found - check file names');
+          }
         }
 
         const rawByBase = new Map(rawFiles.map(file => [normalizeBaseName(file.name), file]));
@@ -715,7 +791,15 @@ const TaskListView: React.FC<TaskListViewProps> = ({
           const baseName = normalizeBaseName(file.name);
           const rawMatch = rawByBase.get(baseName);
           const editedMatch = editedByBase.get(baseName);
-          const meta = metaMap.get(baseName);
+          
+          // 🔧 CRITICAL FIX: Use enhanced matching to find meta even with prefix/timestamp differences
+          const meta = resolveMetaByFileName(metaMap, file.name);
+          
+          // 📊 DEBUG: Log when meta is missing (helps identify name mismatch issues)
+          if (!meta) {
+            console.warn('[PhotoEditor] ⚠️ No meta found for file:', file.name, '- candidates:', getMatchingNameKeys(file.name));
+          }
+          
           const parsedNotes = parseNotesPayload(meta?.notes ?? null);
           const tagsFromNotes = [...parsedNotes.tags];
           const likedByClient = toNumber(meta?.liked) > 0;
