@@ -8,9 +8,11 @@ import {
   Loader2,
   ListFilter,
   LogOut,
+  Plus,
   RefreshCcw,
   ShieldAlert,
   Smartphone,
+  Trash2,
   WalletCards,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,10 +21,17 @@ import { useDataContextValue as useData } from '../providers/data-context';
 import { SecurityAccessTerminal } from '../components/shared/auth/SecurityAccessTerminal';
 import { electronBackend } from '../services/mockBackend';
 import { verifyPasswordSync } from '../services/security/PasswordService';
-import ManagerAccountsView from '../components/manager/financial/ManagerAccountsView';
 import ManagerBookingDetailsView from '../components/manager/ManagerBookingDetailsView';
-import ExpenseTrackerWidget from '../components/manager/financial/widgets/ExpenseTrackerWidget';
-import { Booking, BookingStatus, Expense, StatusLabels, UserRole } from '../types';
+import {
+  Booking,
+  BookingStatus,
+  Currency,
+  Expense,
+  ExpenseCategory,
+  ExpenseCategoryLabels,
+  StatusLabels,
+  UserRole,
+} from '../types';
 
 type ManagerTab = 'sessions' | 'finance' | 'expenses';
 type SessionFilter = 'today' | 'tomorrow' | 'week' | 'date';
@@ -121,8 +130,12 @@ const toDateInput = (date: Date) => {
 };
 
 const makeDate = (year: number, month: number, day: number) => {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
   const date = new Date(year, month, day);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+  return date;
 };
 
 const parseBookingDateSafe = (value: string): Date | null => {
@@ -162,11 +175,16 @@ const endOfDay = (date: Date) => {
   return value;
 };
 
-const getWeekEndFromToday = (today: Date) => {
-  const start = startOfDay(today);
+const getWeekRangeFromDate = (date: Date) => {
+  const dayStart = startOfDay(date);
+  const dayOfWeek = dayStart.getDay();
+  const weekStartsOn = 6; // السبت
+  const daysFromWeekStart = (dayOfWeek - weekStartsOn + 7) % 7;
+  const start = new Date(dayStart);
+  start.setDate(dayStart.getDate() - daysFromWeekStart);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  return endOfDay(end);
+  return { start, end: endOfDay(end) };
 };
 
 const statusClassMap: Record<BookingStatus, string> = {
@@ -200,21 +218,28 @@ const ManagerMobilePortal: React.FC = () => {
   const [isDeviceReady, setIsDeviceReady] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [deviceLabel, setDeviceLabel] = useState('');
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [expenseForm, setExpenseForm] = useState<{
+    title: string;
+    amount: string;
+    currency: Currency;
+    category: ExpenseCategory;
+    date: string;
+    note: string;
+  }>({
+    title: '',
+    amount: '',
+    currency: 'IQD',
+    category: 'other',
+    date: toDateInput(new Date()),
+    note: '',
+  });
 
   const managerUsers = useMemo(() => users.filter(user => user.role === UserRole.MANAGER), [users]);
   const isLikelyMobileDevice = useMemo(() => {
     if (typeof navigator === 'undefined') return false;
     return /iPhone|iPad|Android|Mobile|iPod/i.test(navigator.userAgent || '');
   }, []);
-
-  const today = useMemo(() => new Date(), []);
-  const tomorrow = useMemo(() => {
-    const value = new Date();
-    value.setDate(value.getDate() + 1);
-    return value;
-  }, []);
-
-  const weekEnd = useMemo(() => getWeekEndFromToday(today), [today]);
 
   useEffect(() => {
     let cancelled = false;
@@ -290,7 +315,10 @@ const ManagerMobilePortal: React.FC = () => {
 
   const bookingCounts = useMemo(() => {
     const customDate = parseBookingDateSafe(selectedDate);
-    const todayStart = startOfDay(today);
+    const now = new Date();
+    const today = startOfDay(now);
+    const tomorrow = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+    const { start: weekStart, end: weekEnd } = getWeekRangeFromDate(now);
 
     return sortedBookings.reduce(
       (acc, booking) => {
@@ -299,18 +327,21 @@ const ManagerMobilePortal: React.FC = () => {
 
         if (isSameDay(shootDate, today)) acc.today += 1;
         if (isSameDay(shootDate, tomorrow)) acc.tomorrow += 1;
-        if (shootDate >= todayStart && shootDate <= weekEnd) acc.week += 1;
+        if (shootDate >= weekStart && shootDate <= weekEnd) acc.week += 1;
         if (customDate && isSameDay(shootDate, customDate)) acc.date += 1;
 
         return acc;
       },
       { today: 0, tomorrow: 0, week: 0, date: 0 }
     );
-  }, [selectedDate, sortedBookings, today, tomorrow, weekEnd]);
+  }, [selectedDate, sortedBookings]);
 
   const filteredBookings = useMemo(() => {
     const customDate = parseBookingDateSafe(selectedDate);
-    const todayStart = startOfDay(today);
+    const now = new Date();
+    const today = startOfDay(now);
+    const tomorrow = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+    const { start: weekStart, end: weekEnd } = getWeekRangeFromDate(now);
 
     return sortedBookings.filter(booking => {
       const shootDate = parseBookingDateSafe(booking.shootDate);
@@ -318,13 +349,14 @@ const ManagerMobilePortal: React.FC = () => {
 
       if (sessionFilter === 'today') return isSameDay(shootDate, today);
       if (sessionFilter === 'tomorrow') return isSameDay(shootDate, tomorrow);
-      if (sessionFilter === 'week') return shootDate >= todayStart && shootDate <= weekEnd;
+      if (sessionFilter === 'week') return shootDate >= weekStart && shootDate <= weekEnd;
       if (!customDate) return false;
       return isSameDay(shootDate, customDate);
     });
-  }, [selectedDate, sessionFilter, sortedBookings, today, tomorrow, weekEnd]);
+  }, [selectedDate, sessionFilter, sortedBookings]);
 
   const todayFinance = useMemo(() => {
+    const today = startOfDay(new Date());
     return sortedBookings
       .filter(booking => {
         const date = parseBookingDateSafe(booking.shootDate);
@@ -343,7 +375,7 @@ const ManagerMobilePortal: React.FC = () => {
         },
         { totalUSD: 0, paidUSD: 0, totalIQD: 0, paidIQD: 0 }
       );
-  }, [sortedBookings, today]);
+  }, [sortedBookings]);
 
   const allFinance = useMemo(() => {
     return sortedBookings.reduce(
@@ -360,6 +392,10 @@ const ManagerMobilePortal: React.FC = () => {
       { totalUSD: 0, paidUSD: 0, totalIQD: 0, paidIQD: 0 }
     );
   }, [sortedBookings]);
+
+  const sortedExpenses = useMemo(() => {
+    return [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [expenses]);
 
   const selectedBooking = useMemo(
     () => sortedBookings.find(booking => booking.id === selectedBookingId) || null,
@@ -401,6 +437,40 @@ const ManagerMobilePortal: React.FC = () => {
       toast.error('تعذر حذف الصرفية');
     }
   }, [loadExpenses]);
+
+  const handleSubmitExpense = useCallback(async () => {
+    const normalizedTitle = expenseForm.title.trim();
+    const normalizedAmount = Number(expenseForm.amount);
+    if (!normalizedTitle) {
+      toast.error('يرجى كتابة عنوان الصرفية');
+      return;
+    }
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      toast.error('يرجى كتابة مبلغ صحيح');
+      return;
+    }
+
+    setIsAddingExpense(true);
+    try {
+      await handleAddExpense({
+        title: normalizedTitle,
+        amount: normalizedAmount,
+        currency: expenseForm.currency,
+        category: expenseForm.category,
+        date: expenseForm.date,
+        note: expenseForm.note.trim() || undefined,
+      });
+      setExpenseForm(current => ({
+        ...current,
+        title: '',
+        amount: '',
+        note: '',
+        date: toDateInput(new Date()),
+      }));
+    } finally {
+      setIsAddingExpense(false);
+    }
+  }, [expenseForm, handleAddExpense]);
 
   const managerMobileAccess = currentUser?.preferences?.managerMobileAccess;
   const trustedDeviceId = managerMobileAccess?.trustedDeviceId?.trim() || '';
@@ -718,34 +788,201 @@ const ManagerMobilePortal: React.FC = () => {
 
         {activeTab === 'finance' && (
           <section className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <SummaryCard
-                title="مالية جلسات اليوم"
-                line1={`المدفوع: ${formatMoney(todayFinance.paidUSD, 'USD')} | ${formatMoney(todayFinance.paidIQD, 'IQD')}`}
-                line2={`الإجمالي: ${formatMoney(todayFinance.totalUSD, 'USD')} | ${formatMoney(todayFinance.totalIQD, 'IQD')}`}
+            <div className="grid grid-cols-2 gap-2">
+              <MetricCard
+                title="مدفوع اليوم"
+                value={`${formatMoney(todayFinance.paidUSD, 'USD')} • ${formatMoney(todayFinance.paidIQD, 'IQD')}`}
+                subtitle="إجمالي المقبوضات اليومية"
+                accent="emerald"
               />
-              <SummaryCard
-                title="المالية العامة"
-                line1={`المدفوع: ${formatMoney(allFinance.paidUSD, 'USD')} | ${formatMoney(allFinance.paidIQD, 'IQD')}`}
-                line2={`الإجمالي: ${formatMoney(allFinance.totalUSD, 'USD')} | ${formatMoney(allFinance.totalIQD, 'IQD')}`}
+              <MetricCard
+                title="المتبقي اليوم"
+                value={`${formatMoney(Math.max(todayFinance.totalUSD - todayFinance.paidUSD, 0), 'USD')} • ${formatMoney(
+                  Math.max(todayFinance.totalIQD - todayFinance.paidIQD, 0),
+                  'IQD'
+                )}`}
+                subtitle="مبالغ قيد التحصيل اليوم"
+                accent="rose"
+              />
+              <MetricCard
+                title="مدفوع عام"
+                value={`${formatMoney(allFinance.paidUSD, 'USD')} • ${formatMoney(allFinance.paidIQD, 'IQD')}`}
+                subtitle="المقبوضات الكلية"
+                accent="cyan"
+              />
+              <MetricCard
+                title="المتبقي العام"
+                value={`${formatMoney(Math.max(allFinance.totalUSD - allFinance.paidUSD, 0), 'USD')} • ${formatMoney(
+                  Math.max(allFinance.totalIQD - allFinance.paidIQD, 0),
+                  'IQD'
+                )}`}
+                subtitle="إجمالي المستحقات المتبقية"
+                accent="amber"
               />
             </div>
 
-            <div className="rounded-[1.6rem] border border-white/10 bg-[#121826] p-2 min-h-[68vh]">
-              <ManagerAccountsView bookings={sortedBookings} onUpdateBooking={handleUpdateBooking} />
+            <div className="rounded-[1.6rem] border border-white/10 bg-[#121826] p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-black">تفاصيل الجلسات المالية</p>
+                <span className="rounded-full border border-cyan-400/35 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-200">
+                  {sortedBookings.length} جلسة
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-2 max-h-[58vh] overflow-y-auto pr-1">
+                {sortedBookings.map(booking => {
+                  const totalAmount = booking.totalAmount || 0;
+                  const paidAmount = booking.paidAmount || 0;
+                  const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+
+                  return (
+                    <article key={`finance-${booking.id}`} className="rounded-xl border border-white/10 bg-[#0d1422] p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black truncate">{booking.clientName}</p>
+                          <p className="mt-0.5 text-[11px] text-white/60 truncate">{booking.title}</p>
+                        </div>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusClassMap[booking.status] || 'bg-white/10 text-white'}`}>
+                          {StatusLabels[booking.status] || booking.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                        <p className="text-white/70">الإجمالي: <span className="text-white">{formatMoney(totalAmount, booking.currency)}</span></p>
+                        <p className="text-white/70">المدفوع: <span className="text-emerald-300">{formatMoney(paidAmount, booking.currency)}</span></p>
+                        <p className="text-white/70">المتبقي: <span className={remainingAmount > 0 ? 'text-rose-300' : 'text-cyan-300'}>{formatMoney(remainingAmount, booking.currency)}</span></p>
+                        <p className="text-white/70">
+                          التاريخ:{' '}
+                          <span className="text-white">
+                            {(() => {
+                              const date = parseBookingDateSafe(booking.shootDate);
+                              return date ? arDate.format(date) : '-';
+                            })()}
+                          </span>
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedBookingId(booking.id)}
+                        className="mt-2 w-full rounded-lg border border-cyan-400/35 bg-cyan-500/15 py-1.5 text-[11px] font-bold text-cyan-100 hover:bg-cyan-500/25"
+                      >
+                        عرض التفاصيل
+                      </button>
+                    </article>
+                  );
+                })}
+
+                {sortedBookings.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-center text-xs text-white/65">
+                    لا توجد جلسات مالية حالياً
+                  </p>
+                )}
+              </div>
             </div>
           </section>
         )}
 
         {activeTab === 'expenses' && (
           <section className="space-y-3">
-            <div className="rounded-[1.6rem] border border-white/10 bg-[#121826] p-2 min-h-[68vh]">
-              <ExpenseTrackerWidget
-                expenses={expenses}
-                onAddExpense={handleAddExpense}
-                onDeleteExpense={handleDeleteExpense}
-                disableTilt
-              />
+            <div className="rounded-[1.6rem] border border-white/10 bg-[#121826] p-3 space-y-3">
+              <p className="text-sm font-black">إضافة صرفية جديدة</p>
+
+              <div className="space-y-2">
+                <input
+                  value={expenseForm.title}
+                  onChange={event => setExpenseForm(current => ({ ...current, title: event.target.value }))}
+                  placeholder="عنوان الصرفية"
+                  className="w-full rounded-xl border border-white/10 bg-[#0d1422] px-3 py-2 text-sm"
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={expenseForm.amount}
+                    onChange={event => setExpenseForm(current => ({ ...current, amount: event.target.value }))}
+                    inputMode="decimal"
+                    placeholder="المبلغ"
+                    className="w-full rounded-xl border border-white/10 bg-[#0d1422] px-3 py-2 text-sm"
+                  />
+                  <select
+                    value={expenseForm.currency}
+                    onChange={event => setExpenseForm(current => ({ ...current, currency: event.target.value as Currency }))}
+                    className="w-full rounded-xl border border-white/10 bg-[#0d1422] px-3 py-2 text-sm"
+                  >
+                    <option value="IQD">IQD</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={expenseForm.category}
+                    onChange={event => setExpenseForm(current => ({ ...current, category: event.target.value as ExpenseCategory }))}
+                    className="w-full rounded-xl border border-white/10 bg-[#0d1422] px-3 py-2 text-sm"
+                  >
+                    {Object.entries(ExpenseCategoryLabels).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="date"
+                    value={expenseForm.date}
+                    onChange={event => setExpenseForm(current => ({ ...current, date: event.target.value }))}
+                    className="w-full rounded-xl border border-white/10 bg-[#0d1422] px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <input
+                  value={expenseForm.note}
+                  onChange={event => setExpenseForm(current => ({ ...current, note: event.target.value }))}
+                  placeholder="ملاحظة (اختياري)"
+                  className="w-full rounded-xl border border-white/10 bg-[#0d1422] px-3 py-2 text-sm"
+                />
+              </div>
+
+              <button
+                onClick={() => void handleSubmitExpense()}
+                disabled={isAddingExpense}
+                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 py-2.5 text-sm font-black"
+              >
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  {isAddingExpense ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  {isAddingExpense ? 'جارٍ الإضافة...' : 'إضافة صرفية'}
+                </span>
+              </button>
+            </div>
+
+            <div className="rounded-[1.6rem] border border-white/10 bg-[#121826] p-3">
+              <p className="text-sm font-black">سجل الصرفيات</p>
+              <div className="mt-3 space-y-2 max-h-[44vh] overflow-y-auto pr-1">
+                {sortedExpenses.map(expense => (
+                  <article key={expense.id} className="rounded-xl border border-white/10 bg-[#0d1422] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black truncate">{expense.title}</p>
+                        <p className="text-[11px] text-white/60 mt-0.5">
+                          {ExpenseCategoryLabels[expense.category]} • {arDate.format(parseBookingDateSafe(expense.date) || new Date(expense.date))}
+                        </p>
+                        <p className="text-[11px] text-white/75 mt-1 truncate">{expense.note || 'بدون ملاحظة'}</p>
+                      </div>
+                      <button
+                        onClick={() => void handleDeleteExpense(expense.id)}
+                        className="rounded-lg border border-rose-400/35 bg-rose-500/10 p-2 text-rose-200 hover:bg-rose-500/20"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs font-black text-emerald-300">{formatMoney(expense.amount, expense.currency)}</p>
+                  </article>
+                ))}
+
+                {sortedExpenses.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-center text-xs text-white/65">
+                    لا توجد صرفيات مسجلة
+                  </p>
+                )}
+              </div>
             </div>
           </section>
         )}
@@ -753,8 +990,8 @@ const ManagerMobilePortal: React.FC = () => {
 
       {selectedBooking && (
         <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm overflow-y-auto" dir="rtl">
-          <div className="min-h-screen p-3">
-            <div className="mx-auto max-w-5xl rounded-3xl bg-white p-3">
+        <div className="min-h-screen p-3">
+            <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-[#0f1420] p-3">
               <ManagerBookingDetailsView
                 booking={selectedBooking}
                 reminders={[]}
@@ -814,11 +1051,28 @@ const FilterChip: React.FC<{ active: boolean; onClick: () => void; icon: React.R
   </button>
 );
 
-const SummaryCard: React.FC<{ title: string; line1: string; line2: string }> = ({ title, line1, line2 }) => (
+const MetricCard: React.FC<{
+  title: string;
+  value: string;
+  subtitle: string;
+  accent: 'emerald' | 'rose' | 'cyan' | 'amber';
+}> = ({ title, value, subtitle, accent }) => (
   <article className="rounded-[1.4rem] border border-white/10 bg-[#151a25] p-3">
-    <p className="text-xs text-cyan-200/90 font-black">{title}</p>
-    <p className="text-xs text-white/80 mt-2">{line1}</p>
-    <p className="text-xs text-white/60 mt-1">{line2}</p>
+    <p
+      className={`text-[11px] font-black ${
+        accent === 'emerald'
+          ? 'text-emerald-200'
+          : accent === 'rose'
+            ? 'text-rose-200'
+            : accent === 'cyan'
+              ? 'text-cyan-200'
+              : 'text-amber-200'
+      }`}
+    >
+      {title}
+    </p>
+    <p className="mt-1 text-[12px] font-black text-white leading-6">{value}</p>
+    <p className="mt-1 text-[10px] text-white/60">{subtitle}</p>
   </article>
 );
 
