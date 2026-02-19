@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Camera, Building2, Loader2 } from 'lucide-react';
+import { Camera, Building2, Loader2, ShieldAlert, Smartphone } from 'lucide-react';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
 import { UpdateNotification } from './components/shared/UpdateNotification';
 
@@ -108,6 +108,72 @@ const WEB_ALLOWED_ROLES = new Set<UserRole>([
 
 const WEB_BLOCKED_SECTIONS_BY_ROLE: Partial<Record<UserRole, Set<string>>> = {
   [UserRole.MANAGER]: new Set(['section-files']),
+};
+
+const STAFF_WEB_DEVICE_SEED_KEY = 'vh_staff_web_seed_v1';
+
+const isManagerMasterPin = (pin: string): boolean => {
+  const normalized = pin.trim();
+  return normalized === '1234' || normalized === '112233' || normalized === 'admin2026';
+};
+
+const toHex = (buffer: ArrayBuffer): string =>
+  Array.from(new Uint8Array(buffer))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+
+const legacyHash = (input: string): string => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
+};
+
+const hashDeviceSignature = async (input: string): Promise<string> => {
+  if (typeof window !== 'undefined' && window.crypto?.subtle) {
+    const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    return toHex(digest);
+  }
+  return legacyHash(input);
+};
+
+const createFallbackSeed = (): string => {
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+};
+
+const resolveStaffWebDeviceIdentity = async (): Promise<{ id: string; label: string }> => {
+  if (typeof window === 'undefined') {
+    return { id: '', label: 'Unknown Device' };
+  }
+
+  const storedSeed = window.localStorage.getItem(STAFF_WEB_DEVICE_SEED_KEY);
+  const seed = storedSeed || createFallbackSeed();
+  if (!storedSeed) {
+    window.localStorage.setItem(STAFF_WEB_DEVICE_SEED_KEY, seed);
+  }
+
+  const ua = navigator.userAgent || 'unknown';
+  const platform = navigator.platform || 'unknown';
+  const language = navigator.language || 'ar-IQ';
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Baghdad';
+  const deviceKind = /iPhone/i.test(ua)
+    ? 'iPhone'
+    : /iPad/i.test(ua)
+      ? 'iPad'
+      : /Android/i.test(ua)
+        ? 'Android'
+        : 'Desktop';
+  const payload = `${seed}|${ua}|${platform}|${language}|${timezone}`;
+  const digest = await hashDeviceSignature(payload);
+  return {
+    id: `vhsw_${digest.slice(0, 40)}`,
+    label: `${deviceKind} • ${platform}`,
+  };
 };
 
 const WebAccessLockedScreen: React.FC = () => {
@@ -257,6 +323,7 @@ import {
 import { electronBackend } from './services/mockBackend';
 import { callClientPortal } from './services/clientPortalService';
 import { AppNotification } from './types/notification.types';
+import { verifyPasswordSync } from './services/security/PasswordService';
 import ReceptionPageWrapper from './components/reception/layout/ReceptionPageWrapper';
 
 // Hooks
@@ -493,6 +560,8 @@ export default function App() {
 
 function AppContent() {
   const isWebRuntime = typeof window !== 'undefined' && !isElectronRuntime();
+  const webHostMode = isWebRuntime ? getWebHostMode() : 'other';
+  const isStaffHostView = isWebRuntime && webHostMode === 'staff';
 
   // Import hooks from providers
   const { currentUser, users, login, logout, updateUser } = useAuth();
@@ -515,6 +584,13 @@ function AppContent() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isSafeMode] = useState(false);
+
+  // 🔐 Staff Web trusted-device lock (same model as manager mobile)
+  const [isStaffDeviceReady, setIsStaffDeviceReady] = useState(!isStaffHostView);
+  const [staffDeviceId, setStaffDeviceId] = useState('');
+  const [staffDeviceLabel, setStaffDeviceLabel] = useState('');
+  const [staffDevicePin, setStaffDevicePin] = useState('');
+  const [isStaffDeviceBinding, setIsStaffDeviceBinding] = useState(false);
   
   // 🔐 macOS-style Device Login State
   const [rememberedUserId, setRememberedUserId] = useState<string | null>(null);
@@ -545,6 +621,34 @@ function AppContent() {
       setPinnedUserIds(normalized);
     }
   }, [users, pinnedUserIds]);
+
+  useEffect(() => {
+    if (!isStaffHostView) {
+      setIsStaffDeviceReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    setIsStaffDeviceReady(false);
+
+    const loadIdentity = async () => {
+      try {
+        const identity = await resolveStaffWebDeviceIdentity();
+        if (cancelled) return;
+        setStaffDeviceId(identity.id);
+        setStaffDeviceLabel(identity.label);
+      } catch (error) {
+        console.error('Failed to resolve staff web device identity:', error);
+      } finally {
+        if (!cancelled) setIsStaffDeviceReady(true);
+      }
+    };
+
+    void loadIdentity();
+    return () => {
+      cancelled = true;
+    };
+  }, [isStaffHostView]);
   
   // ⏱️ Loading timeout - increment counter when waiting for users
   useEffect(() => {
@@ -666,6 +770,67 @@ function AppContent() {
     // Force clear local storage data if needed for security
     // localStorage.removeItem('session_token'); // Handled by AuthService
   };
+
+  const staffWebAccess = currentUser?.preferences?.staffWebAccess;
+  const trustedStaffDeviceId = staffWebAccess?.trustedDeviceId?.trim() || '';
+  const staffDeviceIsTrusted = Boolean(
+    isStaffHostView && isStaffDeviceReady && trustedStaffDeviceId && trustedStaffDeviceId === staffDeviceId
+  );
+  const staffNeedsInitialBind = Boolean(
+    currentUser && isStaffHostView && isStaffDeviceReady && !trustedStaffDeviceId
+  );
+  const staffBlockedByDeviceLock = Boolean(
+    currentUser &&
+      isStaffHostView &&
+      isStaffDeviceReady &&
+      trustedStaffDeviceId &&
+      trustedStaffDeviceId !== staffDeviceId
+  );
+
+  const verifyStaffDevicePin = useCallback((pin: string): boolean => {
+    const normalized = pin.trim();
+    if (!normalized || !currentUser) return false;
+    if (currentUser.role === UserRole.MANAGER && isManagerMasterPin(normalized)) return true;
+    if (currentUser.password) return verifyPasswordSync(normalized, currentUser.password);
+    return normalized === '1234';
+  }, [currentUser]);
+
+  const bindStaffWebDevice = useCallback(async (mode: 'initial' | 'transfer') => {
+    if (!currentUser) return;
+    if (!staffDeviceId) {
+      toast.error('تعذر قراءة بصمة الجهاز الحالية');
+      return;
+    }
+    if (!verifyStaffDevicePin(staffDevicePin)) {
+      toast.error('رمز الدخول غير صحيح');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const currentPrefs = currentUser.preferences || {};
+    const lock = currentPrefs.staffWebAccess;
+    const nextPreferences = {
+      ...currentPrefs,
+      staffWebAccess: {
+        trustedDeviceId: staffDeviceId,
+        trustedDeviceLabel: staffDeviceLabel,
+        trustedAt: mode === 'initial' ? now : lock?.trustedAt || now,
+        updatedAt: now,
+      },
+    };
+
+    setIsStaffDeviceBinding(true);
+    try {
+      await updateUser(currentUser.id, { preferences: nextPreferences });
+      setStaffDevicePin('');
+      toast.success(mode === 'initial' ? 'تم تفعيل هذا الجهاز للويب بنجاح' : 'تم نقل صلاحية الجهاز بنجاح');
+    } catch (error) {
+      console.error('Failed to bind staff trusted device:', error);
+      toast.error('تعذر حفظ قفل الجهاز');
+    } finally {
+      setIsStaffDeviceBinding(false);
+    }
+  }, [currentUser, staffDeviceId, staffDeviceLabel, staffDevicePin, updateUser, verifyStaffDevicePin]);
   
   // 🔐 Handle "Not me" - switch to full user selection
   const handleNotMe = () => {
@@ -1959,6 +2124,102 @@ function AppContent() {
 
   if (isWebRuntime && !WEB_ALLOWED_ROLES.has(currentUser.role)) {
     return <WebAccessLockedScreen />;
+  }
+
+  if (isStaffHostView && currentUser) {
+    if (!isStaffDeviceReady) {
+      return (
+        <div className="min-h-screen bg-[#0a0f1c] text-white flex items-center justify-center px-6" dir="rtl">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/5 p-6 text-center space-y-4">
+            <Loader2 className="mx-auto size-8 animate-spin text-cyan-300" />
+            <p className="text-lg font-black">جارٍ التحقق من بصمة الجهاز</p>
+            <p className="text-sm text-white/70">يرجى الانتظار لحظة...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (staffNeedsInitialBind) {
+      return (
+        <div className="min-h-screen bg-[#0a0f1c] text-white flex items-center justify-center px-6" dir="rtl">
+          <div className="w-full max-w-md rounded-[2rem] border border-cyan-400/40 bg-[#0f1728] p-6 space-y-4">
+            <div className="flex items-center justify-center gap-2 text-cyan-200">
+              <Smartphone className="size-5" />
+              <p className="text-lg font-black">تفعيل جهاز الويب</p>
+            </div>
+            <p className="text-sm text-white/70 text-center leading-7">
+              سيتم قفل <strong>{getStaffWebHost()}</strong> على هذا الجهاز.
+              أدخل رمز الحساب لتأكيد التفعيل.
+            </p>
+            <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-white/65">
+              الجهاز الحالي: {staffDeviceLabel || 'Web Device'}
+            </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={staffDevicePin}
+              onChange={event => setStaffDevicePin(event.target.value)}
+              placeholder="رمز الدخول"
+              className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-sm"
+            />
+            <button
+              onClick={() => void bindStaffWebDevice('initial')}
+              disabled={isStaffDeviceBinding || !staffDevicePin.trim()}
+              className="w-full rounded-xl bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 py-2.5 text-sm font-black"
+            >
+              {isStaffDeviceBinding ? 'جارٍ التفعيل...' : 'تفعيل هذا الجهاز'}
+            </button>
+            <button
+              onClick={() => void handleLogout()}
+              className="w-full rounded-xl border border-white/20 hover:bg-white/10 py-2.5 text-sm font-bold"
+            >
+              تسجيل الخروج
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (staffBlockedByDeviceLock && !staffDeviceIsTrusted) {
+      return (
+        <div className="min-h-screen bg-[#0a0f1c] text-white flex items-center justify-center px-6" dir="rtl">
+          <div className="w-full max-w-md rounded-[2rem] border border-rose-400/40 bg-[#190f16] p-6 space-y-4">
+            <div className="flex items-center justify-center gap-2 text-rose-200">
+              <ShieldAlert className="size-5" />
+              <p className="text-lg font-black">الجهاز غير موثوق</p>
+            </div>
+            <p className="text-sm text-white/75 text-center leading-7">
+              هذا الرابط مقفول على جهاز آخر.
+              لإعادة ربطه على هذا الجهاز أدخل رمز الحساب.
+            </p>
+            <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-white/65">
+              الجهاز الحالي: {staffDeviceLabel || 'Web Device'}
+            </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={staffDevicePin}
+              onChange={event => setStaffDevicePin(event.target.value)}
+              placeholder="رمز الدخول لنقل الصلاحية"
+              className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-sm"
+            />
+            <button
+              onClick={() => void bindStaffWebDevice('transfer')}
+              disabled={isStaffDeviceBinding || !staffDevicePin.trim()}
+              className="w-full rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 py-2.5 text-sm font-black"
+            >
+              {isStaffDeviceBinding ? 'جارٍ النقل...' : 'نقل الصلاحية لهذا الجهاز'}
+            </button>
+            <button
+              onClick={() => void handleLogout()}
+              className="w-full rounded-xl border border-white/20 hover:bg-white/10 py-2.5 text-sm font-bold"
+            >
+              تسجيل الخروج
+            </button>
+          </div>
+        </div>
+      );
+    }
   }
 
   // ------------------------------------------------------------------

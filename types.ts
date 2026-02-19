@@ -138,6 +138,24 @@ export interface AppliedDiscount {
   appliedByName?: string;
 }
 
+export type FolderDeletionStatus = 'scheduled' | 'cancelled' | 'completed' | 'failed';
+
+export interface FolderDeletionSchedule {
+  status: FolderDeletionStatus;
+  requestedAt: string;
+  scheduledFor: string;
+  requestedById?: string;
+  requestedByName?: string;
+  cancelledAt?: string;
+  cancelledById?: string;
+  cancelledByName?: string;
+  completedAt?: string;
+  completedById?: string;
+  completedByName?: string;
+  mode?: 'scheduled' | 'manual';
+  lastError?: string;
+}
+
 export interface DiscountCode {
   id: string;
   code: string;
@@ -213,6 +231,7 @@ export interface BookingDetails {
   photoEditorCompletedByName?: string;
   photoEditorDurationMinutes?: number;
   photoEditorCompletedImages?: number;
+  folderDeletion?: FolderDeletionSchedule;
 }
 
 export interface Booking {
@@ -602,6 +621,12 @@ export interface User {
     hr_performance?: number;
     hr_notes?: string;
     managerMobileAccess?: {
+      trustedDeviceId: string;
+      trustedDeviceLabel?: string;
+      trustedAt: string;
+      updatedAt?: string;
+    };
+    staffWebAccess?: {
       trustedDeviceId: string;
       trustedDeviceLabel?: string;
       trustedAt: string;

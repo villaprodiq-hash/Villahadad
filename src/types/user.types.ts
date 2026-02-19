@@ -47,5 +47,11 @@ export interface User {
       trustedAt: string;
       updatedAt?: string;
     };
+    staffWebAccess?: {
+      trustedDeviceId: string;
+      trustedDeviceLabel?: string;
+      trustedAt: string;
+      updatedAt?: string;
+    };
   };
 }
